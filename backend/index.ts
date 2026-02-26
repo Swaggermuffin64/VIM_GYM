@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { Server, Socket } from 'socket.io';
 import { generatePositionTask, generatePositionTasks, generateDeleteTasks, checkPositionTask } from './tasks.js';
-import type { PositionTask, Task, TaskResponse } from './types.js';
+import type { KeystrokeSource, PositionTask, Task, TaskKeystrokeSubmission, TaskResponse } from './types.js';
 import type { 
   ClientToServerEvents, 
   ServerToClientEvents, 
@@ -21,7 +21,8 @@ import {
   validateOptionalRoomId,
   validateCursorOffset, 
   validateEditorText,
-  validateBoolean 
+  validateBoolean,
+  validateKeystrokeEvents,
 } from './validation/inputValidation.js';
 
 // Create Fastify with its own server
@@ -47,11 +48,25 @@ const ACTIVE_TASKS_MAX = 10_000;
 const ACTIVE_TASKS_TTL_MS = 5 * 60 * 1000;
 const activeTasks = new Map<string, { task: PositionTask; createdAt: number }>();
 
+// Task-end keystroke telemetry. In-memory for now; can be swapped for DB persistence later.
+const KEYSTROKE_RECORDS_MAX = 20_000;
+const KEYSTROKE_RECORDS_TTL_MS = 60 * 60 * 1000;
+const taskKeystrokeRecords = new Map<string, { data: TaskKeystrokeSubmission; createdAt: number }>();
+
 setInterval(() => {
   const now = Date.now();
   for (const [id, entry] of activeTasks) {
     if (now - entry.createdAt > ACTIVE_TASKS_TTL_MS) {
       activeTasks.delete(id);
+    }
+  }
+}, 60_000);
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of taskKeystrokeRecords) {
+    if (now - entry.createdAt > KEYSTROKE_RECORDS_TTL_MS) {
+      taskKeystrokeRecords.delete(id);
     }
   }
 }, 60_000);
@@ -124,10 +139,102 @@ fastify.post<{
     cursorOffset: offsetResult.value,
   };
 });
+//currently we store in memory, maybe replace with db eventually
+fastify.post<{
+  Body: {
+    source: KeystrokeSource;
+    taskId: string;
+    taskType: Task['type'];
+    startedAt: number;
+    completedAt: number;
+    roomId?: string;
+    playerId?: string;
+    events: unknown;
+  };
+}>('/api/task/keystrokes', async (request) => {
+  const {
+    source,
+    taskId,
+    taskType,
+    startedAt,
+    completedAt,
+    roomId,
+    playerId,
+    events,
+  } = request.body;
+
+  if (source !== 'practice' && source !== 'multiplayer') {
+    return { success: false, error: 'Invalid source' };
+  }
+
+  if (typeof taskId !== 'string' || taskId.length < 1 || taskId.length > 100) {
+    return { success: false, error: 'Invalid task ID' };
+  }
+
+  if (taskType !== 'navigate' && taskType !== 'delete' && taskType !== 'change') {
+    return { success: false, error: 'Invalid task type' };
+  }
+
+  if (!Number.isInteger(startedAt) || !Number.isInteger(completedAt) || completedAt < startedAt) {
+    return { success: false, error: 'Invalid task timestamps' };
+  }
+
+  if (typeof roomId !== 'undefined') {
+    const roomIdResult = validateRoomId(roomId);
+    if (!roomIdResult.valid) {
+      return { success: false, error: roomIdResult.error || 'Invalid room ID' };
+    }
+  }
+
+  if (typeof playerId !== 'undefined' && (typeof playerId !== 'string' || playerId.length < 1 || playerId.length > 64)) {
+    return { success: false, error: 'Invalid player ID' };
+  }
+
+  const eventsResult = validateKeystrokeEvents(events);
+  if (!eventsResult.valid) {
+    return { success: false, error: eventsResult.error || 'Invalid keystroke events' };
+  }
+
+  if (taskKeystrokeRecords.size >= KEYSTROKE_RECORDS_MAX) {
+    const oldestKey = taskKeystrokeRecords.keys().next().value;
+    if (oldestKey) {
+      taskKeystrokeRecords.delete(oldestKey);
+    }
+  }
+
+  const submission: TaskKeystrokeSubmission = {
+    source,
+    taskId,
+    taskType,
+    startedAt,
+    completedAt,
+    events: eventsResult.value!,
+    ...(roomId ? { roomId } : {}),
+    ...(playerId ? { playerId } : {}),
+  };
+
+  const recordId = `${source}:${taskId}:${completedAt}:${Math.random().toString(36).slice(2, 8)}`;
+  taskKeystrokeRecords.set(recordId, { data: submission, createdAt: Date.now() });
+  console.log(
+    JSON.stringify(
+      Array.from(taskKeystrokeRecords.entries()).map(([id, rec]) => ({
+        id,
+        ...rec.data,
+        createdAt: rec.createdAt,
+      })),
+      null,
+      2
+    )
+  );
+  return {
+    success: true,
+    recordedEventCount: submission.events.length,
+  };
+});
 
 // Get a practice session (10 tasks: 5 position + 5 delete, shuffled)
 fastify.get('/api/task/practice', async () => {
-  const NUM_TASKS = 10;
+  const NUM_TASKS = 2;
   const tasksPerType = Math.floor(NUM_TASKS / 2);
   
   const positionTasks: Task[] = generatePositionTasks(tasksPerType);

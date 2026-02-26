@@ -5,6 +5,7 @@ import type { CodeMirrorV } from '@replit/codemirror-vim';
 import { Transaction } from '@codemirror/state';
 
 import { useGameSocket } from '../hooks/useGameSocket';
+import type { KeystrokeEvent, TaskKeystrokeSubmission } from '../types/keystroke';
 import { Lobby } from '../components/Lobby';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { RaceCountdown } from '../components/RaceCountdown';
@@ -12,6 +13,8 @@ import { RaceResults } from '../components/RaceResults';
 import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
 import { setDeleteMode, setAllowedDeleteRange, allowReset, setUndoBarrier } from '../extensions/readOnlyNavigation';
 import { VimRaceEditor, VimRaceEditorHandle, editorColors as colors } from '../components/VimRaceEditor';
+
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -240,6 +243,49 @@ const MultiplayerGame: React.FC = () => {
     sendEditorTextRef.current(text);
   }, []);
 
+  const keystrokeTaskIdRef = useRef<string | null>(null);
+  const keystrokeTaskTypeRef = useRef<TaskKeystrokeSubmission['taskType']>('navigate');
+  const keystrokeTaskStartedAtRef = useRef<number>(Date.now());
+  const taskKeystrokesRef = useRef<KeystrokeEvent[]>([]);
+  const submittedTaskIdsRef = useRef<Set<string>>(new Set());
+
+  const submitTaskKeystrokes = useCallback(async (taskId: string, taskType: TaskKeystrokeSubmission['taskType']) => {
+    if (submittedTaskIdsRef.current.has(taskId) || !gameState.myPlayerId) return;
+
+    const payload: TaskKeystrokeSubmission = {
+      source: 'multiplayer',
+      taskId,
+      taskType,
+      startedAt: keystrokeTaskStartedAtRef.current,
+      completedAt: Date.now(),
+      roomId: gameState.roomId || undefined,
+      playerId: gameState.myPlayerId,
+      events: taskKeystrokesRef.current,
+    };
+
+    submittedTaskIdsRef.current.add(taskId);
+
+    try {
+      await fetch(`${API_BASE}/api/task/keystrokes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error('Failed to submit multiplayer keystrokes:', error);
+    }
+  }, [gameState.myPlayerId, gameState.roomId]);
+
+  const handleTaskKeyStroke = useCallback((event: KeystrokeEvent) => {
+    if (gameState.roomState !== 'racing' || me?.isFinished || !keystrokeTaskIdRef.current) return;
+
+    const dtMs = Math.max(0, Date.now() - keystrokeTaskStartedAtRef.current);
+    taskKeystrokesRef.current.push({
+      ...event,
+      dtMs,
+    });
+  }, [gameState.roomState, me?.isFinished]);
+
   const resetCurrentTask = useCallback(() => {
     const view = editorRef.current?.view;
     if (!view || !gameState.task.id) return;
@@ -298,6 +344,7 @@ const MultiplayerGame: React.FC = () => {
 
   const handleEditorReady = useCallback(() => {
     currentTaskIdRef.current = null;
+    keystrokeTaskIdRef.current = null;
     setEditorReadyTick((prev) => prev + 1);
   }, []);
 
@@ -321,8 +368,35 @@ const MultiplayerGame: React.FC = () => {
   useEffect(() => {
     if (gameState.roomState !== 'racing') {
       currentTaskIdRef.current = null;
+      keystrokeTaskIdRef.current = null;
+      taskKeystrokesRef.current = [];
+    }
+    if (gameState.roomState === 'idle' || gameState.roomState === 'waiting') {
+      submittedTaskIdsRef.current.clear();
     }
   }, [gameState.roomState]);
+
+  // Keep keystroke collection aligned with task transitions.
+  useEffect(() => {
+    if (gameState.roomState !== 'racing' || !gameState.task.id) return;
+
+    const activeTaskId = keystrokeTaskIdRef.current;
+    if (!activeTaskId) {
+      keystrokeTaskIdRef.current = gameState.task.id;
+      keystrokeTaskTypeRef.current = gameState.task.type;
+      keystrokeTaskStartedAtRef.current = Date.now();
+      taskKeystrokesRef.current = [];
+      return;
+    }
+
+    if (activeTaskId !== gameState.task.id) {
+      void submitTaskKeystrokes(activeTaskId, keystrokeTaskTypeRef.current);
+      keystrokeTaskIdRef.current = gameState.task.id;
+      keystrokeTaskTypeRef.current = gameState.task.type;
+      keystrokeTaskStartedAtRef.current = Date.now();
+      taskKeystrokesRef.current = [];
+    }
+  }, [gameState.roomState, gameState.task.id, gameState.task.type, submitTaskKeystrokes]);
 
   // Set up task highlights (initial + transitions)
   useEffect(() => {
@@ -518,6 +592,7 @@ const MultiplayerGame: React.FC = () => {
                     onReady={handleEditorReady}
                     onCursorChange={handleCursorChange}
                     onDocChange={handleDocChange}
+                    onKeyStroke={handleTaskKeyStroke}
                   />
                 )}
               </div>

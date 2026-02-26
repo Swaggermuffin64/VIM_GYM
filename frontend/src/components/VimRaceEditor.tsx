@@ -13,6 +13,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { targetHighlightExtension } from '../extensions/targetHighlight';
 import { cursorTracker } from '../extensions/cursorTracker';
 import { readOnlyNavigation } from '../extensions/readOnlyNavigation';
+import type { KeystrokeEvent } from '../types/keystroke';
 
 // ---------------------------------------------------------------------------
 // Shared color palette used across all race / practice pages
@@ -94,6 +95,8 @@ interface VimRaceEditorProps {
   onCursorChange: (offset: number) => void;
   /** Called whenever the document text changes. */
   onDocChange?: (text: string) => void;
+  /** Called for each key pressed while focused in the editor. */
+  onKeyStroke?: (event: KeystrokeEvent) => void;
   /**
    * Called on blur — return `true` to allow the blur (e.g. task complete),
    * `false` to auto-refocus. Defaults to never allowing blur.
@@ -106,17 +109,19 @@ interface VimRaceEditorProps {
 // ---------------------------------------------------------------------------
 
 export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>(
-  ({ initialDoc, onReady, onCursorChange, onDocChange, shouldAllowBlur }, ref) => {
+  ({ initialDoc, onReady, onCursorChange, onDocChange, onKeyStroke, shouldAllowBlur }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
     // Refs for callbacks so CodeMirror extensions never hold stale closures.
     const onCursorChangeRef = useRef(onCursorChange);
     const onDocChangeRef = useRef(onDocChange);
+    const onKeyStrokeRef = useRef(onKeyStroke);
     const shouldAllowBlurRef = useRef(shouldAllowBlur);
 
     useEffect(() => { onCursorChangeRef.current = onCursorChange; }, [onCursorChange]);
     useEffect(() => { onDocChangeRef.current = onDocChange; }, [onDocChange]);
+    useEffect(() => { onKeyStrokeRef.current = onKeyStroke; }, [onKeyStroke]);
     useEffect(() => { shouldAllowBlurRef.current = shouldAllowBlur; }, [shouldAllowBlur]);
 
     useImperativeHandle(ref, () => ({
@@ -247,6 +252,22 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       // through the Vim API so insert→normal transitions always work.
       // ---------------------------------------------------------------
       const handleEscapeKey = (e: KeyboardEvent) => {
+        // Shift is only a modifier for other keys in this telemetry model.
+        // Skip standalone Shift presses so they don't inflate keystroke counts.
+        if (e.key === 'Shift') {
+          return;
+        }
+
+        onKeyStrokeRef.current?.({
+          key: e.key,
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          repeat: e.repeat,
+          dtMs: Math.max(0, Math.floor(e.timeStamp)),
+        });
+
         if (shouldDebugUndo() && (e.key === 'u' || (e.key.toLowerCase() === 'r' && e.ctrlKey))) {
           const cm = getCM(view);
           console.log('[vim-undo-debug] keydown in editor', {
@@ -269,7 +290,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           }
         }
       };
-      view.contentDOM.addEventListener('keydown', handleEscapeKey);
+      // Capture phase ensures we record the key before downstream handlers
+      // can trigger task-complete state transitions in parent components.
+      view.contentDOM.addEventListener('keydown', handleEscapeKey, true);
 
       const handleWindowKeyCapture = (e: KeyboardEvent) => {
         if (!shouldDebugUndo()) return;
@@ -317,7 +340,7 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       view.focus();
 
       return () => {
-        view.contentDOM.removeEventListener('keydown', handleEscapeKey);
+        view.contentDOM.removeEventListener('keydown', handleEscapeKey, true);
         view.contentDOM.removeEventListener('blur', handleBlur);
         window.removeEventListener('keydown', handleWindowKeyCapture, { capture: true });
         view.destroy();

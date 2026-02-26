@@ -5,11 +5,24 @@ import type { CodeMirrorV } from '@replit/codemirror-vim';
 import { Transaction } from '@codemirror/state';
 
 import { Task } from '../types/task';
+import type { KeystrokeEvent, TaskKeystrokeSubmission } from '../types/keystroke';
 import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
 import { setDeleteMode, setAllowedDeleteRange, allowReset, setUndoBarrier } from '../extensions/readOnlyNavigation';
 import { VimRaceEditor, VimRaceEditorHandle, editorColors as colors } from '../components/VimRaceEditor';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+
+interface TaskSummary {
+  taskIndex: number;
+  taskId: string;
+  taskType: Task['type'];
+  durationMs: number;
+  keyCount: number;
+  keySequence: string;
+  codePreview: string;
+  highlightFrom: number | null;
+  highlightTo: number | null;
+}
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -135,6 +148,35 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column' as const,
     alignItems: 'flex-start',
   },
+  keyLogContainer: {
+    marginTop: '16px',
+    borderTop: `1px solid ${colors.border}`,
+    paddingTop: '14px',
+  },
+  keyLogTitle: {
+    fontSize: '12px',
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
+    letterSpacing: '0.8px',
+    textTransform: 'uppercase' as const,
+    marginBottom: '10px',
+  },
+  keyLogBox: {
+    minHeight: '64px',
+    maxHeight: '120px',
+    overflowY: 'auto' as const,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+    background: colors.bgCard,
+    padding: '8px',
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '12px',
+    color: colors.textSecondary,
+    lineHeight: 1.5,
+  },
+  keyLogEmpty: {
+    color: colors.textMuted,
+  },
   sidebarTitle: {
     fontSize: '14px',
     fontWeight: 700,
@@ -214,8 +256,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '400px',
+    justifyContent: 'flex-start',
+    minHeight: 'calc(100vh - 180px)',
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.success}40`,
     borderRadius: '12px',
@@ -261,6 +303,91 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
     boxShadow: `0 0 20px ${colors.success}60`,
+  },
+  summaryList: {
+    width: '50%',
+    marginTop: '24px',
+    borderTop: `1px solid ${colors.border}`,
+    paddingTop: '16px',
+  },
+  summaryItem: {
+    border: `1px solid ${colors.border}`,
+    background: colors.bgCard,
+    borderRadius: '10px',
+    padding: '12px',
+    marginBottom: '12px',
+  },
+  summaryItemHeader: {
+    display: 'block',
+    fontFamily: '"JetBrains Mono", monospace',
+    marginBottom: '6px',
+    color: colors.textPrimary,
+    fontSize: '16px',
+    fontWeight: 600,
+  },
+  summaryTaskType: {
+    color: colors.primaryLight,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '14px',
+    marginBottom: '8px',
+  },
+  summaryMeta: {
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '14px',
+    marginBottom: '6px',
+  },
+  summaryKeys: {
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '14px',
+    lineHeight: 1.4,
+  },
+  summaryCodeLabel: {
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '14px',
+    marginTop: '8px',
+    marginBottom: '6px',
+  },
+  summaryCodeBox: {
+    background: '#0a0a0f',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+    overflow: 'hidden',
+  },
+  summaryCodeRow: {
+    display: 'flex',
+    alignItems: 'stretch',
+  },
+  summaryCodeLineNo: {
+    width: '36px',
+    color: colors.textMuted,
+    background: '#12121a',
+    borderRight: `1px solid ${colors.border}`,
+    padding: '2px 6px',
+    textAlign: 'right' as const,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '13px',
+    userSelect: 'none' as const,
+  },
+  summaryCodeLineText: {
+    flex: 1,
+    color: colors.textPrimary,
+    padding: '2px 8px',
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '13px',
+    lineHeight: 1.4,
+    whiteSpace: 'pre' as const,
+    overflow: 'hidden',
+  },
+  summaryHighlightNavigate: {
+    backgroundColor: 'rgba(6, 182, 212, 0.35)',
+    outline: '1px solid #06b6d4',
+  },
+  summaryHighlightDelete: {
+    backgroundColor: 'rgba(236, 72, 153, 0.35)',
+    outline: '1px solid #ec4899',
   },
   homeButton: {
     padding: '14px 32px',
@@ -424,6 +551,8 @@ const PracticeEditor: React.FC = () => {
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [finalTime, setFinalTime] = useState(0);
   const [editorReadyTick, setEditorReadyTick] = useState(0);
+  const [recentKeys, setRecentKeys] = useState<string[]>([]);
+  const [taskSummaries, setTaskSummaries] = useState<TaskSummary[]>([]);
 
   // Current task derived from state
   const currentTask = tasks[taskProgress] || null;
@@ -432,6 +561,10 @@ const PracticeEditor: React.FC = () => {
   const tasksRef = useRef<Task[]>([]);
   const taskProgressRef = useRef(0);
   const isTaskCompleteRef = useRef(false);
+  const currentTaskIdRef = useRef<string | null>(null);
+  const taskStartedAtRef = useRef<number>(Date.now());
+  const taskKeystrokesRef = useRef<KeystrokeEvent[]>([]);
+  const submittedTaskIdsRef = useRef<Set<string>>(new Set());
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -457,6 +590,82 @@ const PracticeEditor: React.FC = () => {
     const tenths = Math.floor((ms % 1000) / 100);
     return `${seconds}.${tenths}s`;
   };
+
+  const formatKeyLabel = useCallback((key: string): string => {
+    if (key === ' ') return 'Space';
+    if (key === 'Escape') return 'Esc';
+    if (key === 'ArrowLeft') return 'Left';
+    if (key === 'ArrowRight') return 'Right';
+    if (key === 'ArrowUp') return 'Up';
+    if (key === 'ArrowDown') return 'Down';
+    if (key === 'Control') return 'Ctrl';
+    if (key === 'Meta') return 'Meta';
+    if (key === 'Alt') return 'Alt';
+    if (key === 'Shift') return 'Shift';
+    return key;
+  }, []);
+
+  const formatTaskTypeLabel = useCallback((taskType: Task['type']): string => {
+    if (taskType === 'navigate') return 'Navigate';
+    if (taskType === 'delete') return 'Delete';
+    if (taskType === 'insert') return 'Insert';
+    return 'Change';
+  }, []);
+
+  const getTaskHighlightRange = useCallback((task: Task): { from: number | null; to: number | null } => {
+    if (task.type === 'navigate') {
+      return { from: task.targetOffset, to: task.targetOffset + 1 };
+    }
+    if (task.type === 'delete') {
+      return { from: task.targetRange.from, to: task.targetRange.to };
+    }
+    return { from: null, to: null };
+  }, []);
+
+  const submitTaskKeystrokes = useCallback(async (
+    task: Task,
+    snapshot?: { startedAt: number; completedAt: number; events: KeystrokeEvent[] }
+  ) => {
+    if (submittedTaskIdsRef.current.has(task.id)) return;
+
+    const startedAt = snapshot?.startedAt ?? taskStartedAtRef.current;
+    const completedAt = snapshot?.completedAt ?? Date.now();
+    const events = snapshot?.events ?? taskKeystrokesRef.current;
+
+    const payload: TaskKeystrokeSubmission = {
+      source: 'practice',
+      taskId: task.id,
+      taskType: task.type,
+      startedAt,
+      completedAt,
+      events,
+    };
+
+    submittedTaskIdsRef.current.add(task.id);
+
+    try {
+      await fetch(`${API_BASE}/api/task/keystrokes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      console.error('Failed to submit task keystrokes:', error);
+    }
+  }, []);
+
+  const handleTaskKeyStroke = useCallback((event: KeystrokeEvent) => {
+    const currentTaskId = currentTaskIdRef.current;
+    if (!currentTaskId || isTaskCompleteRef.current || isSessionComplete) return;
+
+    const dtMs = Math.max(0, Date.now() - taskStartedAtRef.current);
+    taskKeystrokesRef.current.push({
+      ...event,
+      dtMs,
+    });
+    const keyLabel = formatKeyLabel(event.key);
+    setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
+  }, [formatKeyLabel, isSessionComplete]);
 
   // Start practice session when user clicks Ready
   const handleReady = useCallback(() => {
@@ -484,6 +693,11 @@ const PracticeEditor: React.FC = () => {
     if (cm?.state?.vim) {
       Vim.handleEx(cm as CodeMirrorV, 'nohlsearch');
     }
+
+    currentTaskIdRef.current = task.id;
+    taskStartedAtRef.current = Date.now();
+    taskKeystrokesRef.current = [];
+    setRecentKeys([]);
 
     if (task.type === 'navigate') {
       view.dispatch({
@@ -519,6 +733,11 @@ const PracticeEditor: React.FC = () => {
       setSessionStartTime(Date.now());
       setElapsedTime(0);
       setFinalTime(0);
+      currentTaskIdRef.current = null;
+      taskKeystrokesRef.current = [];
+      submittedTaskIdsRef.current.clear();
+      setRecentKeys([]);
+      setTaskSummaries([]);
     } catch (error) {
       console.error('Failed to fetch practice session:', error);
     }
@@ -573,6 +792,40 @@ const PracticeEditor: React.FC = () => {
     isTaskCompleteRef.current = true; // Set ref synchronously before blur
     setIsTaskComplete(true);
 
+    const completedTask = tasksRef.current[taskProgressRef.current];
+    if (completedTask) {
+      const startedAt = taskStartedAtRef.current;
+      const completedAt = Date.now();
+      const eventsSnapshot = [...taskKeystrokesRef.current];
+      const keyLabels = eventsSnapshot.map((event) => formatKeyLabel(event.key));
+      const visibleKeyCount = 30;
+      const keySequence = keyLabels.length <= visibleKeyCount
+        ? keyLabels.join(' ')
+        : `${keyLabels.slice(0, visibleKeyCount).join(' ')} ... (+${keyLabels.length - visibleKeyCount})`;
+      const highlight = getTaskHighlightRange(completedTask);
+
+      setTaskSummaries((prev) => [
+        ...prev,
+        {
+          taskIndex: taskProgressRef.current + 1,
+          taskId: completedTask.id,
+          taskType: completedTask.type,
+          durationMs: Math.max(0, completedAt - startedAt),
+          keyCount: eventsSnapshot.length,
+          keySequence,
+          codePreview: completedTask.codeSnippet,
+          highlightFrom: highlight.from,
+          highlightTo: highlight.to,
+        },
+      ]);
+
+      void submitTaskKeystrokes(completedTask, {
+        startedAt,
+        completedAt,
+        events: eventsSnapshot,
+      });
+    }
+
     const view = editorRef.current?.view;
     if (view) {
       view.dispatch({
@@ -583,7 +836,7 @@ const PracticeEditor: React.FC = () => {
       });
       view.contentDOM.blur();
     }
-  }, []);
+  }, [formatKeyLabel, getTaskHighlightRange, submitTaskKeystrokes]);
 
   // Listen for Enter key to advance when task is complete
   useEffect(() => {
@@ -675,6 +928,86 @@ const PracticeEditor: React.FC = () => {
 
   const taskDisplay = getTaskTypeDisplay(currentTask);
 
+  const renderSummarySnippet = useCallback((summary: TaskSummary): React.ReactNode => {
+    const lines = summary.codePreview.split('\n');
+    const lineStarts: number[] = [];
+    let cursor = 0;
+    for (let i = 0; i < lines.length; i++) {
+      lineStarts.push(cursor);
+      cursor += lines[i]!.length + 1;
+    }
+
+    const highlightFrom = summary.highlightFrom;
+    const highlightTo = summary.highlightTo;
+    const hasHighlight = highlightFrom !== null && highlightTo !== null && highlightTo > highlightFrom;
+
+    let focusLine = 0;
+    if (hasHighlight) {
+      for (let i = 0; i < lines.length; i++) {
+        const lineStart = lineStarts[i]!;
+        const lineEnd = lineStart + lines[i]!.length;
+        if (highlightFrom >= lineStart && highlightFrom <= lineEnd) {
+          focusLine = i;
+          break;
+        }
+      }
+    }
+
+    const previewLineLimit = 8;
+    const startLine = Math.max(0, focusLine - Math.floor(previewLineLimit / 2));
+    const endLine = Math.min(lines.length, startLine + previewLineLimit);
+    const highlightStyle = summary.taskType === 'delete' ? styles.summaryHighlightDelete : styles.summaryHighlightNavigate;
+
+    return (
+      <>
+        {lines.slice(startLine, endLine).map((line, idx) => {
+          const lineIndex = startLine + idx;
+          const lineStart = lineStarts[lineIndex]!;
+          const lineEnd = lineStart + line.length;
+
+          if (!hasHighlight) {
+            return (
+              <div key={`line-${lineIndex}`} style={styles.summaryCodeRow}>
+                <div style={styles.summaryCodeLineNo}>{lineIndex + 1}</div>
+                <div style={styles.summaryCodeLineText}>{line || ' '}</div>
+              </div>
+            );
+          }
+
+          const overlapStart = Math.max(highlightFrom, lineStart);
+          const overlapEnd = Math.min(highlightTo, lineEnd);
+          const hasLineOverlap = overlapEnd > overlapStart;
+
+          if (!hasLineOverlap) {
+            return (
+              <div key={`line-${lineIndex}`} style={styles.summaryCodeRow}>
+                <div style={styles.summaryCodeLineNo}>{lineIndex + 1}</div>
+                <div style={styles.summaryCodeLineText}>{line || ' '}</div>
+              </div>
+            );
+          }
+
+          const localStart = overlapStart - lineStart;
+          const localEnd = overlapEnd - lineStart;
+          const before = line.slice(0, localStart);
+          const marked = line.slice(localStart, localEnd) || ' ';
+          const after = line.slice(localEnd);
+
+          return (
+            <div key={`line-${lineIndex}`} style={styles.summaryCodeRow}>
+              <div style={styles.summaryCodeLineNo}>{lineIndex + 1}</div>
+              <div style={styles.summaryCodeLineText}>
+                {before}
+                <span style={highlightStyle}>{marked}</span>
+                {after}
+              </div>
+            </div>
+          );
+        })}
+      </>
+    );
+  }, []);
+
   // Ready screen before practice starts
   if (!isReady) {
     return (
@@ -726,8 +1059,8 @@ const PracticeEditor: React.FC = () => {
 
         {isSessionComplete ? (
           <div style={styles.sessionComplete}>
-            <div style={styles.completeTitle}>Session Complete!</div>
-            <div style={styles.completeText}>You completed all {numTasks} tasks</div>
+            <div style={styles.completeTitle}>Practice Summary</div>
+            <div style={styles.completeText}>Completed {numTasks} tasks</div>
             <div style={styles.completeTime}>{formatTime(finalTime)}</div>
             <div style={styles.completeButtons}>
               <button style={styles.completeButton} onClick={fetchPracticeSession}>
@@ -736,6 +1069,42 @@ const PracticeEditor: React.FC = () => {
               <button style={styles.homeButton} onClick={() => navigate('/')}>
                 Home
               </button>
+            </div>
+            <div style={styles.summaryList}>
+              {taskSummaries.length === 0 && (
+                <div style={styles.summaryKeys}>No task details recorded for this run.</div>
+              )}
+              {taskSummaries.map((summary) => {
+                const speed = summary.durationMs > 0
+                  ? (summary.keyCount / (summary.durationMs / 1000)).toFixed(2)
+                  : '0.00';
+                return (
+                  <div key={summary.taskId} style={styles.summaryItem}>
+                    <div style={styles.summaryItemHeader}>
+                      Task {summary.taskIndex}
+                    </div>
+                    <div style={styles.summaryTaskType}>
+                      Type: {formatTaskTypeLabel(summary.taskType)}
+                    </div>
+                    <div style={styles.summaryMeta}>
+                      Speed: {speed} keys/s
+                    </div>
+                    <div style={styles.summaryMeta}>
+                      Duration: {formatTime(summary.durationMs)}
+                    </div>
+                    <div style={styles.summaryMeta}>
+                      Key Events: {summary.keyCount}
+                    </div>
+                    <div style={styles.summaryKeys}>
+                      Keys: {summary.keySequence || 'No key events recorded'}
+                    </div>
+                    <div style={styles.summaryCodeLabel}>Snippet</div>
+                    <div style={styles.summaryCodeBox}>
+                      {renderSummarySnippet(summary)}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -793,6 +1162,7 @@ const PracticeEditor: React.FC = () => {
                     onReady={handleEditorReady}
                     onCursorChange={handleCursorChange}
                     onDocChange={handleEditorChange}
+                    onKeyStroke={handleTaskKeyStroke}
                     shouldAllowBlur={() => isTaskCompleteRef.current}
                   />
                 </div>
@@ -819,6 +1189,15 @@ const PracticeEditor: React.FC = () => {
 
                   <div style={styles.progressBar}>
                     <div style={{ ...styles.progressFill, width: `${progressPercent}%` }} />
+                  </div>
+
+                  <div style={styles.keyLogContainer}>
+                    <div style={styles.keyLogTitle}>Keys Pressed (Current Task)</div>
+                    <div style={styles.keyLogBox}>
+                      {recentKeys.length > 0
+                        ? recentKeys.join(' ')
+                        : <span style={styles.keyLogEmpty}>No keys yet...</span>}
+                    </div>
                   </div>
                 </div>
 

@@ -84,6 +84,7 @@ export interface codeSnippet {
   curlyBraceIndices: IntTuple[];
   parenthesisIndices: IntTuple[];
   bracketIndices: IntTuple[];
+  lineOffsetRanges: IntTuple[];
 }
 
 export type IntTuple = [number, number];

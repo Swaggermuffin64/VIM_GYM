@@ -234,7 +234,7 @@ fastify.post<{
 
 // Get a practice session (10 tasks: 5 position + 5 delete, shuffled)
 fastify.get('/api/task/practice', async () => {
-  const NUM_TASKS = 2;
+  const NUM_TASKS = 4;
   const tasksPerType = Math.floor(NUM_TASKS / 2);
   
   const positionTasks: Task[] = generatePositionTasks(tasksPerType);

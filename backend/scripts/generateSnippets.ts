@@ -10,20 +10,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-
+import type { codeSnippet } from '../types.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Copy of the helper functions (to avoid import issues)
-type IntTuple = [number, number];
-
-interface codeSnippet {
-  code: string;
-  wordIndices: IntTuple[];
-  curlyBraceIndices: IntTuple[];
-  parenthesisIndices: IntTuple[];
-  bracketIndices: IntTuple[];
-}
+export type IntTuple = [number, number];
 
 function isLetter(char: string): boolean {
   return /^[a-zA-Z]$/.test(char);
@@ -53,6 +45,20 @@ function getWordIndices(code: string): IntTuple[] {
     }
   }
   return wordIndiceArray;
+}
+
+function getNewlineOffsets(code: string) : IntTuple[] { 
+    //output list of lists where indice is line #, and [start offset, \n offset (or last char for last line)]
+    //be able to tell what line your on from offset
+    const allOffsetRanges: IntTuple[] = []; 
+    const splitText = code.split('\n');    
+    let startOffset = 0;
+    for (const line of splitText) {
+        const lineLength = line.length + startOffset; // length + 1 should be the \n char
+        allOffsetRanges.push([startOffset, lineLength] as IntTuple);
+        startOffset = lineLength + 1;
+    }
+    return allOffsetRanges; 
 }
 
 function getCurlyBraceIndices(code: string): IntTuple[] {
@@ -121,6 +127,7 @@ function createCodeSnippetObjects(CODE_SNIPPETS: string[]): codeSnippet[] {
         curlyBraceIndices: getCurlyBraceIndices(code_snippet),
         parenthesisIndices: getParenthesisIndices(code_snippet),
         bracketIndices: getBracketIndices(code_snippet),
+        lineOffsetRanges: getNewlineOffsets(code_snippet),
       };
       codeSnippetObjects.push(code_object);
     }

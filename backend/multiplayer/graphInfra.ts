@@ -1,5 +1,5 @@
 import type { codeSnippet } from "../types.js";
-import { getLineFromOffset, resolveKeyOffset } from "./vimMotionsGraph.js";
+import { getLineFromOffset, resolveKeyOffset, multiKeyResolve, findMaxFactor} from "./vimMotionsGraph.js";
 import { CODE_SNIPPIT_OBJECTS } from "../codeSnippets.js";
 // one way edge
 interface vimEdge {
@@ -37,21 +37,31 @@ export function buildSnippetGraph(codeSnippet: codeSnippet): vimGraph {
     for (let i=0; i<codeSnippet.code.length; i++) {
         //going to start with states representing single key presses w/o factors
         for (const key of vimKeys) {
-           const lineNumber = getLineFromOffset(i, codeSnippet.lineOffsetRanges); 
-           if (!codeSnippet.lineOffsetRanges || !codeSnippet.lineOffsetRanges[lineNumber]) continue;
-           const startingRelativeX = i - codeSnippet.lineOffsetRanges[lineNumber][0];
-           const [offset, relativeX] = resolveKeyOffset(i, key, codeSnippet, startingRelativeX);
-           if (offset == i) continue; //no self nodes
-           const ourNode = offsetToNode[i]
-           const otherNode = offsetToNode[offset];
-           if (!otherNode || !ourNode) continue;
-           const newEdge: vimEdge = {weight: 1, otherNode, keySequence: [key]};
-           ourNode.connections.push(newEdge);
+            const ourNode = offsetToNode[i];
+            const lineNumber = getLineFromOffset(i, codeSnippet.lineOffsetRanges); 
+            if (!ourNode || !codeSnippet.lineOffsetRanges || !codeSnippet.lineOffsetRanges[lineNumber]) continue;
+            const startingRelativeX = i - codeSnippet.lineOffsetRanges[lineNumber][0];
+            //find max factor, run multi resolve, map into edges add to connections
+            const keyMaxFactor = findMaxFactor(i, key, codeSnippet, startingRelativeX); 
+            const allKeyOffsets = multiKeyResolve(i, key, keyMaxFactor, codeSnippet, startingRelativeX);
+            allKeyOffsets.forEach((tuple, idx) => {
+                const currOffset = tuple[0];
+                const otherNode = offsetToNode[currOffset];
+                const keySequence = [];
+                if (!otherNode) return;
+                if (idx !== 0) keySequence.push(String(idx+1));
+                keySequence.push(key);
+                const newEdge : vimEdge = { weight: idx+1, otherNode, keySequence};
+                ourNode.connections.push(newEdge);
+                //create edge for each
+                // your logic here using tuple and idx
+            });
         }
 
     }
     return offsetToNode;
 }
+
 function findNextDijkstraStart(dijkstraList: dijkstraNodeInfo[]): number {
     let currentMin = 998; //won't try unexplored nodes
     let nodeIndex = -1;
@@ -72,7 +82,7 @@ targetOffset: number): [totalWeight: number, keySequence: string[]] {
     //Keep track of unvisited nodes and shortest paths, need to be able to find smallest unvisited
     //build list of nodes with [node, visitedbool, shortestPath]
     const lastCharOffset = codeSnippet.code.length;
-    const dijkstraList: dijkstraNodeInfo[] = [];
+    const dijkstraList: dijkstraNodeInfo[] = []; //should use a heap, however i do not care!
     const newLineIndexes = codeSnippet.lineOffsetRanges.map(lineRange => lineRange[1]);
     for (let i = 0; i < lastCharOffset; i++) {
         const node = graph[i];
@@ -105,7 +115,6 @@ targetOffset: number): [totalWeight: number, keySequence: string[]] {
         }
         currentShortestPath.visited = true;
         currentNodeIndex = findNextDijkstraStart(dijkstraList);
-        console.log(currentNodeIndex);
     }
     if (!dijkstraList[targetOffset]) return [-1,[]];
     return [dijkstraList[targetOffset].shortestPath, dijkstraList[targetOffset]?.shortestSequence];
@@ -113,8 +122,15 @@ targetOffset: number): [totalWeight: number, keySequence: string[]] {
     // use dijkstras algorithm, return key sequence, weight
 }
 const exampleCodeSnippet = CODE_SNIPPIT_OBJECTS[0]; 
-if (exampleCodeSnippet) {
-    const graph = buildSnippetGraph(exampleCodeSnippet);
-    const [w, seq] = shortestVimSequence(graph, exampleCodeSnippet, 0, 98);
-    console.log(w, seq);
-}
+//if (exampleCodeSnippet) {
+//    const graph = buildSnippetGraph(exampleCodeSnippet);
+//    console.log(
+//        graph[24].connections.map(({ weight, otherNode, keySequence }) => ({
+//          weight,
+//          otherOffset: otherNode.offset,
+//          keySequence,
+//        }))
+//    );
+//const [w, seq] = shortestVimSequence(graph, exampleCodeSnippet, 86, 0);
+//console.log(w, seq);
+//}

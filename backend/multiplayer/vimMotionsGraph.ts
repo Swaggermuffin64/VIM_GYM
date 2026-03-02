@@ -38,7 +38,7 @@ export function resolveKeyOffset(offset: number, key: string, codeSnippet: codeS
     const lineNumber = getLineFromOffset(offset, lineOffsetRanges);
     const totalLines = lineOffsetRanges.length;
 
-    switch (key){
+    switch (key) {
         case 'h': {
             //TODO, fix savedRelativeX logic
             //doesn't move if at 0
@@ -130,27 +130,44 @@ export function resolveKeyOffset(offset: number, key: string, codeSnippet: codeS
     return [-1, -1];
 }
 
-function multiKeyResolve(initialOffset:number, key:string, factor: number, codeSnippet: codeSnippet, savedRelativeX: number): IntTuple {
-    console.log("start loop");
+export function multiKeyResolve(initialOffset:number, key:string, factor: number, codeSnippet: codeSnippet, startingRelativeX: number): IntTuple[] {
+    const positions = [];
     let offset = initialOffset;
-    let relativeX = savedRelativeX;
+    let relativeX = startingRelativeX;
     for (let i = 0; i < factor; i++) {
         [offset, relativeX] = resolveKeyOffset(offset, key, codeSnippet, relativeX);
-        console.log(offset, relativeX);
+        positions.push([offset, relativeX] as IntTuple);
     }
-    return [offset, relativeX];
+    return positions;
+}
+
+export function findMaxFactor(initialOffset: number, key:string, codeSnippet: codeSnippet, startingRelativeX: number) {
+    let i = 0;
+    let prevOffset = initialOffset; 
+    let prevRelativeX = startingRelativeX;
+    while (i < codeSnippet.code.length + 1) {
+        const [currOffset, currRelativeX] = resolveKeyOffset(prevOffset, key, codeSnippet, prevRelativeX);
+        if (currOffset === prevOffset) return i;
+        prevOffset = currOffset;
+        prevRelativeX = currRelativeX;
+        i++;
+    }
+    return -1
 }
 
 const exampleCodeSnippet = CODE_SNIPPIT_OBJECTS[0] as codeSnippet;
 logCodeOffsets(exampleCodeSnippet);
 //multiKeyResolve(23, 'l', 23, exampleCodeSnippet, 0);
 const graph = buildSnippetGraph(exampleCodeSnippet);
-for (const node of Object.values(graph)) {
-    const edges = node.connections
-      .map(c => `${c.otherNode.offset}:${JSON.stringify(c.otherNode.associatedCharacter)} w=${c.weight} keys=${c.keySequence.join("")}`)
-      .join(" | ");
-  
-    console.log(`${node.offset}:${JSON.stringify(node.associatedCharacter)} -> ${edges}`);
-}
-const [w, seq] = shortestVimSequence(graph, exampleCodeSnippet, 0, 81);
-console.log(w, seq);
+console.log(exampleCodeSnippet.lineOffsetRanges);
+//for (const node of Object.values(graph)) {
+//    const edges = node.connections
+//      .map(c => `${c.otherNode.offset}:${JSON.stringify(c.otherNode.associatedCharacter)} w=${c.weight} keys=${c.keySequence.join("")}`)
+//      .join(" | ");
+//  
+//    console.log(`${node.offset}:${JSON.stringify(node.associatedCharacter)} -> ${edges}`);
+//}
+//const [w, seq] = shortestVimSequence(graph, exampleCodeSnippet, 0, 81);
+//console.log(w, seq);
+console.log(multiKeyResolve(16, 'j', 4, exampleCodeSnippet, 16));
+console.log(findMaxFactor(98, 'h', exampleCodeSnippet, 0));

@@ -1,24 +1,5 @@
 import type { codeSnippet, DeleteStrategy } from "../types.js";
 import { getLineFromOffset, resolveKeyOffset, multiKeyResolve, findMaxFactor} from "./graphInfra.js";
-// one way edge
-interface vimEdge {
-    weight: number,
-    otherNode: offsetNode;
-    keySequence: string[];
-}
-interface offsetNode {
-    offset: number,
-    connections: vimEdge[],
-    associatedCharacter: string
-}
-interface dijkstraNodeInfo {
-    node: offsetNode,
-    shortestPath: number,
-    shortestSequence: string[],
-    visited: boolean, 
-}
-
-type vimGraph = Record<number, offsetNode>;
 
 function isCountToken(token: string): boolean {
     // In Vim, numeric counts are positive integers (1+). '0' is a motion.
@@ -71,6 +52,10 @@ function shouldPreferCandidateOnTie(candidateSequence: string[], currentSequence
 function getMotionKeysForOffset(offset: number, codeSnippet: codeSnippet): string[] {
     const baseKeys = ['h', 'j', 'k', 'l', 'w', 'e', 'b', '0', '$'];
     const lineNumber = getLineFromOffset(offset, codeSnippet);
+    const precomputedKeys = codeSnippet.precomputed?.motionKeysByLine[lineNumber];
+    if (precomputedKeys && precomputedKeys.length > 0) {
+        return precomputedKeys;
+    }
     const lineRange = codeSnippet.lineOffsetRanges[lineNumber];
     if (!lineRange) return baseKeys;
 
@@ -85,112 +70,6 @@ function getMotionKeysForOffset(offset: number, codeSnippet: codeSnippet): strin
     return [...baseKeys, ...targetedKeys];
 }
 
-export function buildSnippetGraph(codeSnippet: codeSnippet): vimGraph {
-    //graph using vim keystrokes # as edge weight and vim 
-    // for each offset, connect to nodes reachable by hjkl and their multiples
-    const offsetToNode: vimGraph = {};
-
-    for (let i=0; i<codeSnippet.code.length; i++) {
-        const associatedCharacter = codeSnippet.code[i];
-        if (associatedCharacter===undefined) continue; 
-        const newNode: offsetNode = {offset: i, connections: [], associatedCharacter}
-        offsetToNode[i] = newNode;
-    }
-
-    for (let i=0; i<codeSnippet.code.length; i++) {
-        //going to start with states representing single key presses w/o factors
-        const vimKeys = getMotionKeysForOffset(i, codeSnippet);
-        for (const key of vimKeys) {
-            const ourNode = offsetToNode[i];
-            const lineNumber = getLineFromOffset(i, codeSnippet); 
-            if (!ourNode || !codeSnippet.lineOffsetRanges || !codeSnippet.lineOffsetRanges[lineNumber]) continue;
-            const startingRelativeX = i - codeSnippet.lineOffsetRanges[lineNumber][0];
-            //find max factor, run multi resolve, map into edges add to connections
-            const keyMaxFactor = findMaxFactor(i, key, codeSnippet, startingRelativeX); 
-            const allKeyOffsets = multiKeyResolve(i, key, keyMaxFactor, codeSnippet, startingRelativeX);
-            allKeyOffsets.forEach((tuple, idx) => {
-                const currOffset = tuple[0];
-                const otherNode = offsetToNode[currOffset];
-                const keySequence = [];
-                if (!otherNode) return;
-                if (idx !== 0) keySequence.push(String(idx+1));
-                keySequence.push(key);
-                const extraWeight = key.length-1; //for f + <char> types
-                const newEdge : vimEdge = { weight: idx+1+extraWeight, otherNode, keySequence};
-                ourNode.connections.push(newEdge);
-                //create edge for each
-                // your logic here using tuple and idx
-            });
-        }
-
-    }
-    return offsetToNode;
-}
-
-function findNextDijkstraStart(dijkstraList: dijkstraNodeInfo[]): number {
-    let currentMin = 998; //won't try unexplored nodes
-    let nodeIndex = -1;
-    for (let i = 0; i < dijkstraList.length; i++) {
-        const nodeInfo = dijkstraList[i];
-        if (!nodeInfo || nodeInfo.visited === true) continue;
-        if (nodeInfo.shortestPath < currentMin) {
-            currentMin = nodeInfo.shortestPath;
-            nodeIndex = i;
-        }
-    }
-    return nodeIndex;
-}
-
-
-export function shortestVimSequence(graph : vimGraph, codeSnippet: codeSnippet, startingOffset: number, 
-targetOffset: number): [totalWeight: number, keySequence: string[]] {
-    //Keep track of unvisited nodes and shortest paths, need to be able to find smallest unvisited
-    //build list of nodes with [node, visitedbool, shortestPath]
-    const lastCharOffset = codeSnippet.code.length;
-    const dijkstraList: dijkstraNodeInfo[] = []; //should use a heap, however i do not care!
-    const newLineIndexes = codeSnippet.lineOffsetRanges.map(lineRange => lineRange[1]);
-    for (let i = 0; i < lastCharOffset; i++) {
-        const node = graph[i];
-        if (!node) continue;
-        if (newLineIndexes.includes(i)){
-            //placeholders for newlines
-            dijkstraList.push({ node, shortestPath: i === startingOffset ? 0 : 999, shortestSequence: [], visited: true });
-            continue;
-        }
-        dijkstraList.push({ node, shortestPath: i === startingOffset ? 0 : 999, shortestSequence: [], visited: false });
-    }
-    // Make a list with just the visited bools from dijkstraList
-    let currentNodeIndex = 0;
-    while (currentNodeIndex !== -1) {
-        //explore current nodes connections
-        const currentNode = graph[currentNodeIndex];
-        const currentShortestPath = dijkstraList[currentNodeIndex];
-        if (!currentNode || !currentShortestPath) continue;
-        for (const edge of currentNode.connections){
-            //possibleNewMin is distance to current Node + edgeWeight
-            //must be smaller than current
-            const connectedNodeOffset = edge.otherNode.offset;
-            const connectedNodeInfo = dijkstraList[connectedNodeOffset];
-            if (!connectedNodeInfo) continue;
-            const possibleNewMin = currentShortestPath.shortestPath + edge.weight;
-            const candidateSequence = [...currentShortestPath.shortestSequence, ...edge.keySequence];
-            const isShorterPath = possibleNewMin < connectedNodeInfo.shortestPath;
-            const isPreferredTie =
-                possibleNewMin === connectedNodeInfo.shortestPath &&
-                shouldPreferCandidateOnTie(candidateSequence, connectedNodeInfo.shortestSequence);
-            if (isShorterPath || isPreferredTie) {
-                connectedNodeInfo.shortestPath = possibleNewMin;
-                connectedNodeInfo.shortestSequence = candidateSequence;
-            }
-        }
-        currentShortestPath.visited = true;
-        currentNodeIndex = findNextDijkstraStart(dijkstraList);
-    }
-    if (!dijkstraList[targetOffset]) return [-1,[]];
-    return [dijkstraList[targetOffset].shortestPath, dijkstraList[targetOffset]?.shortestSequence];
-
-    // use dijkstras algorithm, return key sequence, weight
-}
 // START LAZY DIJKSTRA CREATION
 interface vimCursorState {
     offset: number;
@@ -389,6 +268,96 @@ export function shortestVimSequenceLazy(
     return [-1, []];
 }
 
+interface shortestAnyTargetResult {
+    targetOffset: number;
+    weight: number;
+    sequence: string[];
+}
+
+function shortestVimSequenceLazyToAnyTarget(
+    codeSnippet: codeSnippet,
+    startingOffset: number,
+    targetOffsets: number[],
+    startingPreferredX?: number
+): shortestAnyTargetResult | null {
+    const uniqueTargets = new Set<number>(
+        targetOffsets.filter(offset => offset >= 0 && offset < codeSnippet.code.length)
+    );
+    if (uniqueTargets.size === 0) return null;
+
+    const startLine = getLineFromOffset(startingOffset, codeSnippet);
+    const startLineRange = startLine >= 0 ? codeSnippet.lineOffsetRanges[startLine] : undefined;
+    const defaultPreferredX = startLineRange ? startingOffset - startLineRange[0] : 0;
+    const startState: vimCursorState = {
+        offset: startingOffset,
+        preferredX: startingPreferredX ?? defaultPreferredX,
+    };
+
+    const heap = new minHeap();
+    const bestByState = new Map<string, dijkstraStateInfo>();
+
+    const startKey = encodeStateKey(startState);
+    bestByState.set(startKey, { distance: 0, sequence: [] });
+    heap.push({ stateKey: startKey, distance: 0 });
+
+    let bestTarget: shortestAnyTargetResult | null = null;
+
+    while (!heap.isEmpty()) {
+        const currentEntry = heap.pop();
+        if (!currentEntry) break;
+
+        if (bestTarget && currentEntry.distance > bestTarget.weight) {
+            break;
+        }
+
+        const currentBest = bestByState.get(currentEntry.stateKey);
+        if (!currentBest || currentEntry.distance > currentBest.distance) {
+            continue; // stale heap entry
+        }
+
+        const currentState = decodeStateKey(currentEntry.stateKey);
+        if (uniqueTargets.has(currentState.offset)) {
+            if (
+                !bestTarget ||
+                currentBest.distance < bestTarget.weight ||
+                (currentBest.distance === bestTarget.weight &&
+                    shouldPreferCandidateOnTie(currentBest.sequence, bestTarget.sequence))
+            ) {
+                bestTarget = {
+                    targetOffset: currentState.offset,
+                    weight: currentBest.distance,
+                    sequence: currentBest.sequence,
+                };
+            }
+            continue;
+        }
+
+        const neighbors = getLazyNeighbors(currentState, codeSnippet);
+        for (const neighbor of neighbors) {
+            const neighborKey = encodeStateKey(neighbor.to);
+            const candidateDistance = currentBest.distance + neighbor.weight;
+            const candidateSequence = [...currentBest.sequence, ...neighbor.keySequence];
+            const existing = bestByState.get(neighborKey);
+
+            const isShorterPath = !existing || candidateDistance < existing.distance;
+            const isPreferredTie =
+                !!existing &&
+                candidateDistance === existing.distance &&
+                shouldPreferCandidateOnTie(candidateSequence, existing.sequence);
+
+            if (!isShorterPath && !isPreferredTie) continue;
+
+            bestByState.set(neighborKey, {
+                distance: candidateDistance,
+                sequence: candidateSequence,
+            });
+            heap.push({ stateKey: neighborKey, distance: candidateDistance });
+        }
+    }
+
+    return bestTarget;
+}
+
 interface deletePlanCandidate {
     sequence: string[];
     weight: number;
@@ -526,6 +495,26 @@ function buildSingleAnchorDeletePlan(
     return {
         sequence: [...navSequence, ...actionKeys],
         weight: navWeight + expandSequenceToKeystrokeCount(actionKeys),
+    };
+}
+
+function buildAnyAnchorDeletePlan(
+    codeSnippet: codeSnippet,
+    startingOffset: number,
+    startingPreferredX: number,
+    anchorOffsets: number[],
+    actionKeys: string[]
+): deletePlanCandidate | null {
+    const bestNavigation = shortestVimSequenceLazyToAnyTarget(
+        codeSnippet,
+        startingOffset,
+        anchorOffsets,
+        startingPreferredX
+    );
+    if (!bestNavigation) return null;
+    return {
+        sequence: [...bestNavigation.sequence, ...actionKeys],
+        weight: bestNavigation.weight + expandSequenceToKeystrokeCount(actionKeys),
     };
 }
 
@@ -761,16 +750,14 @@ export function getRecommendedDeleteSequence(
     if (strategy === 'INNER_CURLY_BRACE' || strategy === 'INNER_PARENTHESIS' || strategy === 'INNER_BRACKET') {
         const textObjectChar = strategy === 'INNER_CURLY_BRACE' ? '{' : strategy === 'INNER_PARENTHESIS' ? '(' : '[';
         const anchors = getValidInnerTextObjectAnchors(codeSnippet, strategy, from, to);
-        for (const anchor of anchors) {
-            const candidate = buildSingleAnchorDeletePlan(
-                codeSnippet,
-                startingOffset,
-                startingPreferredX,
-                anchor,
-                ['d', 'i', textObjectChar]
-            );
-            if (candidate) candidates.push(candidate);
-        }
+        const candidate = buildAnyAnchorDeletePlan(
+            codeSnippet,
+            startingOffset,
+            startingPreferredX,
+            anchors,
+            ['d', 'i', textObjectChar]
+        );
+        if (candidate) candidates.push(candidate);
     }
 
     if (strategy === 'RANDOM') {

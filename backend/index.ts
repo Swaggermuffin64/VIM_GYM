@@ -239,7 +239,7 @@ fastify.get('/api/task/practice', async () => {
   
   const positionTasks: Task[] = generatePositionTasks(tasksPerType);
   const deleteTasks: Task[] = generateDeleteTasks(tasksPerType);
-  const allTasks = shuffle([...positionTasks, ...deleteTasks]);
+  const allTasks = [...positionTasks, ...deleteTasks];
   const navigateTasksWithRecommendation = positionTasks.reduce((count, task) => {
     if (task.type !== 'navigate') return count;
     return task.recommendedSequence && typeof task.recommendedWeight === 'number' ? count + 1 : count;

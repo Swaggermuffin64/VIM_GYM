@@ -101,7 +101,7 @@ function generateDescription(code: string, pos: Position): string {
   const contextEnd = Math.min(line.length, pos.col + 10);
   const context = line.substring(contextStart, contextEnd);
   
-  return `Move cursor to the highlighted character (in: ${context.trim()}.)`;
+  return `Move cursor to the highlighted character`;
 }
 let taskIdCounter = 0;
 
@@ -109,6 +109,7 @@ let taskIdCounter = 0;
  * Generate a random position task
  */
 export function generatePositionTask(): PositionTask {
+  const generationStartedAt = Date.now();
   const snippetIndex = Math.floor(Math.random() * CODE_SNIPPIT_OBJECTS.length);
   const snippetData = CODE_SNIPPIT_OBJECTS[snippetIndex] ?? CODE_SNIPPIT_OBJECTS[0];
   if (!snippetData) {
@@ -132,7 +133,10 @@ export function generatePositionTask(): PositionTask {
     0
   );
   
-  console.log(`[NAVIGATE] Target: line ${targetPosition.line}, col ${targetPosition.col}`);
+  const generationLatencyMs = Date.now() - generationStartedAt;
+  console.log(
+    `[NAVIGATE] Target: line ${targetPosition.line}, col ${targetPosition.col} | latency: ${generationLatencyMs}ms`
+  );
   
   return {
     id: `task-${++taskIdCounter}`,
@@ -166,6 +170,7 @@ function getValidInnerIndices(code: string, indices: IntTuple[]): IntTuple[] {
 type DeleteStrategyExecutor = () => IntTuple;
 
 export function generateDeleteTask(): DeleteTask {
+  const generationStartedAt = Date.now();
   const snippetIndex = Math.floor(Math.random() * CODE_SNIPPIT_OBJECTS.length);
   const snippetData = CODE_SNIPPIT_OBJECTS[snippetIndex] ?? CODE_SNIPPIT_OBJECTS[0];
   if (!snippetData) {
@@ -274,11 +279,14 @@ export function generateDeleteTask(): DeleteTask {
 
   // Pick a random strategy
   const chosen = strategies[Math.floor(Math.random() * strategies.length)]!;
-  console.log(`[DELETE] Strategy: ${chosen.name}`);
   const [from, to] = chosen.execute();
 
   const expectedResult = snippet.slice(0, from) + snippet.slice(to);
   const deleteRecommendation = getRecommendedDeleteSequence(snippetData, chosen.name, from, to);
+  const generationLatencyMs = Date.now() - generationStartedAt;
+  console.log(
+    `[DELETE] Strategy: ${chosen.name} | latency: ${generationLatencyMs}ms`
+  );
   return {
     id: `task-${++taskIdCounter}`,
     type: 'delete',

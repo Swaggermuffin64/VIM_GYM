@@ -122,6 +122,35 @@ function getBracketIndices(code: string): IntTuple[] {
   return bracketIndices;
 }
 
+function buildLineStartOffsets(lineOffsetRanges: IntTuple[]): number[] {
+  return lineOffsetRanges.map(([lineStart]) => lineStart);
+}
+
+function buildOffsetToLineMap(code: string, lineOffsetRanges: IntTuple[]): number[] {
+  const lastValidOffset = Math.max(0, code.length - 1);
+  const offsetToLine = new Array<number>(code.length).fill(0);
+  lineOffsetRanges.forEach(([lineStart, lineEndInclusive], lineIndex) => {
+    const clampedEnd = Math.min(lineEndInclusive, lastValidOffset);
+    for (let offset = lineStart; offset <= clampedEnd; offset++) {
+      offsetToLine[offset] = lineIndex;
+    }
+  });
+  return offsetToLine;
+}
+
+function buildMotionKeysByLine(code: string, lineOffsetRanges: IntTuple[]): string[][] {
+  const baseKeys = ['h', 'j', 'k', 'l', 'w', 'e', 'b', '0', '$'];
+  return lineOffsetRanges.map(([lineStart, lineEndExclusive]) => {
+    const lineText = code.slice(lineStart, lineEndExclusive);
+    const uniqueChars = new Set<string>(lineText);
+    const targetedKeys: string[] = [];
+    for (const char of uniqueChars) {
+      targetedKeys.push(`f${char}`, `F${char}`, `t${char}`, `T${char}`);
+    }
+    return [...baseKeys, ...targetedKeys];
+  });
+}
+
 // Remove empty lines (lines with only whitespace) - must match tasks.ts behavior
 function removeEmptyLines(code: string): string {
   return code
@@ -137,13 +166,19 @@ function createCodeSnippetObjects(CODE_SNIPPETS: string[]): codeSnippet[] {
     if (raw_snippet) {
       // Remove empty lines first - indices must match the cleaned code used at runtime
       const code_snippet = removeEmptyLines(raw_snippet);
+      const lineOffsetRanges = getNewlineOffsets(code_snippet);
       let code_object: codeSnippet = {
         code: code_snippet,
         wordIndices: getWordIndices(code_snippet),
         curlyBraceIndices: getCurlyBraceIndices(code_snippet),
         parenthesisIndices: getParenthesisIndices(code_snippet),
         bracketIndices: getBracketIndices(code_snippet),
-        lineOffsetRanges: getNewlineOffsets(code_snippet),
+        lineOffsetRanges,
+        precomputed: {
+          lineStartOffsets: buildLineStartOffsets(lineOffsetRanges),
+          offsetToLine: buildOffsetToLineMap(code_snippet, lineOffsetRanges),
+          motionKeysByLine: buildMotionKeysByLine(code_snippet, lineOffsetRanges),
+        },
       };
       codeSnippetObjects.push(code_object);
     }

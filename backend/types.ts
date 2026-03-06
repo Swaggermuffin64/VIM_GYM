@@ -98,6 +98,13 @@ export interface codeSnippet {
   parenthesisIndices: IntTuple[];
   bracketIndices: IntTuple[];
   lineOffsetRanges: IntTuple[];
+  precomputed?: {
+    lineStartOffsets: number[];
+    // Maps each character offset to its 0-indexed line.
+    offsetToLine: number[];
+    // Per-line motion keys to avoid rebuilding find-char keys repeatedly.
+    motionKeysByLine: string[][];
+  };
 }
 
 export type IntTuple = [number, number];

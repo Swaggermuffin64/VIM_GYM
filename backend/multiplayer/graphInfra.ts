@@ -3,6 +3,10 @@ import type { codeSnippet, IntTuple } from "../types.js";
 const WANTED_EOL_RELATIVE_X = Number.MAX_SAFE_INTEGER;
 //return zero indexed line for any offset
 export function getLineFromOffset(offset: number, codeSnippet: codeSnippet) {
+    const precomputedLine = codeSnippet.precomputed?.offsetToLine[offset];
+    if (precomputedLine !== undefined) {
+        return precomputedLine;
+    }
     const allLineOffsets = codeSnippet.lineOffsetRanges;
     for (let i = 0; i < allLineOffsets.length; i++) {
 
@@ -21,7 +25,7 @@ export function getLineFromOffset(offset: number, codeSnippet: codeSnippet) {
 export function resolveKeyOffset(offset: number, key: string, codeSnippet: codeSnippet, savedRelativeX: number): IntTuple {
     const lineOffsetRanges = codeSnippet.lineOffsetRanges;
     if (!lineOffsetRanges) return [offset, savedRelativeX];
-    const lineStartOffsets = lineOffsetRanges.map(range => range[0]);
+    const lineStartOffsets = codeSnippet.precomputed?.lineStartOffsets ?? lineOffsetRanges.map(range => range[0]);
     const lineNumber = getLineFromOffset(offset, codeSnippet);
     const totalLines = lineOffsetRanges.length;
     const currentLineRange = lineOffsetRanges[lineNumber];

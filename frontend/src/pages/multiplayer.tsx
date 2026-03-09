@@ -287,6 +287,7 @@ const MultiplayerGame: React.FC = () => {
     sendCursorMove,
     sendEditorText,
     clearResetFlag,
+    getMatchToken,
   } = useGameSocket();
 
   const editorRef = useRef<VimRaceEditorHandle>(null);
@@ -604,13 +605,20 @@ const MultiplayerGame: React.FC = () => {
   const showResultsOverlay = !showTaskReview && displayRankings !== null;
 
   useEffect(() => {
+    if (initialMode !== 'quick') return;
     if (!gameState.roomId) return;
     if (!me?.isFinished && gameState.roomState !== 'finished') return;
+    const matchToken = getMatchToken();
+    if (!matchToken) return;
 
     let cancelled = false;
     const fetchPlayerAverages = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/multiplayer/stats/${gameState.roomId}`);
+        const response = await fetch(`${API_BASE}/api/multiplayer/stats/${gameState.roomId}`, {
+          headers: {
+            Authorization: `Bearer ${matchToken}`,
+          },
+        });
         const payload = await response.json() as {
           success: boolean;
           players?: Array<{
@@ -646,7 +654,7 @@ const MultiplayerGame: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [gameState.roomId, gameState.roomState, gameState.players, me?.isFinished]);
+  }, [initialMode, gameState.roomId, gameState.roomState, gameState.players, me?.isFinished, getMatchToken]);
 
   const recentKeysDisplay = React.useMemo(() => {
     if (recentKeys.length === 0) return '';

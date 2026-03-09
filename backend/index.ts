@@ -12,7 +12,7 @@ import type {
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
 import { BACKEND_PORT, CORS_ORIGINS } from './config.js';
-import { verifyMatchToken, extractTokenFromHandshake } from './auth/auth.js';
+import { verifyMatchToken, extractTokenFromAuthHeader, extractTokenFromHandshake } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
 import { 
@@ -234,13 +234,23 @@ fastify.post<{
 
 fastify.get<{
   Params: { roomId: string };
-}>('/api/multiplayer/stats/:roomId', async (request) => {
+}>('/api/multiplayer/stats/:roomId', async (request, reply) => {
   const roomIdResult = validateRoomId(request.params.roomId);
   if (!roomIdResult.valid || !roomIdResult.value) {
-    return { success: false, error: roomIdResult.error || 'Invalid room ID' };
+    return reply.status(400).send({ success: false, error: roomIdResult.error || 'Invalid room ID' });
+  }
+
+  const token = extractTokenFromAuthHeader(request.headers);
+  const authResult = verifyMatchToken(token);
+  if (!authResult.success || !authResult.matchedRoomId) {
+    return reply.status(401).send({ success: false, error: 'Authentication required' });
   }
 
   const roomId = roomIdResult.value;
+  if (authResult.matchedRoomId !== roomId) {
+    return reply.status(403).send({ success: false, error: 'Forbidden for this room' });
+  }
+
   const summaries = new Map<string, { taskCount: number; totalDurationMs: number; totalKeys: number }>();
 
   for (const { data } of taskKeystrokeRecords.values()) {
@@ -284,7 +294,7 @@ fastify.get('/api/task/practice', async () => {
   
   const positionTasks: Task[] = generatePositionTasks(tasksPerType);
   const deleteTasks: Task[] = generateDeleteTasks(tasksPerType);
-  const allTasks = [...positionTasks, ...deleteTasks];
+  const allTasks = shuffle([...positionTasks, ...deleteTasks]);
   const navigateTasksWithRecommendation = positionTasks.reduce((count, task) => {
     if (task.type !== 'navigate') return count;
     return task.recommendedSequence && typeof task.recommendedWeight === 'number' ? count + 1 : count;

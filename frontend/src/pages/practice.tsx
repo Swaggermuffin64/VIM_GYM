@@ -13,7 +13,13 @@ import {
   formatKeysForDisplay as sharedFormatKeysForDisplay,
 } from '../utils/keyFormatting';
 import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
-import { setDeleteMode, setAllowedDeleteRange, allowReset, setUndoBarrier } from '../extensions/readOnlyNavigation';
+import {
+  allowReset,
+  EditBlockReason,
+  setAllowedDeleteRange,
+  setDeleteMode,
+  setUndoBarrier,
+} from '../extensions/readOnlyNavigation';
 import { VimRaceEditor, VimRaceEditorHandle, editorColors as colors } from '../components/VimRaceEditor';
 import { SummaryTaskSandbox } from '../components/SummaryTaskSandbox';
 
@@ -320,6 +326,14 @@ const styles: Record<string, React.CSSProperties> = {
   keyLogEmpty: {
     color: colors.textMuted,
     fontSize: '14px',
+  },
+  blockedEditHint: {
+    marginTop: '10px',
+    minHeight: '18px',
+    fontSize: '12px',
+    color: colors.warning,
+    fontFamily: '"JetBrains Mono", monospace',
+    lineHeight: 1.4,
   },
   sidebarTitle: {
     fontSize: '14px',
@@ -994,6 +1008,7 @@ const PracticeEditor: React.FC = () => {
   const [summaryTaskCompletion, setSummaryTaskCompletion] = useState<Record<string, boolean>>({});
   const [summaryTaskResetTokens, setSummaryTaskResetTokens] = useState<Record<string, number>>({});
   const [showCheatSheet, setShowCheatSheet] = useState(false);
+  const [blockedEditHint, setBlockedEditHint] = useState<string | null>(null);
 
   // Current task derived from state
   const currentTask = tasks[taskProgress] || null;
@@ -1007,6 +1022,7 @@ const PracticeEditor: React.FC = () => {
   const taskKeystrokesRef = useRef<KeystrokeEvent[]>([]);
   const submittedTaskIdsRef = useRef<Set<string>>(new Set());
   const isFetchingPracticeSessionRef = useRef(false);
+  const blockedHintTimerRef = useRef<number | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1025,6 +1041,12 @@ const PracticeEditor: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [sessionStartTime, isSessionComplete]);
+
+  useEffect(() => () => {
+    if (blockedHintTimerRef.current !== null) {
+      window.clearTimeout(blockedHintTimerRef.current);
+    }
+  }, []);
 
   // Format time display
   const formatTime = (ms: number): string => {
@@ -1055,6 +1077,32 @@ const PracticeEditor: React.FC = () => {
   const formatKeysForDisplay = useCallback((keys: string[]): string => {
     return sharedFormatKeysForDisplay(keys);
   }, []);
+
+  const getBlockedEditHint = useCallback((reason: EditBlockReason): string => {
+    switch (reason) {
+      case 'readOnlyTask':
+        return 'This task is navigation-only; edits are disabled.';
+      case 'insertNotAllowed':
+        return 'Only deletions are allowed in this task.';
+      case 'outsideAllowedRange':
+        return 'Deletion blocked: command went outside the highlighted range.';
+      case 'undoBarrier':
+        return 'Undo is temporarily blocked right after reset.';
+      default:
+        return 'Edit blocked by task constraints.';
+    }
+  }, []);
+
+  const handleBlockedEdit = useCallback((reason: EditBlockReason) => {
+    setBlockedEditHint(getBlockedEditHint(reason));
+    if (blockedHintTimerRef.current !== null) {
+      window.clearTimeout(blockedHintTimerRef.current);
+    }
+    blockedHintTimerRef.current = window.setTimeout(() => {
+      setBlockedEditHint(null);
+      blockedHintTimerRef.current = null;
+    }, 2400);
+  }, [getBlockedEditHint]);
 
   const submitTaskKeystrokes = useCallback(async (
     task: Task,
@@ -1112,6 +1160,7 @@ const PracticeEditor: React.FC = () => {
   const setupTaskInEditor = useCallback((task: Task) => {
     const view = editorRef.current?.view;
     if (!view) return;
+    setBlockedEditHint(null);
 
     view.dispatch({
       changes: {
@@ -1784,6 +1833,7 @@ const PracticeEditor: React.FC = () => {
                     onReady={handleEditorReady}
                     onCursorChange={handleCursorChange}
                     onDocChange={handleEditorChange}
+                    onBlockedEdit={handleBlockedEdit}
                     onKeyStroke={handleTaskKeyStroke}
                     shouldAllowBlur={() => isTaskCompleteRef.current}
                   />
@@ -1812,6 +1862,9 @@ const PracticeEditor: React.FC = () => {
                     {recentKeys.length > 0
                       ? recentKeysDisplay
                       : <span style={styles.keyLogEmpty}>No keys yet...</span>}
+                  </div>
+                  <div style={styles.blockedEditHint}>
+                    {blockedEditHint ?? '\u00A0'}
                   </div>
                 </div>
 

@@ -16,7 +16,13 @@ import { RaceCountdown } from '../components/RaceCountdown';
 import { RaceResults } from '../components/RaceResults';
 import { TaskReviewOverlay } from '../components/TaskReviewOverlay';
 import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
-import { setDeleteMode, setAllowedDeleteRange, allowReset, setUndoBarrier } from '../extensions/readOnlyNavigation';
+import {
+  allowReset,
+  EditBlockReason,
+  setAllowedDeleteRange,
+  setDeleteMode,
+  setUndoBarrier,
+} from '../extensions/readOnlyNavigation';
 import { VimRaceEditor, VimRaceEditorHandle, editorColors as colors } from '../components/VimRaceEditor';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -265,6 +271,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textMuted,
     fontSize: '14px',
   },
+  blockedEditHint: {
+    marginTop: '10px',
+    minHeight: '18px',
+    fontSize: '12px',
+    color: colors.warning,
+    fontFamily: '"JetBrains Mono", monospace',
+    lineHeight: 1.4,
+  },
 };
 
 const MultiplayerGame: React.FC = () => {
@@ -299,10 +313,12 @@ const MultiplayerGame: React.FC = () => {
   const [taskSummaries, setTaskSummaries] = React.useState<TaskSummary[]>([]);
   const [raceFinishTime, setRaceFinishTime] = React.useState(0);
   const [playerAveragesById, setPlayerAveragesById] = React.useState<Record<string, PlayerTaskAverages>>({});
+  const [blockedEditHint, setBlockedEditHint] = React.useState<string | null>(null);
 
   const taskSummariesRef = useRef<TaskSummary[]>([]);
   const currentTaskObjRef = useRef<Task | null>(null);
   const taskIndexCounterRef = useRef(0);
+  const blockedHintTimerRef = useRef<number | null>(null);
 
   // Stable refs for callbacks used in CodeMirror extensions
   const sendCursorMoveRef = useRef(sendCursorMove);
@@ -321,6 +337,32 @@ const MultiplayerGame: React.FC = () => {
   const handleDocChange = useCallback((text: string) => {
     sendEditorTextRef.current(text);
   }, []);
+
+  const getBlockedEditHint = useCallback((reason: EditBlockReason): string => {
+    switch (reason) {
+      case 'readOnlyTask':
+        return 'This task is navigation-only; edits are disabled.';
+      case 'insertNotAllowed':
+        return 'Only deletions are allowed in this task.';
+      case 'outsideAllowedRange':
+        return 'Deletion blocked: command went outside the highlighted range.';
+      case 'undoBarrier':
+        return 'Undo is temporarily blocked right after reset.';
+      default:
+        return 'Edit blocked by task constraints.';
+    }
+  }, []);
+
+  const handleBlockedEdit = useCallback((reason: EditBlockReason) => {
+    setBlockedEditHint(getBlockedEditHint(reason));
+    if (blockedHintTimerRef.current !== null) {
+      window.clearTimeout(blockedHintTimerRef.current);
+    }
+    blockedHintTimerRef.current = window.setTimeout(() => {
+      setBlockedEditHint(null);
+      blockedHintTimerRef.current = null;
+    }, 2400);
+  }, [getBlockedEditHint]);
 
   const keystrokeTaskIdRef = useRef<string | null>(null);
   const keystrokeTaskTypeRef = useRef<TaskKeystrokeSubmission['taskType']>('navigate');
@@ -428,6 +470,12 @@ const MultiplayerGame: React.FC = () => {
   const handleEditorReady = useCallback(() => {
     currentTaskIdRef.current = null;
     setEditorReadyTick((prev) => prev + 1);
+  }, []);
+
+  useEffect(() => () => {
+    if (blockedHintTimerRef.current !== null) {
+      window.clearTimeout(blockedHintTimerRef.current);
+    }
   }, []);
 
   // Timer effect
@@ -666,6 +714,7 @@ const MultiplayerGame: React.FC = () => {
     const view = editorRef.current?.view;
     if (!view || !gameState.task.id) return;
     if (currentTaskIdRef.current === gameState.task.id) return;
+    setBlockedEditHint(null);
 
     // Replace doc for every new task. allowReset bypasses readOnlyNavigation
     // so full-snippet swaps are always permitted.
@@ -857,6 +906,7 @@ const MultiplayerGame: React.FC = () => {
                     onReady={handleEditorReady}
                     onCursorChange={handleCursorChange}
                     onDocChange={handleDocChange}
+                    onBlockedEdit={handleBlockedEdit}
                     onKeyStroke={handleTaskKeyStroke}
                   />
                 )}
@@ -916,6 +966,9 @@ const MultiplayerGame: React.FC = () => {
                 {recentKeys.length > 0
                   ? recentKeysDisplay
                   : <span style={styles.keyLogEmpty}>No keys yet...</span>}
+              </div>
+              <div style={styles.blockedEditHint}>
+                {blockedEditHint ?? '\u00A0'}
               </div>
             </div>
           </div>

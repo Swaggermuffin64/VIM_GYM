@@ -12,7 +12,11 @@ import { oneDark } from '@codemirror/theme-one-dark';
 
 import { targetHighlightExtension } from '../extensions/targetHighlight';
 import { cursorTracker } from '../extensions/cursorTracker';
-import { readOnlyNavigation } from '../extensions/readOnlyNavigation';
+import {
+  blockedEditReasonAnnotation,
+  EditBlockReason,
+  readOnlyNavigation,
+} from '../extensions/readOnlyNavigation';
 import type { KeystrokeEvent } from '../types/keystroke';
 
 // ---------------------------------------------------------------------------
@@ -118,6 +122,8 @@ interface VimRaceEditorProps {
   onCursorChange: (offset: number) => void;
   /** Called whenever the document text changes. */
   onDocChange?: (text: string) => void;
+  /** Called when a document edit is blocked by task guardrails. */
+  onBlockedEdit?: (reason: EditBlockReason) => void;
   /** Called for each key pressed while focused in the editor. */
   onKeyStroke?: (event: KeystrokeEvent) => void;
   /**
@@ -151,6 +157,7 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
     onReady,
     onCursorChange,
     onDocChange,
+    onBlockedEdit,
     onKeyStroke,
     shouldAllowBlur,
     allowMouseNavigation = false,
@@ -163,11 +170,13 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
     // Refs for callbacks so CodeMirror extensions never hold stale closures.
     const onCursorChangeRef = useRef(onCursorChange);
     const onDocChangeRef = useRef(onDocChange);
+    const onBlockedEditRef = useRef(onBlockedEdit);
     const onKeyStrokeRef = useRef(onKeyStroke);
     const shouldAllowBlurRef = useRef(shouldAllowBlur);
 
     useEffect(() => { onCursorChangeRef.current = onCursorChange; }, [onCursorChange]);
     useEffect(() => { onDocChangeRef.current = onDocChange; }, [onDocChange]);
+    useEffect(() => { onBlockedEditRef.current = onBlockedEdit; }, [onBlockedEdit]);
     useEffect(() => { onKeyStrokeRef.current = onKeyStroke; }, [onKeyStroke]);
     useEffect(() => { shouldAllowBlurRef.current = shouldAllowBlur; }, [shouldAllowBlur]);
 
@@ -204,6 +213,12 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       const docChangeListener = EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onDocChangeRef.current?.(update.state.doc.toString());
+        }
+        for (const transaction of update.transactions) {
+          const blockReason = transaction.annotation(blockedEditReasonAnnotation);
+          if (blockReason) {
+            onBlockedEditRef.current?.(blockReason);
+          }
         }
       });
 

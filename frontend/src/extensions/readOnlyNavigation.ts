@@ -1,4 +1,4 @@
-import { EditorState, Transaction, TransactionSpec, StateEffect, StateField, Extension } from '@codemirror/state';
+import { Annotation, EditorState, Transaction, TransactionSpec, StateEffect, StateField, Extension } from '@codemirror/state';
 
 function shouldDebugUndo(): boolean {
   return typeof globalThis !== 'undefined'
@@ -29,6 +29,14 @@ export const setAllowedDeleteRange = StateEffect.define<{ from: number; to: numb
  */
 export const allowReset = StateEffect.define<boolean>();
 export const setUndoBarrier = StateEffect.define<boolean>();
+
+export type EditBlockReason =
+  | 'undoBarrier'
+  | 'readOnlyTask'
+  | 'insertNotAllowed'
+  | 'outsideAllowedRange';
+
+export const blockedEditReasonAnnotation = Annotation.define<EditBlockReason>();
 
 /**
  * State field that tracks whether deletions are allowed
@@ -106,6 +114,15 @@ const allowedDeleteRangeState = StateField.define<{ from: number; to: number } |
  * When delete mode is enabled, deletions are only allowed within the target range.
  */
 const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
+  const buildBlockedTransaction = (reason: EditBlockReason): TransactionSpec => {
+    const blocked: TransactionSpec = {
+      annotations: blockedEditReasonAnnotation.of(reason),
+    };
+    if (tr.selection) blocked.selection = tr.selection;
+    if (tr.scrollIntoView) blocked.scrollIntoView = true;
+    return blocked;
+  };
+
   const isUndoRedo = tr.isUserEvent('undo') || tr.isUserEvent('redo');
   if (isUndoRedo) {
     logUndoDebug('saw undo/redo transaction', {
@@ -138,10 +155,7 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
 
   if (isUndoRedo && undoBarrier) {
     logUndoDebug('blocking undo/redo due to reset barrier');
-    const blockedUndo: TransactionSpec = {};
-    if (tr.selection) blockedUndo.selection = tr.selection;
-    if (tr.scrollIntoView) blockedUndo.scrollIntoView = true;
-    return blockedUndo;
+    return buildBlockedTransaction('undoBarrier');
   }
 
   if (deleteMode) {
@@ -160,9 +174,11 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
         return tr;
       }
       logUndoDebug('blocking undo/redo outside allowed range', { allowedRange });
+      return buildBlockedTransaction('outsideAllowedRange');
     }
 
     let isValidDeletion = true;
+    let outsideAllowedRange = false;
     
     tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
       const isDelete = inserted.length === 0 || inserted.length < (toA - fromA);
@@ -174,6 +190,7 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
       if (allowedRange) {
         if (fromA < allowedRange.from || toA > allowedRange.to) {
           isValidDeletion = false;
+          outsideAllowedRange = true;
         }
       }
     });
@@ -184,6 +201,8 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
       }
       return tr;
     }
+
+    return buildBlockedTransaction(outsideAllowedRange ? 'outsideAllowedRange' : 'insertNotAllowed');
   }
 
   if (isUndoRedo) {
@@ -194,18 +213,7 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
     });
   }
 
-  // Block the document change but preserve selection/scroll
-  const newTr: TransactionSpec = {};
-  
-  if (tr.selection) {
-    newTr.selection = tr.selection;
-  }
-  
-  if (tr.scrollIntoView) {
-    newTr.scrollIntoView = true;
-  }
-  
-  return newTr;
+  return buildBlockedTransaction('readOnlyTask');
 });
 
 /**

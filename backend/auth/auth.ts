@@ -77,3 +77,19 @@ export function verifyMatchToken(token: string | undefined): AuthResult {
 export function extractTokenFromHandshake(handshake: { auth?: { token?: string } }): string | undefined {
   return handshake?.auth?.token;
 }
+
+/**
+ * Extract bearer token from HTTP Authorization header.
+ */
+export function extractTokenFromAuthHeader(
+  headers: { authorization?: string | string[] | undefined }
+): string | undefined {
+  const rawAuth = headers.authorization;
+  const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+  if (!authHeader) return undefined;
+
+  const [scheme, token] = authHeader.trim().split(/\s+/, 2);
+  if (!scheme || !token) return undefined;
+  if (scheme.toLowerCase() !== 'bearer') return undefined;
+  return token;
+}

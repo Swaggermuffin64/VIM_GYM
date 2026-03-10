@@ -50,9 +50,9 @@ export interface ServerToClientEvents {
   'room:reset': (data: { players: Player[] }) => void;
   'room:error': (data: { message: string }) => void;
   'game:countdown': (data: { seconds: number }) => void;
-  'game:start': (data: { startTime: number, initialTask: Task | undefined, num_tasks: number}) => void;
+  'game:start': (data: { startTime: number; initialTask: Task | undefined; tasks: Task[]; num_tasks: number }) => void;
   'game:opponent_finished_task': (data: { playerId: string; taskProgress: number;}) => void;
-  'game:player_finished_task': (data: { playerId: string; taskProgress: number; newTask: Task | undefined}) => void;
+  'game:player_finished_task': (data: { playerId: string; taskProgress: number }) => void;
   'game:validation_failed': (playerId: string) => void;
   'game:player_finished': (data: { playerId: string; time: number; position: number }) => void;
   'game:complete': (data: { rankings: Array<{ playerId: string; playerName: string; time: number; position: number }> }) => void;

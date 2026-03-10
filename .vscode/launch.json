@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug backend index (tsx)",
+        "type": "node",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/backend",
+        "runtimeExecutable": "node",
+        "runtimeArgs": ["--import", "tsx"],
+        "args": ["index.ts"],
+        "sourceMaps": true,
+        "console": "integratedTerminal",
+        "skipFiles": ["<node_internals>/**"]
+      },
+      {
+        "name": "Debug current TS file (backend)",
+        "type": "node",
+        "request": "launch",
+        "cwd": "${workspaceFolder}/backend",
+        "runtimeExecutable": "node",
+        "runtimeArgs": ["--import", "tsx"],
+        "args": ["${file}"],
+        "sourceMaps": true,
+        "console": "integratedTerminal",
+        "skipFiles": ["<node_internals>/**"]
+      }
+    ]
+}

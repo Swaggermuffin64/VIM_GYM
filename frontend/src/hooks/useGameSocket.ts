@@ -25,6 +25,7 @@ interface UseGameSocketReturn {
   sendEditorText: (text: string) => void;
   sendTaskComplete: () => void;
   clearResetFlag: () => void;
+  getMatchToken: () => string | null;
 }
 
 const initialGameState: Omit<GameState, 'myPlayerId'> = {
@@ -32,6 +33,7 @@ const initialGameState: Omit<GameState, 'myPlayerId'> = {
   roomState: 'idle',
   players: [],
   task: EMPTY_TASK,
+  taskQueue: [],
   num_tasks: 0,
   countdown: null,
   startTime: null,
@@ -50,6 +52,7 @@ export function useGameSocket(): UseGameSocketReturn {
   
   const pendingPlayerNameRef = useRef<string | null>(null);
   const quickMatchCancelledRef = useRef(false);
+  const matchTokenRef = useRef<string | null>(null);
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket: Socket) => {
@@ -133,6 +136,7 @@ export function useGameSocket(): UseGameSocketReturn {
         roomState: 'waiting',
         players,
         task: EMPTY_TASK,
+        taskQueue: [],
         countdown: null,
         startTime: null,
         rankings: null,
@@ -155,24 +159,27 @@ export function useGameSocket(): UseGameSocketReturn {
       }));
     });
 
-    socket.on('game:start', ({ startTime, initialTask, num_tasks }) => {
+    socket.on('game:start', ({ startTime, initialTask, tasks, num_tasks }) => {
       setGameState(prev => ({
         ...prev,
         roomState: 'racing',
         countdown: null,
         startTime,
-        task: initialTask,
+        taskQueue: tasks,
+        task: initialTask || tasks[0] || EMPTY_TASK,
         num_tasks,
       }));
     });
 
-    socket.on('game:player_finished_task', ({ playerId, taskProgress, newTask }) => {
+    socket.on('game:player_finished_task', ({ playerId, taskProgress }) => {
       setGameState(prev => ({
         ...prev,
         players: prev.players.map(p =>
           p.id === playerId ? { ...p, taskProgress: taskProgress } : p
         ),
-        task: newTask,
+        task: playerId === prev.myPlayerId
+          ? (prev.taskQueue[taskProgress] || EMPTY_TASK)
+          : prev.task,
       }));
     });
 
@@ -217,6 +224,7 @@ export function useGameSocket(): UseGameSocketReturn {
     if (socketRef.current) {
       socketRef.current.disconnect();
     }
+    matchTokenRef.current = token || null;
 
     const socket = io(url, {
       transports: ['websocket', 'polling'],
@@ -253,12 +261,14 @@ export function useGameSocket(): UseGameSocketReturn {
   // Actions
   const createRoom = useCallback((playerName: string) => {
     if (socketRef.current) {
+      matchTokenRef.current = null;
       socketRef.current.emit('room:create', { playerName });
     }
   }, []);
 
   const joinRoom = useCallback((roomId: string, playerName: string) => {
     if (socketRef.current) {
+      matchTokenRef.current = null;
       socketRef.current.emit('room:join', { roomId: roomId.toUpperCase(), playerName });
     }
   }, []);
@@ -347,6 +357,7 @@ export function useGameSocket(): UseGameSocketReturn {
 
   const cancelQuickMatch = useCallback(() => {
     quickMatchCancelledRef.current = true;
+    matchTokenRef.current = null;
 
     if (matchmakingWsRef.current) {
       try {
@@ -377,6 +388,7 @@ export function useGameSocket(): UseGameSocketReturn {
       socketRef.current.emit('room:leave');
       setGameState(prev => ({ ...initialGameState, myPlayerId: prev.myPlayerId }));
     }
+    matchTokenRef.current = null;
   }, []);
 
   const readyToPlay = useCallback(() => {
@@ -408,6 +420,8 @@ export function useGameSocket(): UseGameSocketReturn {
     setGameState(prev => ({ ...prev, shouldResetEditor: false }));
   }, []);
 
+  const getMatchToken = useCallback(() => matchTokenRef.current, []);
+
   // Cleanup matchmaking WebSocket on unmount
   useEffect(() => {
     return () => {
@@ -433,5 +447,6 @@ export function useGameSocket(): UseGameSocketReturn {
     sendEditorText,
     sendTaskComplete,
     clearResetFlag,
+    getMatchToken,
   };
 }

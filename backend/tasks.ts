@@ -1,5 +1,6 @@
 import type { PositionTask, DeleteTask, Position, Task, IntTuple, DeleteStrategy } from './types.ts';
 import { CODE_SNIPPIT_OBJECTS  } from './codeSnippets.js'; //will be a db call one day
+import { shortestVimSequenceLazy, getRecommendedDeleteSequence } from './multiplayer/vimGraph.js';
 /**
  * Remove empty lines from a code snippet
  */
@@ -105,7 +106,7 @@ function generateDescription(code: string, pos: Position): string {
   const contextEnd = Math.min(line.length, pos.col + 10);
   const context = line.substring(contextStart, contextEnd);
   
-  return `Move cursor to the highlighted character (in: ${context.trim()}.)`;
+  return `Move cursor to the highlighted character`;
 }
 let taskIdCounter = 0;
 
@@ -113,16 +114,34 @@ let taskIdCounter = 0;
  * Generate a random position task
  */
 export function generatePositionTask(): PositionTask {
+  const generationStartedAt = Date.now();
   const snippetIndex = Math.floor(Math.random() * CODE_SNIPPIT_OBJECTS.length);
-  const snippet = removeEmptyLines(CODE_SNIPPIT_OBJECTS[snippetIndex]?.code ?? CODE_SNIPPIT_OBJECTS[0]?.code!);
+  const snippetData = CODE_SNIPPIT_OBJECTS[snippetIndex] ?? CODE_SNIPPIT_OBJECTS[0];
+  if (!snippetData) {
+    throw new Error('No code snippets available to generate navigate task');
+  }
+  const snippet = removeEmptyLines(snippetData.code);
   const positions = findInterestingPositions(snippet);
+  const validPositions = positions.filter((position) => positionToOffset(snippet, position) > 0);
+  if (validPositions.length === 0) {
+    throw new Error('No valid non-zero offsets available for navigate task');
+  }
   
   // Pick a random interesting position
-  const posIndex = Math.floor(Math.random() * positions.length);
-  const targetPosition = positions[posIndex] ?? { line: 1, col: 0 };
+  const posIndex = Math.floor(Math.random() * validPositions.length);
+  const targetPosition = validPositions[posIndex] ?? { line: 1, col: 1 };
   const targetOffset = positionToOffset(snippet, targetPosition);
+  const [recommendedWeight, recommendedSequence] = shortestVimSequenceLazy(
+    snippetData,
+    0,
+    targetOffset,
+    0
+  );
   
-  console.log(`[NAVIGATE] Target: line ${targetPosition.line}, col ${targetPosition.col}`);
+  const generationLatencyMs = Date.now() - generationStartedAt;
+  console.log(
+    `[NAVIGATE] Target: line ${targetPosition.line}, col ${targetPosition.col} | latency: ${generationLatencyMs}ms`
+  );
   
   return {
     id: `task-${++taskIdCounter}`,
@@ -131,6 +150,12 @@ export function generatePositionTask(): PositionTask {
     codeSnippet: snippet,
     targetPosition,
     targetOffset,
+    ...(recommendedWeight >= 0
+      ? {
+          recommendedSequence,
+          recommendedWeight,
+        }
+      : {}),
   };
 }
 
@@ -150,9 +175,13 @@ function getValidInnerIndices(code: string, indices: IntTuple[]): IntTuple[] {
 type DeleteStrategyExecutor = () => IntTuple;
 
 export function generateDeleteTask(): DeleteTask {
+  const generationStartedAt = Date.now();
   const snippetIndex = Math.floor(Math.random() * CODE_SNIPPIT_OBJECTS.length);
-  const snippet = removeEmptyLines(CODE_SNIPPIT_OBJECTS[snippetIndex]?.code!); 
-  const snippetData = CODE_SNIPPIT_OBJECTS[snippetIndex];
+  const snippetData = CODE_SNIPPIT_OBJECTS[snippetIndex] ?? CODE_SNIPPIT_OBJECTS[0];
+  if (!snippetData) {
+    throw new Error('No code snippets available to generate delete task');
+  }
+  const snippet = removeEmptyLines(snippetData.code); 
 
   // Build available strategies based on what the snippet contains
   const strategies: Array<{ name: DeleteStrategy; execute: DeleteStrategyExecutor }> = [];
@@ -255,10 +284,14 @@ export function generateDeleteTask(): DeleteTask {
 
   // Pick a random strategy
   const chosen = strategies[Math.floor(Math.random() * strategies.length)]!;
-  console.log(`[DELETE] Strategy: ${chosen.name}`);
   const [from, to] = chosen.execute();
 
   const expectedResult = snippet.slice(0, from) + snippet.slice(to);
+  const deleteRecommendation = getRecommendedDeleteSequence(snippetData, chosen.name, from, to);
+  const generationLatencyMs = Date.now() - generationStartedAt;
+  console.log(
+    `[DELETE] Strategy: ${chosen.name} | latency: ${generationLatencyMs}ms`
+  );
   return {
     id: `task-${++taskIdCounter}`,
     type: 'delete',
@@ -267,6 +300,12 @@ export function generateDeleteTask(): DeleteTask {
     targetRange: {from, to},
     expectedResult,
     strategy: chosen.name,
+    ...(deleteRecommendation
+      ? {
+          recommendedSequence: deleteRecommendation.recommendedSequence,
+          recommendedWeight: deleteRecommendation.recommendedWeight,
+        }
+      : {}),
   }
 }
 

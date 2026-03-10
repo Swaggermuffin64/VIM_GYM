@@ -11,12 +11,25 @@ export interface ValidationResult<T> {
   error?: string;
 }
 
+interface RawKeystrokeEvent {
+  key: unknown;
+  altKey: unknown;
+  ctrlKey: unknown;
+  metaKey: unknown;
+  shiftKey: unknown;
+  repeat: unknown;
+  dtMs: unknown;
+}
+
 // Limits
 const PLAYER_NAME_MAX_LENGTH = 20;
 const PLAYER_NAME_MIN_LENGTH = 1;
 const ROOM_ID_LENGTH = 6;
 const MAX_EDITOR_TEXT_LENGTH = 10000; // 10KB max for editor content
 const MAX_CURSOR_OFFSET = 100000;     // Reasonable max for any code file
+const MAX_KEYSTROKES_PER_TASK = 2000;
+const MAX_KEY_NAME_LENGTH = 32;
+const MAX_KEYSTROKE_DT_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Sanitize and validate a player name.
@@ -115,6 +128,67 @@ export function validateEditorText(input: unknown): ValidationResult<string> {
   }
 
   return { valid: true, value: input };
+}
+
+/**
+ * Validate and sanitize task-end keystroke event payloads.
+ */
+export function validateKeystrokeEvents(input: unknown): ValidationResult<Array<{
+  key: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  repeat: boolean;
+  dtMs: number;
+}>> {
+  if (!Array.isArray(input)) {
+    return { valid: false, error: 'Keystroke events must be an array' };
+  }
+
+  if (input.length > MAX_KEYSTROKES_PER_TASK) {
+    return {
+      valid: false,
+      error: `Too many keystrokes (max ${MAX_KEYSTROKES_PER_TASK})`,
+    };
+  }
+
+  const sanitizedEvents: Array<{
+    key: string;
+    altKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    shiftKey: boolean;
+    repeat: boolean;
+    dtMs: number;
+  }> = [];
+
+  for (const rawEvent of input as RawKeystrokeEvent[]) {
+    if (!rawEvent || typeof rawEvent !== 'object') {
+      return { valid: false, error: 'Invalid keystroke event format' };
+    }
+
+    if (typeof rawEvent.key !== 'string' || rawEvent.key.length < 1 || rawEvent.key.length > MAX_KEY_NAME_LENGTH) {
+      return { valid: false, error: 'Invalid key value in keystroke event' };
+    }
+
+    const dtMs = rawEvent.dtMs;
+    if (typeof dtMs !== 'number' || !Number.isInteger(dtMs) || dtMs < 0 || dtMs > MAX_KEYSTROKE_DT_MS) {
+      return { valid: false, error: 'Invalid keystroke timestamp delta' };
+    }
+
+    sanitizedEvents.push({
+      key: rawEvent.key,
+      altKey: Boolean(rawEvent.altKey),
+      ctrlKey: Boolean(rawEvent.ctrlKey),
+      metaKey: Boolean(rawEvent.metaKey),
+      shiftKey: Boolean(rawEvent.shiftKey),
+      repeat: Boolean(rawEvent.repeat),
+      dtMs,
+    });
+  }
+
+  return { valid: true, value: sanitizedEvents };
 }
 
 /**

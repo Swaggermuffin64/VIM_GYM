@@ -483,13 +483,15 @@ export const Lobby: React.FC<LobbyProps> = ({
           </>
         )}
 
-        <button
-          style={styles.backButton}
-          onClick={(isInQueue || isLoading) && onCancelQuickMatch ? onCancelQuickMatch : handleBack}
-          disabled={false}
-        >
-          ← Back
-        </button>
+        {!((isInQueue || isLoading) && onCancelQuickMatch) && (
+          <button
+            style={styles.backButton}
+            onClick={handleBack}
+            disabled={false}
+          >
+            ← Back
+          </button>
+        )}
           </div>
         </div>
       </div>

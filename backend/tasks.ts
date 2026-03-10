@@ -48,6 +48,11 @@ function findInterestingPositions(code: string): Position[] {
   
   lines.forEach((line, lineIndex) => {
     for (let col = 0; col < line.length; col++) {
+      if (lineIndex === 0 && col === 0) {
+        // this is player's starting position, so we skip it
+        continue;
+      }
+      
       const char = line[col];
       if (char !== ' ' && char !== '\t') {
         positions.push({ line: lineIndex + 1, col });

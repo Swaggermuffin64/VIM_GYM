@@ -240,15 +240,22 @@ fastify.get<{
     return reply.status(400).send({ success: false, error: roomIdResult.error || 'Invalid room ID' });
   }
 
+  const roomId = roomIdResult.value;
+  const room = roomManager?.getRoom(roomId);
+  const allowTokenlessStats = room?.isPublic === false;
+
   const token = extractTokenFromAuthHeader(request.headers);
   const authResult = verifyMatchToken(token);
-  if (!authResult.success || !authResult.matchedRoomId) {
-    return reply.status(401).send({ success: false, error: 'Authentication required' });
-  }
 
-  const roomId = roomIdResult.value;
-  if (authResult.matchedRoomId !== roomId) {
-    return reply.status(403).send({ success: false, error: 'Forbidden for this room' });
+  // Private rooms have no match token, so allow tokenless stats access
+  // only when we can confirm this is an active private room.
+  if (!allowTokenlessStats) {
+    if (!authResult.success || !authResult.matchedRoomId) {
+      return reply.status(401).send({ success: false, error: 'Authentication required' });
+    }
+    if (authResult.matchedRoomId !== roomId) {
+      return reply.status(403).send({ success: false, error: 'Forbidden for this room' });
+    }
   }
 
   const summaries = new Map<string, { taskCount: number; totalDurationMs: number; totalKeys: number }>();

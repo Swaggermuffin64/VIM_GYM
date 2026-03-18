@@ -653,19 +653,19 @@ const MultiplayerGame: React.FC = () => {
   const showResultsOverlay = !showTaskReview && displayRankings !== null;
 
   useEffect(() => {
-    if (initialMode !== 'quick') return;
     if (!gameState.roomId) return;
     if (!me?.isFinished && gameState.roomState !== 'finished') return;
     const matchToken = getMatchToken();
-    if (!matchToken) return;
 
     let cancelled = false;
     const fetchPlayerAverages = async () => {
       try {
+        const headers: HeadersInit = {};
+        if (matchToken) {
+          headers.Authorization = `Bearer ${matchToken}`;
+        }
         const response = await fetch(`${API_BASE}/api/multiplayer/stats/${gameState.roomId}`, {
-          headers: {
-            Authorization: `Bearer ${matchToken}`,
-          },
+          headers,
         });
         const payload = await response.json() as {
           success: boolean;
@@ -702,7 +702,7 @@ const MultiplayerGame: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [initialMode, gameState.roomId, gameState.roomState, gameState.players, me?.isFinished, getMatchToken]);
+  }, [gameState.roomId, gameState.roomState, gameState.players, me?.isFinished, getMatchToken]);
 
   const recentKeysDisplay = React.useMemo(() => {
     if (recentKeys.length === 0) return '';

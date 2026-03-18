@@ -50,6 +50,7 @@ function shouldPreferCandidateOnTie(candidateSequence: string[], currentSequence
 }
 
 function getMotionKeysForOffset(offset: number, codeSnippet: codeSnippet): string[] {
+    //adds base keys, and f, F, t, T for every unique letter in a line
     const baseKeys = ['h', 'j', 'k', 'l', 'w', 'e', 'b', '0', '$'];
     const lineNumber = getLineFromOffset(offset, codeSnippet);
     const precomputedKeys = codeSnippet.precomputed?.motionKeysByLine[lineNumber];
@@ -171,13 +172,20 @@ interface lazyNeighbor {
     keySequence: string[];
 }
 
+// For an offset, and for all possible vim keys and their multiples
+// From that offset, record all possible resulting offset, weight and keySequence
 function getLazyNeighbors(state: vimCursorState, codeSnippet: codeSnippet): lazyNeighbor[] {
+    //[{offset, preferredX}, ...]
     const neighbors: lazyNeighbor[] = [];
     const vimKeys = getMotionKeysForOffset(state.offset, codeSnippet);
 
+    // h, j , k, l, fa, fb, ...
     for (const key of vimKeys) {
+        // most amount of times a key can be repeated until the action is redundant
+
         const keyMaxFactor = findMaxFactor(state.offset, key, codeSnippet, state.preferredX);
         if (keyMaxFactor <= 0) continue;
+        // [ {offset, relativeX}, ...] all possible resulting { offset, relativeX } for the multiples of the keys
 
         const allKeyOffsets = multiKeyResolve(
             state.offset,
@@ -192,6 +200,7 @@ function getLazyNeighbors(state: vimCursorState, codeSnippet: codeSnippet): lazy
             if (nextOffset < 0 || nextPreferredX < 0) return;
 
             const keySequence: string[] = [];
+            // this adds the key sequence + its multiple
             if (idx !== 0) keySequence.push(String(idx + 1));
             keySequence.push(key);
 
@@ -206,7 +215,9 @@ function getLazyNeighbors(state: vimCursorState, codeSnippet: codeSnippet): lazy
 
     return neighbors;
 }
-
+// Finds shortest vim sequence and weight between two offsets
+// Lazy because it calculates all of the possible transition neighbors each time for each state
+// instead of the graph already initialized in memory
 export function shortestVimSequenceLazy(
     codeSnippet: codeSnippet,
     startingOffset: number,
@@ -224,24 +235,35 @@ export function shortestVimSequenceLazy(
     const heap = new minHeap();
     const bestByState = new Map<string, dijkstraStateInfo>();
 
+    //state key is in format 'offset:preferred_x'
+    //We initialize the state key for starting offset + its preferred x
     const startKey = encodeStateKey(startState);
+    //set startKey's bestByState entry to 0, empty sequence, we are already there
     bestByState.set(startKey, { distance: 0, sequence: [] });
+
+    //min heap gets minimum distance states
     heap.push({ stateKey: startKey, distance: 0 });
 
     while (!heap.isEmpty()) {
+
+        // {statekey, distance}
         const currentEntry = heap.pop();
         if (!currentEntry) break;
 
+        // {distance, sequence[]} gives current closest distance + sequence for current
         const currentBest = bestByState.get(currentEntry.stateKey);
         if (!currentBest || currentEntry.distance > currentBest.distance) {
             continue; // stale heap entry
         }
 
+        //offset:preferredX --> {offset, preferredX}
         const currentState = decodeStateKey(currentEntry.stateKey);
+        //exit condition, finish when the targetOffset is the current node
         if (currentState.offset === targetOffset) {
             return [currentBest.distance, currentBest.sequence];
         }
 
+        //{to: (offset, relativeX}, weight, keySequence} for all added vim motions and multiples
         const neighbors = getLazyNeighbors(currentState, codeSnippet);
         for (const neighbor of neighbors) {
             const neighborKey = encodeStateKey(neighbor.to);
@@ -261,6 +283,8 @@ export function shortestVimSequenceLazy(
                 distance: candidateDistance,
                 sequence: candidateSequence,
             });
+
+            //only add neighbor to heap if we set a new best state
             heap.push({ stateKey: neighborKey, distance: candidateDistance });
         }
     }
@@ -274,6 +298,10 @@ interface shortestAnyTargetResult {
     sequence: string[];
 }
 
+// This is for delete tasks, specifically when there's multiple offsets 
+// where deletion tasks can be deleted from 
+// example di() will delete inside the next () pair, lots of different offsets
+// before the targeted () pair
 function shortestVimSequenceLazyToAnyTarget(
     codeSnippet: codeSnippet,
     startingOffset: number,

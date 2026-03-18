@@ -315,7 +315,12 @@ export class RoomManager {
     });
 
     console.log(`🏁 Race started in room ${roomId}`);
-    this.io.to(roomId).emit('game:start', { startTime: room.startTime, initialTask: room.tasks[0], num_tasks: room.num_tasks});
+    this.io.to(roomId).emit('game:start', {
+      startTime: room.startTime,
+      initialTask: room.tasks[0],
+      tasks: room.tasks,
+      num_tasks: room.num_tasks,
+    });
   }
 
   handleCursorMove(socket: GameSocket, offset: number): void {
@@ -410,7 +415,6 @@ export class RoomManager {
     socket.emit('game:player_finished_task', {
       playerId,
       taskProgress: player.taskProgress,
-      newTask: room.tasks[player.taskProgress]
     });
     
     // Send the progress to the opponents

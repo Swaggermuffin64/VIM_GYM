@@ -1,11 +1,16 @@
 import React from 'react';
 import type { Ranking } from '../types/multiplayer';
+import type { PlayerTaskAverages } from '../utils/taskSummaries';
+import { formatTenthsDuration } from '../utils/taskSummaries';
 
 interface RaceResultsProps {
   rankings: Ranking[];
   myPlayerId: string | null;
+  raceComplete?: boolean;
+  playerAveragesById?: Record<string, PlayerTaskAverages>;
   onPlayAgain: () => void;
   onLeave: () => void;
+  onReviewTasks?: () => void;
 }
 
 const colors = {
@@ -22,6 +27,8 @@ const colors = {
   textMuted: '#64748b',
   
   border: '#334155',
+  success: '#22c55e',
+  successLight: '#86efac',
   
   gold: '#fbbf24',
   silver: '#94a3b8',
@@ -46,8 +53,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.border}`,
     borderRadius: '20px',
-    padding: '48px',
-    maxWidth: '420px',
+    padding: '36px',
+    maxWidth: '760px',
     width: '100%',
     textAlign: 'center' as const,
   },
@@ -61,41 +68,74 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: {
     fontSize: '15px',
     color: colors.textSecondary,
-    marginBottom: '32px',
+    marginBottom: '18px',
   },
-  rankingList: {
-    marginBottom: '32px',
-  },
-  rankingItem: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '16px 20px',
+  tableWrap: {
+    width: '100%',
+    marginBottom: '22px',
+    border: `1px solid ${colors.border}`,
     borderRadius: '12px',
-    marginBottom: '10px',
+    overflow: 'hidden',
+    background: `${colors.accent}08`,
   },
-  position: {
-    fontSize: '22px',
+  tableHeader: {
+    display: 'grid',
+    background: `${colors.accent}12`,
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  headerCell: {
+    padding: '10px 12px',
+    textAlign: 'left' as const,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '11px',
+    letterSpacing: '0.7px',
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+  },
+  tableBody: {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+  },
+  row: {
+    display: 'grid',
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  rowLast: {
+    borderBottom: 'none',
+  },
+  rowTitle: {
+    padding: '12px',
+    textAlign: 'left' as const,
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '13px',
+    fontWeight: 600,
+  },
+  statValue: {
+    padding: '12px',
+    textAlign: 'left' as const,
+    fontFamily: '"JetBrains Mono", monospace',
+    fontSize: '14px',
     fontWeight: 700,
-    width: '44px',
-    textAlign: 'left' as const,
+    color: colors.textPrimary,
   },
-  playerInfo: {
-    flex: 1,
-    textAlign: 'left' as const,
-    marginLeft: '12px',
+  statValueBetter: {
+    color: '#6ee7b7',
+  },
+  playerHeader: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  positionTag: {
+    fontSize: '12px',
+    fontWeight: 700,
+    padding: '2px 6px',
+    borderRadius: '999px',
+    border: `1px solid ${colors.border}`,
   },
   playerName: {
-    fontSize: '16px',
-    fontWeight: 600,
     color: colors.textPrimary,
-    fontFamily: '"JetBrains Mono", monospace',
-  },
-  time: {
-    fontSize: '13px',
-    color: colors.textMuted,
-    marginTop: '4px',
-    fontFamily: '"JetBrains Mono", monospace',
   },
   buttons: {
     display: 'flex',
@@ -112,31 +152,38 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   primaryButton: {
-    background: colors.accent,
-    border: 'none',
-    color: colors.bgDark,
+    background: `${colors.success}24`,
+    border: `1px solid ${colors.success}66`,
+    color: colors.successLight,
   },
   secondaryButton: {
     background: 'transparent',
     border: `1px solid ${colors.border}`,
-    color: colors.textMuted,
+    color: colors.textSecondary,
+  },
+  reviewButton: {
+    background: 'transparent',
+    border: `1px solid ${colors.accent}60`,
+    color: colors.accentLight,
   },
 };
 
 const positionLabels = ['1st', '2nd', '3rd'];
-const positionColors = [colors.gold, colors.silver, colors.bronze];
 
 export const RaceResults: React.FC<RaceResultsProps> = ({
   rankings,
   myPlayerId,
+  raceComplete = true,
+  playerAveragesById = {},
   onPlayAgain,
   onLeave,
+  onReviewTasks,
 }) => {
-  const winner = rankings[0];
+  const winner = rankings[0] ?? null;
   const isWinner = winner?.playerId === myPlayerId;
   
   const formatTime = (ms: number): string => {
-    if (ms === 0) return 'DNF';
+    if (ms === 0) return raceComplete ? 'DNF' : 'Racing...';
     const seconds = ms / 1000;
     return `${seconds.toFixed(2)}s`;
   };
@@ -145,6 +192,73 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
     const idx = rankings.findIndex(r => r.playerId === myPlayerId);
     return idx >= 0 ? idx + 1 : null;
   };
+
+  const renderPlayerHeader = (ranking: Ranking) => {
+    return (
+      <span style={styles.playerHeader}>
+        <span
+          style={{
+            ...styles.positionTag,
+            color: ranking.position === 1 ? colors.gold : ranking.position === 2 ? colors.silver : colors.textMuted,
+          }}
+        >
+          {positionLabels[ranking.position - 1] || `#${ranking.position}`}
+        </span>
+        <span style={styles.playerName}>
+          {ranking.playerName}
+          {ranking.playerId === myPlayerId ? ' (You)' : ''}
+        </span>
+      </span>
+    );
+  };
+
+  const getBestPlayerIds = (
+    getter: (ranking: Ranking) => number | null,
+    higherIsBetter: boolean,
+  ): Set<string> => {
+    let best: number | null = null;
+    const bestIds = new Set<string>();
+
+    for (const ranking of rankings) {
+      const value = getter(ranking);
+      if (value === null || Number.isNaN(value)) continue;
+
+      if (best === null) {
+        best = value;
+        bestIds.add(ranking.playerId);
+        continue;
+      }
+
+      const isBetter = higherIsBetter ? value > best : value < best;
+      if (isBetter) {
+        best = value;
+        bestIds.clear();
+        bestIds.add(ranking.playerId);
+      } else if (value === best) {
+        bestIds.add(ranking.playerId);
+      }
+    }
+
+    return bestIds;
+  };
+
+  const bestFinishTimeIds = getBestPlayerIds(
+    (ranking) => (ranking.time > 0 ? ranking.time : null),
+    false,
+  );
+  const bestAvgDurationIds = getBestPlayerIds((ranking) => {
+    const stats = playerAveragesById[ranking.playerId];
+    return typeof stats?.avgDurationMs === 'number' ? stats.avgDurationMs : null;
+  }, false);
+  const bestKeysPerSecondIds = getBestPlayerIds((ranking) => {
+    const stats = playerAveragesById[ranking.playerId];
+    return typeof stats?.keysPerSecond === 'number' ? stats.keysPerSecond : null;
+  }, true);
+  const bestAvgKeysIds = getBestPlayerIds((ranking) => {
+    const stats = playerAveragesById[ranking.playerId];
+    return typeof stats?.avgKeys === 'number' ? stats.avgKeys : null;
+  }, false);
+  const columnTemplate = '1.6fr repeat(4, minmax(0, 1fr))';
 
   return (
     <div style={styles.overlay}>
@@ -159,49 +273,85 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
           }
         </p>
 
-        <div style={styles.rankingList}>
-          {rankings.map((ranking, index) => (
-            <div
-              key={ranking.playerId}
-              style={{
-                ...styles.rankingItem,
-                background: `${colors.accent}15`,
-                border: `1px solid ${colors.accent}40`,
-              }}
-            >
-              <div
-                style={{
-                  ...styles.position,
-                  color: positionColors[index] || colors.textMuted,
-                }}
-              >
-                {positionLabels[index] || `#${index + 1}`}
-              </div>
-              <div style={styles.playerInfo}>
-                <div style={styles.playerName}>
-                  {ranking.playerName}
-                  {ranking.playerId === myPlayerId && (
-                    <span style={{ color: colors.textMuted, fontWeight: 400 }}> (You)</span>
-                  )}
+        <div style={styles.tableWrap}>
+          <div style={{ ...styles.tableHeader, gridTemplateColumns: columnTemplate }}>
+            <div style={styles.headerCell}>Player</div>
+            <div style={styles.headerCell}>Finish Time</div>
+            <div style={styles.headerCell}>Duration/Task</div>
+            <div style={styles.headerCell}>Keys/Second</div>
+            <div style={styles.headerCell}>Keys/Task</div>
+          </div>
+          <div style={styles.tableBody}>
+            {rankings.map((ranking, index) => {
+              const stats = playerAveragesById[ranking.playerId];
+              const isLast = index === rankings.length - 1;
+              return (
+                <div
+                  key={ranking.playerId}
+                  style={{
+                    ...styles.row, gridTemplateColumns: columnTemplate,
+                    ...(isLast ? styles.rowLast : {}),
+                  }}
+                >
+                  <div style={styles.rowTitle}>{renderPlayerHeader(ranking)}</div>
+                  <div
+                    style={{
+                      ...styles.statValue,
+                      ...(bestFinishTimeIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                    }}
+                  >
+                    {formatTime(ranking.time)}
+                  </div>
+                  <div
+                    style={{
+                      ...styles.statValue,
+                      ...(bestAvgDurationIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                    }}
+                  >
+                    {stats ? formatTenthsDuration(stats.avgDurationMs) : '--'}
+                  </div>
+                  <div
+                    style={{
+                      ...styles.statValue,
+                      ...(bestKeysPerSecondIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                    }}
+                  >
+                    {stats ? stats.keysPerSecond.toFixed(2) : '--'}
+                  </div>
+                  <div
+                    style={{
+                      ...styles.statValue,
+                      ...(bestAvgKeysIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                    }}
+                  >
+                    {typeof stats?.avgKeys === 'number' ? stats.avgKeys : '--'}
+                  </div>
                 </div>
-                <div style={styles.time}>{formatTime(ranking.time)}</div>
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
 
         <div style={styles.buttons}>
-          <button
-            style={{ ...styles.button, ...styles.secondaryButton }}
-            onClick={onLeave}
-          >
-            Leave
-          </button>
           <button
             style={{ ...styles.button, ...styles.primaryButton }}
             onClick={onPlayAgain}
           >
             Play Again
+          </button>
+          {onReviewTasks && (
+            <button
+              style={{ ...styles.button, ...styles.reviewButton }}
+              onClick={onReviewTasks}
+            >
+              Review Performance
+            </button>
+          )}
+          <button
+            style={{ ...styles.button, ...styles.secondaryButton }}
+            onClick={onLeave}
+          >
+            Leave
           </button>
         </div>
       </div>

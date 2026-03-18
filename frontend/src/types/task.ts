@@ -25,6 +25,8 @@ export interface PositionTask {
   codeSnippet: string;
   targetPosition: Position;
   targetOffset: number;
+  recommendedSequence?: string[];
+  recommendedWeight?: number;
 }
 export interface DeleteTask {
   id: string;
@@ -34,6 +36,8 @@ export interface DeleteTask {
   targetRange: { from: number; to: number };
   expectedResult: string;
   strategy: DeleteStrategy;
+  recommendedSequence?: string[];
+  recommendedWeight?: number;
 }
 
 export type Task = PositionTask | DeleteTask;
@@ -41,5 +45,25 @@ export type Task = PositionTask | DeleteTask;
 export interface TaskResponse {
   task: Task;
   startTime: number;
+}
+
+export interface TaskSummary {
+  taskIndex: number;
+  taskId: string;
+  taskType: Task['type'];
+  task: Task;
+  durationMs: number;
+  keyCount: number;
+  keySequence: string;
+  optimalSequence?: string;
+  ourSolutionKeyCount?: number;
+}
+
+export interface PracticeSummary {
+  totalTasks: number;
+  navigateTasks: number;
+  deleteTasks: number;
+  navigateTasksWithRecommendation: number;
+  deleteTasksWithRecommendation: number;
 }
 

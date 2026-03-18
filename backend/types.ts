@@ -26,6 +26,9 @@ export interface PositionTask {
   targetPosition: Position;
   // Character offset in the document (for CodeMirror highlighting)
   targetOffset: number;
+  // Optional backend recommendation for fastest vim path.
+  recommendedSequence?: string[];
+  recommendedWeight?: number;
 }
 
 export interface DeleteTask {
@@ -36,6 +39,8 @@ export interface DeleteTask {
   targetRange: { from: number; to: number };
   expectedResult: string;
   strategy: DeleteStrategy;
+  recommendedSequence?: string[];
+  recommendedWeight?: number;
 }
 
 export interface ChangeTask {
@@ -55,12 +60,51 @@ export interface TaskResponse {
   startTime: number;
 }
 
+export interface PracticeSummary {
+  totalTasks: number;
+  navigateTasks: number;
+  deleteTasks: number;
+  navigateTasksWithRecommendation: number;
+  deleteTasksWithRecommendation: number;
+}
+
+export type KeystrokeSource = 'practice' | 'multiplayer';
+
+export interface KeystrokeEvent {
+  key: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  repeat: boolean;
+  dtMs: number;
+}
+
+export interface TaskKeystrokeSubmission {
+  source: KeystrokeSource;
+  taskId: string;
+  taskType: TaskType;
+  startedAt: number;
+  completedAt: number;
+  roomId?: string;
+  playerId?: string;
+  events: KeystrokeEvent[];
+}
+
 export interface codeSnippet {
   code: string;
   wordIndices: IntTuple[];
   curlyBraceIndices: IntTuple[];
   parenthesisIndices: IntTuple[];
   bracketIndices: IntTuple[];
+  lineOffsetRanges: IntTuple[];
+  precomputed?: {
+    lineStartOffsets: number[];
+    // Maps each character offset to its 0-indexed line.
+    offsetToLine: number[];
+    // Per-line motion keys to avoid rebuilding find-char keys repeatedly.
+    motionKeysByLine: string[][];
+  };
 }
 
 export type IntTuple = [number, number];

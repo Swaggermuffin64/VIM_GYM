@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { Server, Socket } from 'socket.io';
 import { generatePositionTask, generatePositionTasks, generateDeleteTasks, checkPositionTask } from './tasks.js';
-import type { PositionTask, Task, TaskResponse } from './types.js';
+import type { KeystrokeSource, PositionTask, PracticeSummary, Task, TaskKeystrokeSubmission, TaskResponse } from './types.js';
 import type { 
   ClientToServerEvents, 
   ServerToClientEvents, 
@@ -12,7 +12,7 @@ import type {
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
 import { BACKEND_PORT, CORS_ORIGINS } from './config.js';
-import { verifyMatchToken, extractTokenFromHandshake } from './auth/auth.js';
+import { verifyMatchToken, extractTokenFromAuthHeader, extractTokenFromHandshake } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
 import { 
@@ -21,7 +21,8 @@ import {
   validateOptionalRoomId,
   validateCursorOffset, 
   validateEditorText,
-  validateBoolean 
+  validateBoolean,
+  validateKeystrokeEvents,
 } from './validation/inputValidation.js';
 
 // Create Fastify with its own server
@@ -47,11 +48,25 @@ const ACTIVE_TASKS_MAX = 10_000;
 const ACTIVE_TASKS_TTL_MS = 5 * 60 * 1000;
 const activeTasks = new Map<string, { task: PositionTask; createdAt: number }>();
 
+// Task-end keystroke telemetry. In-memory for now; can be swapped for DB persistence later.
+const KEYSTROKE_RECORDS_MAX = 20_000;
+const KEYSTROKE_RECORDS_TTL_MS = 60 * 60 * 1000;
+const taskKeystrokeRecords = new Map<string, { data: TaskKeystrokeSubmission; createdAt: number }>();
+
 setInterval(() => {
   const now = Date.now();
   for (const [id, entry] of activeTasks) {
     if (now - entry.createdAt > ACTIVE_TASKS_TTL_MS) {
       activeTasks.delete(id);
+    }
+  }
+}, 60_000);
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, entry] of taskKeystrokeRecords) {
+    if (now - entry.createdAt > KEYSTROKE_RECORDS_TTL_MS) {
+      taskKeystrokeRecords.delete(id);
     }
   }
 }, 60_000);
@@ -124,6 +139,153 @@ fastify.post<{
     cursorOffset: offsetResult.value,
   };
 });
+//currently we store in memory, maybe replace with db eventually
+fastify.post<{
+  Body: {
+    source: KeystrokeSource;
+    taskId: string;
+    taskType: Task['type'];
+    startedAt: number;
+    completedAt: number;
+    roomId?: string;
+    playerId?: string;
+    events: unknown;
+  };
+}>('/api/task/keystrokes', async (request) => {
+  const {
+    source,
+    taskId,
+    taskType,
+    startedAt,
+    completedAt,
+    roomId,
+    playerId,
+    events,
+  } = request.body;
+
+  if (source !== 'practice' && source !== 'multiplayer') {
+    return { success: false, error: 'Invalid source' };
+  }
+
+  if (typeof taskId !== 'string' || taskId.length < 1 || taskId.length > 100) {
+    return { success: false, error: 'Invalid task ID' };
+  }
+
+  if (taskType !== 'navigate' && taskType !== 'delete' && taskType !== 'change') {
+    return { success: false, error: 'Invalid task type' };
+  }
+
+  if (!Number.isInteger(startedAt) || !Number.isInteger(completedAt) || completedAt < startedAt) {
+    return { success: false, error: 'Invalid task timestamps' };
+  }
+
+  if (typeof roomId !== 'undefined') {
+    const roomIdResult = validateRoomId(roomId);
+    if (!roomIdResult.valid) {
+      return { success: false, error: roomIdResult.error || 'Invalid room ID' };
+    }
+  }
+
+  if (typeof playerId !== 'undefined' && (typeof playerId !== 'string' || playerId.length < 1 || playerId.length > 64)) {
+    return { success: false, error: 'Invalid player ID' };
+  }
+
+  const eventsResult = validateKeystrokeEvents(events);
+  if (!eventsResult.valid) {
+    return { success: false, error: eventsResult.error || 'Invalid keystroke events' };
+  }
+
+  if (taskKeystrokeRecords.size >= KEYSTROKE_RECORDS_MAX) {
+    const oldestKey = taskKeystrokeRecords.keys().next().value;
+    if (oldestKey) {
+      taskKeystrokeRecords.delete(oldestKey);
+    }
+  }
+
+  const submission: TaskKeystrokeSubmission = {
+    source,
+    taskId,
+    taskType,
+    startedAt,
+    completedAt,
+    events: eventsResult.value!,
+    ...(roomId ? { roomId } : {}),
+    ...(playerId ? { playerId } : {}),
+  };
+
+  const recordId = `${source}:${taskId}:${completedAt}:${Math.random().toString(36).slice(2, 8)}`;
+  taskKeystrokeRecords.set(recordId, { data: submission, createdAt: Date.now() });
+  console.log(
+    JSON.stringify(
+      Array.from(taskKeystrokeRecords.entries()).map(([id, rec]) => ({
+        id,
+        ...rec.data,
+        createdAt: rec.createdAt,
+      })),
+      null,
+      2
+    )
+  );
+  return {
+    success: true,
+    recordedEventCount: submission.events.length,
+  };
+});
+
+fastify.get<{
+  Params: { roomId: string };
+}>('/api/multiplayer/stats/:roomId', async (request, reply) => {
+  const roomIdResult = validateRoomId(request.params.roomId);
+  if (!roomIdResult.valid || !roomIdResult.value) {
+    return reply.status(400).send({ success: false, error: roomIdResult.error || 'Invalid room ID' });
+  }
+
+  const token = extractTokenFromAuthHeader(request.headers);
+  const authResult = verifyMatchToken(token);
+  if (!authResult.success || !authResult.matchedRoomId) {
+    return reply.status(401).send({ success: false, error: 'Authentication required' });
+  }
+
+  const roomId = roomIdResult.value;
+  if (authResult.matchedRoomId !== roomId) {
+    return reply.status(403).send({ success: false, error: 'Forbidden for this room' });
+  }
+
+  const summaries = new Map<string, { taskCount: number; totalDurationMs: number; totalKeys: number }>();
+
+  for (const { data } of taskKeystrokeRecords.values()) {
+    if (data.source !== 'multiplayer') continue;
+    if (!data.roomId || data.roomId !== roomId) continue;
+    if (!data.playerId) continue;
+
+    const durationMs = Math.max(0, data.completedAt - data.startedAt);
+    const existing = summaries.get(data.playerId) || { taskCount: 0, totalDurationMs: 0, totalKeys: 0 };
+    existing.taskCount += 1;
+    existing.totalDurationMs += durationMs;
+    existing.totalKeys += data.events.length;
+    summaries.set(data.playerId, existing);
+  }
+
+  return {
+    success: true,
+    roomId,
+    players: Array.from(summaries.entries()).map(([playerId, agg]) => {
+      const keysPerSecond = agg.totalDurationMs > 0
+        ? agg.totalKeys / (agg.totalDurationMs / 1000)
+        : 0;
+      const avgDurationMs = agg.taskCount > 0 ? agg.totalDurationMs / agg.taskCount : 0;
+      const avgKeys = agg.taskCount > 0 ? Math.round(agg.totalKeys / agg.taskCount) : 0;
+
+      return {
+        playerId,
+        taskCount: agg.taskCount,
+        keysPerSecond,
+        avgDurationMs,
+        avgKeys,
+      };
+    }),
+  };
+});
 
 // Get a practice session (10 tasks: 5 position + 5 delete, shuffled)
 fastify.get('/api/task/practice', async () => {
@@ -133,10 +295,26 @@ fastify.get('/api/task/practice', async () => {
   const positionTasks: Task[] = generatePositionTasks(tasksPerType);
   const deleteTasks: Task[] = generateDeleteTasks(tasksPerType);
   const allTasks = shuffle([...positionTasks, ...deleteTasks]);
+  const navigateTasksWithRecommendation = positionTasks.reduce((count, task) => {
+    if (task.type !== 'navigate') return count;
+    return task.recommendedSequence && typeof task.recommendedWeight === 'number' ? count + 1 : count;
+  }, 0);
+  const deleteTasksWithRecommendation = deleteTasks.reduce((count, task) => {
+    if (task.type !== 'delete') return count;
+    return task.recommendedSequence && typeof task.recommendedWeight === 'number' ? count + 1 : count;
+  }, 0);
+  const practiceSummary: PracticeSummary = {
+    totalTasks: allTasks.length,
+    navigateTasks: positionTasks.length,
+    deleteTasks: deleteTasks.length,
+    navigateTasksWithRecommendation,
+    deleteTasksWithRecommendation,
+  };
   
   return {
     tasks: allTasks,
     numTasks: NUM_TASKS,
+    practiceSummary,
     startTime: Date.now(),
   };
 });

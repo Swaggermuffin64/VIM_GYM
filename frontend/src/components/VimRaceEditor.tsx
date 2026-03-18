@@ -12,7 +12,12 @@ import { oneDark } from '@codemirror/theme-one-dark';
 
 import { targetHighlightExtension } from '../extensions/targetHighlight';
 import { cursorTracker } from '../extensions/cursorTracker';
-import { readOnlyNavigation } from '../extensions/readOnlyNavigation';
+import {
+  blockedEditReasonAnnotation,
+  EditBlockReason,
+  readOnlyNavigation,
+} from '../extensions/readOnlyNavigation';
+import type { KeystrokeEvent } from '../types/keystroke';
 
 // ---------------------------------------------------------------------------
 // Shared color palette used across all race / practice pages
@@ -38,6 +43,8 @@ export const editorColors = {
   borderLight: '#475569',
 };
 
+const EDITOR_FONT_SIZE_PX = '18px';
+
 // ---------------------------------------------------------------------------
 // Editor-only extensions (shared between practice & multiplayer)
 // ---------------------------------------------------------------------------
@@ -50,6 +57,27 @@ const disableMouseInteraction = EditorView.domEventHandlers({
   mousedown: () => true,
   click: () => true,
   dblclick: () => true,
+  contextmenu: () => true,
+  selectstart: () => true,
+});
+
+/** Allow click-to-focus but block mouse cursor movement/selection. */
+const focusOnlyMouseInteraction = EditorView.domEventHandlers({
+  mousedown: (event, view) => {
+    event.preventDefault();
+    view.focus();
+    return true;
+  },
+  click: (event, view) => {
+    event.preventDefault();
+    view.focus();
+    return true;
+  },
+  dblclick: (event, view) => {
+    event.preventDefault();
+    view.focus();
+    return true;
+  },
   contextmenu: () => true,
   selectstart: () => true,
 });
@@ -94,11 +122,29 @@ interface VimRaceEditorProps {
   onCursorChange: (offset: number) => void;
   /** Called whenever the document text changes. */
   onDocChange?: (text: string) => void;
+  /** Called when a document edit is blocked by task guardrails. */
+  onBlockedEdit?: (reason: EditBlockReason) => void;
+  /** Called for each key pressed while focused in the editor. */
+  onKeyStroke?: (event: KeystrokeEvent) => void;
   /**
    * Called on blur — return `true` to allow the blur (e.g. task complete),
    * `false` to auto-refocus. Defaults to never allowing blur.
    */
   shouldAllowBlur?: () => boolean;
+  /**
+   * Allow mouse interactions (click-to-focus, click-to-move-cursor).
+   * Defaults to false for keyboard-only race mode behavior.
+   */
+  allowMouseNavigation?: boolean;
+  /**
+   * Allow mouse clicks to focus editor, but block mouse cursor movement.
+   * Ignored when allowMouseNavigation is true.
+   */
+  allowMouseFocusOnly?: boolean;
+  /**
+   * Auto-focus editor once on mount. Defaults to true.
+   */
+  autoFocusOnMount?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,17 +152,32 @@ interface VimRaceEditorProps {
 // ---------------------------------------------------------------------------
 
 export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>(
-  ({ initialDoc, onReady, onCursorChange, onDocChange, shouldAllowBlur }, ref) => {
+  ({
+    initialDoc,
+    onReady,
+    onCursorChange,
+    onDocChange,
+    onBlockedEdit,
+    onKeyStroke,
+    shouldAllowBlur,
+    allowMouseNavigation = false,
+    allowMouseFocusOnly = false,
+    autoFocusOnMount = true,
+  }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
     // Refs for callbacks so CodeMirror extensions never hold stale closures.
     const onCursorChangeRef = useRef(onCursorChange);
     const onDocChangeRef = useRef(onDocChange);
+    const onBlockedEditRef = useRef(onBlockedEdit);
+    const onKeyStrokeRef = useRef(onKeyStroke);
     const shouldAllowBlurRef = useRef(shouldAllowBlur);
 
     useEffect(() => { onCursorChangeRef.current = onCursorChange; }, [onCursorChange]);
     useEffect(() => { onDocChangeRef.current = onDocChange; }, [onDocChange]);
+    useEffect(() => { onBlockedEditRef.current = onBlockedEdit; }, [onBlockedEdit]);
+    useEffect(() => { onKeyStrokeRef.current = onKeyStroke; }, [onKeyStroke]);
     useEffect(() => { shouldAllowBlurRef.current = shouldAllowBlur; }, [shouldAllowBlur]);
 
     useImperativeHandle(ref, () => ({
@@ -153,6 +214,12 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
         if (update.docChanged) {
           onDocChangeRef.current?.(update.state.doc.toString());
         }
+        for (const transaction of update.transactions) {
+          const blockReason = transaction.annotation(blockedEditReasonAnnotation);
+          if (blockReason) {
+            onBlockedEditRef.current?.(blockReason);
+          }
+        }
       });
 
       const view = new EditorView({
@@ -171,11 +238,11 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           drawSelection(),
           highlightActiveLine(),
           highlightActiveLineGutter(),
-          disableMouseInteraction,
+          ...(allowMouseNavigation ? [] : [allowMouseFocusOnly ? focusOnlyMouseInteraction : disableMouseInteraction]),
           keymap.of([...defaultKeymap, ...searchKeymap]),
           EditorView.theme({
             '&': {
-              fontSize: '14px',
+              fontSize: EDITOR_FONT_SIZE_PX,
               fontFamily: '"JetBrains Mono", "Fira Code", monospace',
             },
             '.cm-content': {
@@ -208,7 +275,7 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
               backgroundColor: 'transparent',
               color: editorColors.textPrimary,
               fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-              fontSize: '14px',
+              fontSize: EDITOR_FONT_SIZE_PX,
               padding: '0',
               margin: '0',
             },
@@ -226,7 +293,7 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
               backgroundColor: 'transparent',
               color: editorColors.textPrimary,
               fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-              fontSize: '14px',
+              fontSize: EDITOR_FONT_SIZE_PX,
               border: 'none',
               borderRadius: '0',
               outline: 'none',
@@ -247,6 +314,22 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       // through the Vim API so insert→normal transitions always work.
       // ---------------------------------------------------------------
       const handleEscapeKey = (e: KeyboardEvent) => {
+        // Shift is only a modifier for other keys in this telemetry model.
+        // Skip standalone Shift presses so they don't inflate keystroke counts.
+        if (e.key === 'Shift') {
+          return;
+        }
+
+        onKeyStrokeRef.current?.({
+          key: e.key,
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          repeat: e.repeat,
+          dtMs: Math.max(0, Math.floor(e.timeStamp)),
+        });
+
         if (shouldDebugUndo() && (e.key === 'u' || (e.key.toLowerCase() === 'r' && e.ctrlKey))) {
           const cm = getCM(view);
           console.log('[vim-undo-debug] keydown in editor', {
@@ -269,7 +352,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           }
         }
       };
-      view.contentDOM.addEventListener('keydown', handleEscapeKey);
+      // Capture phase ensures we record the key before downstream handlers
+      // can trigger task-complete state transitions in parent components.
+      view.contentDOM.addEventListener('keydown', handleEscapeKey, true);
 
       const handleWindowKeyCapture = (e: KeyboardEvent) => {
         if (!shouldDebugUndo()) return;
@@ -314,16 +399,18 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       view.contentDOM.addEventListener('blur', handleBlur);
 
       // Auto-focus on mount.
-      view.focus();
+      if (autoFocusOnMount) {
+        view.focus();
+      }
 
       return () => {
-        view.contentDOM.removeEventListener('keydown', handleEscapeKey);
+        view.contentDOM.removeEventListener('keydown', handleEscapeKey, true);
         view.contentDOM.removeEventListener('blur', handleBlur);
         window.removeEventListener('keydown', handleWindowKeyCapture, { capture: true });
         view.destroy();
         viewRef.current = null;
       };
-      // initialDoc is intentionally read only on mount.
+      // initialDoc and autoFocusOnMount are intentionally read only on mount.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

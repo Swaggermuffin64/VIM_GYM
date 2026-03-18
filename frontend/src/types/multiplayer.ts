@@ -45,6 +45,7 @@ export interface GameState {
   roomState: RoomState;
   players: Player[];
   task: Task;
+  taskQueue: Task[];
   num_tasks: number;
   countdown: number | null;
   startTime: number | null;

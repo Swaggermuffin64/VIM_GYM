@@ -279,6 +279,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.4,
   },
+  editorButtonRow: {
+    display: 'flex',
+    gap: '10px',
+    marginTop: '10px',
+  },
+  lineNumbersButton: {
+    padding: '8px 14px',
+    fontSize: '12px',
+    background: 'transparent',
+    border: `1px solid ${colors.primary}`,
+    borderRadius: '8px',
+    color: colors.primary,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    fontWeight: 600,
+    marginTop: '10px',
+  },
 };
 
 const MultiplayerGame: React.FC = () => {
@@ -314,6 +331,7 @@ const MultiplayerGame: React.FC = () => {
   const [raceFinishTime, setRaceFinishTime] = React.useState(0);
   const [playerAveragesById, setPlayerAveragesById] = React.useState<Record<string, PlayerTaskAverages>>({});
   const [blockedEditHint, setBlockedEditHint] = React.useState<string | null>(null);
+  const [relativeLineNumbers, setRelativeLineNumbers] = React.useState(true);
 
   const taskSummariesRef = useRef<TaskSummary[]>([]);
   const currentTaskObjRef = useRef<Task | null>(null);
@@ -704,6 +722,26 @@ const MultiplayerGame: React.FC = () => {
     };
   }, [gameState.roomId, gameState.roomState, gameState.players, me?.isFinished, getMatchToken]);
 
+  const toggleRelativeLineNumbers = useCallback(() => {
+    const newValue = !relativeLineNumbers;
+    setRelativeLineNumbers(newValue);
+    editorRef.current?.setRelativeLineNumbers(newValue);
+  }, [relativeLineNumbers]);
+
+  useEffect(() => {
+    const handleLineNumbersHotkey = (e: KeyboardEvent) => {
+      if (e.key !== 'F7') return;
+      if (gameState.roomState !== 'racing' || me?.isFinished || !gameState.task.id) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      toggleRelativeLineNumbers();
+    };
+
+    window.addEventListener('keydown', handleLineNumbersHotkey, { capture: true });
+    return () => window.removeEventListener('keydown', handleLineNumbersHotkey, { capture: true });
+  }, [gameState.roomState, gameState.task.id, me?.isFinished, toggleRelativeLineNumbers]);
+
   const recentKeysDisplay = React.useMemo(() => {
     if (recentKeys.length === 0) return '';
     return recentKeys.slice(-KEY_LOG_VISIBLE_KEYS).join(' ');
@@ -913,9 +951,14 @@ const MultiplayerGame: React.FC = () => {
               </div>
             )}
             {!me?.isFinished && gameState.task.id && (
-              <button style={styles.resetTaskButton} onClick={resetCurrentTask}>
-                Reset (F6)
-              </button>
+              <div style={styles.editorButtonRow}>
+                <button style={styles.resetTaskButton} onClick={resetCurrentTask}>
+                  Reset (F6)
+                </button>
+                <button style={styles.lineNumbersButton} onClick={toggleRelativeLineNumbers}>
+                  {relativeLineNumbers ? 'Relative Lines ✓' : 'Relative Lines'} (F7)
+                </button>
+              </div>
             )}
           </div>
 

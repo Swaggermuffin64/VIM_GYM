@@ -29,6 +29,21 @@ const CHEATSHEET_DOCK_WIDTH = 'clamp(18rem, 22vw, 24rem)';
 const CHEATSHEET_CONTAINER_SHIFT = 'clamp(2.375rem, 3.25vw, 3.5rem)';
 const RACE_CONTAINER_LEFT_WITH_CHEATSHEET = `max(1.5rem, calc((100vw - 1200px) / 2 + ${CHEATSHEET_CONTAINER_SHIFT}))`;
 const CHEATSHEET_DOCK_LEFT = `max(0.75rem, calc((${RACE_CONTAINER_LEFT_WITH_CHEATSHEET} - ${CHEATSHEET_DOCK_WIDTH}) / 2))`;
+const CHEATSHEET_DOCK_GAP_PX = 24;
+const ROOT_FONT_SIZE_PX = 16;
+
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.max(min, Math.min(max, value));
+};
+
+const canDockCheatSheetForWidth = (viewportWidth: number): boolean => {
+  const dockWidth = clamp(viewportWidth * 0.22, 18 * ROOT_FONT_SIZE_PX, 24 * ROOT_FONT_SIZE_PX);
+  const containerShift = clamp(viewportWidth * 0.0325, 2.375 * ROOT_FONT_SIZE_PX, 3.5 * ROOT_FONT_SIZE_PX);
+  const raceContainerLeft = Math.max(1.5 * ROOT_FONT_SIZE_PX, ((viewportWidth - 1200) / 2) + containerShift);
+  const dockLeft = Math.max(0.75 * ROOT_FONT_SIZE_PX, (raceContainerLeft - dockWidth) / 2);
+  const dockRight = dockLeft + dockWidth;
+  return dockRight + CHEATSHEET_DOCK_GAP_PX <= raceContainerLeft;
+};
 
 // TaskSummary imported from '../types/task'
 
@@ -101,8 +116,8 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '2px',
   },
   exitButton: {
-    padding: '10px 20px',
-    fontSize: '14px',
+    padding: '12px 24px',
+    fontSize: '15px',
     background: 'transparent',
     border: `1px solid ${colors.secondary}`,
     borderRadius: '8px',
@@ -206,11 +221,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'stretch',
-    gap: '10px',
+    gap: '12px',
   },
   cheatSheetPanel: {
-    marginTop: '16px',
-    marginBottom: '28px',
+    marginTop: '8px',
+    marginBottom: '8px',
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.border}`,
     borderRadius: '12px',
@@ -234,9 +249,9 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '12px',
   },
   cheatSheetToggle: {
-    height: '40px',
-    padding: '0 10px',
-    fontSize: '13px',
+    height: '44px',
+    padding: '0 14px',
+    fontSize: '14px',
     fontWeight: 700,
     color: colors.textSecondary,
     background: `${colors.border}22`,
@@ -371,9 +386,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toggleButton: {
     width: '90%',
-    height: '40px',
-    padding: '0 10px',
-    fontSize: '13px',
+    height: '44px',
+    padding: '0 14px',
+    fontSize: '14px',
     fontWeight: 700,
     color: colors.textSecondary,
     background: `${colors.border}22`,
@@ -388,9 +403,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sidebarControlButton: {
     width: '100%',
-    height: '42px',
-    padding: '0 12px',
-    fontSize: '13px',
+    height: '46px',
+    padding: '0 14px',
+    fontSize: '14px',
     fontWeight: 700,
     color: colors.textSecondary,
     background: `${colors.border}22`,
@@ -401,6 +416,28 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.4px',
     transition: 'all 0.2s ease',
     position: 'relative' as const,
+    textAlign: 'center' as const,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sidebarActionBase: {
+    color: colors.textSecondary,
+    background: '#000000',
+    border: `1px solid ${colors.border}`,
+  },
+  sidebarToggleButton: {
+    width: '100%',
+    padding: '8px 14px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: colors.secondary,
+    background: 'transparent',
+    border: `1px solid ${colors.secondary}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    transition: 'all 0.2s ease',
     textAlign: 'left' as const,
   },
   sidebarControlButtonCheckable: {
@@ -413,6 +450,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    textAlign: 'center' as const,
   },
   sidebarToggleCheck: {
     position: 'absolute' as const,
@@ -425,7 +463,7 @@ const styles: Record<string, React.CSSProperties> = {
   sidebarActionsRow: {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-    gap: '10px',
+    gap: '12px',
     width: '100%',
   },
   sidebarActionNewTasks: {
@@ -469,8 +507,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
   },
   resetTaskButton: {
-    padding: '8px 14px',
-    fontSize: '12px',
+    padding: '10px 16px',
+    fontSize: '13px',
     fontWeight: 600,
     color: colors.secondary,
     background: 'transparent',
@@ -479,7 +517,36 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
     transition: 'all 0.2s ease',
+  },
+  editorActionRow: {
+    display: 'flex',
+    gap: '12px',
     marginTop: '10px',
+    flexWrap: 'wrap' as const,
+  },
+  cheatsheetTaskButton: {
+    padding: '10px 16px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: colors.successLight,
+    background: 'transparent',
+    border: `1px solid ${colors.successLight}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    transition: 'all 0.2s ease',
+  },
+  relativeLinesTaskButton: {
+    padding: '10px 16px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: colors.primary,
+    background: 'transparent',
+    border: `1px solid ${colors.primary}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    transition: 'all 0.2s ease',
   },
   sessionComplete: {
     display: 'flex',
@@ -554,8 +621,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textPrimary,
   },
   completeButton: {
-    padding: '14px 32px',
-    fontSize: '18px',
+    padding: '16px 36px',
+    fontSize: '19px',
     fontWeight: 600,
     color: colors.bgDark,
     background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
@@ -760,8 +827,8 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: 'hidden' as const,
   },
   summaryResetButton: {
-    padding: '8px 14px',
-    fontSize: '12px',
+    padding: '10px 16px',
+    fontSize: '13px',
     fontWeight: 600,
     color: colors.secondary,
     background: 'transparent',
@@ -824,8 +891,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#61afef',
   },
   homeButton: {
-    padding: '14px 32px',
-    fontSize: '18px',
+    padding: '16px 36px',
+    fontSize: '19px',
     fontWeight: 600,
     color: colors.textSecondary,
     background: 'transparent',
@@ -949,10 +1016,57 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.8,
   },
+  readyOptionsGroup: {
+    marginTop: '16px',
+    borderTop: `1px solid ${colors.border}`,
+    paddingTop: '14px',
+  },
+  readyOptionRow: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '8px 0',
+  },
+  readyOptionLabel: {
+    color: colors.textSecondary,
+    fontSize: '13px',
+    fontWeight: 600,
+    fontFamily: '"JetBrains Mono", monospace',
+    letterSpacing: '0.3px',
+    userSelect: 'none' as const,
+  },
+  readyOptionCheck: {
+    width: '18px',
+    height: '18px',
+    borderRadius: '4px',
+    border: `1px solid ${colors.borderLight}`,
+    background: colors.bgDark,
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.45)',
+    transition: 'all 0.15s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'transparent',
+    fontSize: '13px',
+    lineHeight: 1,
+    fontWeight: 700,
+    fontFamily: '"JetBrains Mono", monospace',
+    userSelect: 'none' as const,
+    cursor: 'pointer',
+    padding: 0,
+  },
+  readyOptionCheckActive: {
+    background: `${colors.success}1f`,
+    border: `1px solid ${colors.success}`,
+    boxShadow: `0 0 0 1px ${colors.success}33`,
+    color: colors.success,
+  },
   readyButton: {
     width: '100%',
-    padding: '16px 24px',
-    fontSize: '16px',
+    padding: '18px 24px',
+    fontSize: '17px',
     fontWeight: 600,
     color: colors.bgDark,
     background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
@@ -967,8 +1081,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   backButton: {
     width: '100%',
-    padding: '14px 24px',
-    fontSize: '14px',
+    padding: '16px 24px',
+    fontSize: '15px',
     fontWeight: 500,
     background: 'transparent',
     border: `1px solid ${colors.border}`,
@@ -1009,6 +1123,12 @@ const PracticeEditor: React.FC = () => {
   const [summaryTaskResetTokens, setSummaryTaskResetTokens] = useState<Record<string, number>>({});
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const [blockedEditHint, setBlockedEditHint] = useState<string | null>(null);
+  const [isNewTasksHovered, setIsNewTasksHovered] = useState(false);
+  const [isSameTasksHovered, setIsSameTasksHovered] = useState(false);
+  const [canDockCheatSheet, setCanDockCheatSheet] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return canDockCheatSheetForWidth(window.innerWidth);
+  });
 
   // Current task derived from state
   const currentTask = tasks[taskProgress] || null;
@@ -1046,6 +1166,16 @@ const PracticeEditor: React.FC = () => {
     if (blockedHintTimerRef.current !== null) {
       window.clearTimeout(blockedHintTimerRef.current);
     }
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setCanDockCheatSheet(canDockCheatSheetForWidth(window.innerWidth));
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Format time display
@@ -1291,6 +1421,11 @@ const PracticeEditor: React.FC = () => {
     editorRef.current?.view?.focus();
   }, [tasks, taskProgress, setupTaskInEditor, editorReadyTick]);
 
+  useEffect(() => {
+    if (editorReadyTick === 0) return;
+    editorRef.current?.setRelativeLineNumbers(relativeLineNumbers);
+  }, [editorReadyTick, relativeLineNumbers]);
+
   // Advance to next task
   const advanceToNextTask = useCallback(() => {
     const nextProgress = taskProgressRef.current + 1;
@@ -1424,6 +1559,10 @@ const PracticeEditor: React.FC = () => {
     editorRef.current?.setRelativeLineNumbers(newValue);
   }, [relativeLineNumbers]);
 
+  const toggleCheatSheet = useCallback(() => {
+    setShowCheatSheet((prev) => !prev);
+  }, []);
+
   const resetCurrentTask = useCallback(() => {
     const current = tasksRef.current[taskProgressRef.current];
     if (!current) return;
@@ -1448,6 +1587,34 @@ const PracticeEditor: React.FC = () => {
     window.addEventListener('keydown', handleResetHotkey, { capture: true });
     return () => window.removeEventListener('keydown', handleResetHotkey, { capture: true });
   }, [isReady, isSessionComplete, currentTask, resetCurrentTask]);
+
+  useEffect(() => {
+    const handleRelativeLinesHotkey = (e: KeyboardEvent) => {
+      if (e.key !== 'F7') return;
+      if (!isReady || isSessionComplete || !currentTask) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      toggleRelativeLineNumbers();
+    };
+
+    window.addEventListener('keydown', handleRelativeLinesHotkey, { capture: true });
+    return () => window.removeEventListener('keydown', handleRelativeLinesHotkey, { capture: true });
+  }, [isReady, isSessionComplete, currentTask, toggleRelativeLineNumbers]);
+
+  useEffect(() => {
+    const handleCheatSheetHotkey = (e: KeyboardEvent) => {
+      if (e.key !== 'F8') return;
+      if (!isReady || isSessionComplete || !currentTask) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      toggleCheatSheet();
+    };
+
+    window.addEventListener('keydown', handleCheatSheetHotkey, { capture: true });
+    return () => window.removeEventListener('keydown', handleCheatSheetHotkey, { capture: true });
+  }, [isReady, isSessionComplete, currentTask, toggleCheatSheet]);
 
   // Handle cursor position changes (for navigate tasks)
   const handleCursorChange = useCallback((offset: number) => {
@@ -1526,6 +1693,7 @@ const PracticeEditor: React.FC = () => {
   };
 
   const taskDisplay = getTaskTypeDisplay(currentTask);
+  const useDockedCheatSheet = showCheatSheet && !isSessionComplete && canDockCheatSheet;
 
   // Ready screen before practice starts
   if (!isReady) {
@@ -1550,6 +1718,38 @@ const PracticeEditor: React.FC = () => {
                 Delete highlighted text using Vim commands<br />
                 Complete all tasks as fast as you can
               </div>
+              <div style={styles.readyOptionsGroup}>
+                <div style={styles.readyOptionRow}>
+                  <span style={styles.readyOptionLabel}>Start with Relative Line Numbers</span>
+                  <button
+                    type="button"
+                    aria-label="Toggle relative line numbers"
+                    aria-pressed={relativeLineNumbers}
+                    onClick={() => setRelativeLineNumbers((prev) => !prev)}
+                    style={{
+                      ...styles.readyOptionCheck,
+                      ...(relativeLineNumbers ? styles.readyOptionCheckActive : {}),
+                    }}
+                  >
+                    ✓
+                  </button>
+                </div>
+                <div style={styles.readyOptionRow}>
+                  <span style={styles.readyOptionLabel}>Start with Cheatsheet Open</span>
+                  <button
+                    type="button"
+                    aria-label="Toggle cheatsheet visibility"
+                    aria-pressed={showCheatSheet}
+                    onClick={() => setShowCheatSheet((prev) => !prev)}
+                    style={{
+                      ...styles.readyOptionCheck,
+                      ...(showCheatSheet ? styles.readyOptionCheckActive : {}),
+                    }}
+                  >
+                    ✓
+                  </button>
+                </div>
+              </div>
             </div>
 
             <button style={styles.readyButton} onClick={handleReady}>
@@ -1568,7 +1768,7 @@ const PracticeEditor: React.FC = () => {
     <div style={styles.container}>
       <div
         style={
-          showCheatSheet && !isSessionComplete
+          useDockedCheatSheet
             ? {
                 ...styles.raceContainer,
                 marginLeft: RACE_CONTAINER_LEFT_WITH_CHEATSHEET,
@@ -1582,11 +1782,11 @@ const PracticeEditor: React.FC = () => {
               }
         }
       >
-        {!isSessionComplete && showCheatSheet && (
+        {!isSessionComplete && useDockedCheatSheet && (
           <div style={styles.leftCheatSheetDock}>
             <div style={styles.leftCheatSheetPanel}>
               <div style={styles.leftCheatSheetHeader}>
-                <div style={{ ...styles.cheatSheetTitle, marginBottom: 0 }}>Cheat Sheet</div>
+                <div style={{ ...styles.cheatSheetTitle, marginBottom: 0 }}>Basic Cheat Sheet</div>
                 <button
                   type="button"
                   style={styles.cheatSheetToggle}
@@ -1839,17 +2039,59 @@ const PracticeEditor: React.FC = () => {
                   />
                 </div>
                 {currentTask && (
-                  <button
-                    style={styles.resetTaskButton}
-                    onClick={resetCurrentTask}
-                  >
-                    Reset (F6)
-                  </button>
+                  <div style={styles.editorActionRow}>
+                    <button
+                      style={styles.resetTaskButton}
+                      onClick={resetCurrentTask}
+                    >
+                      Reset (F6)
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.relativeLinesTaskButton}
+                      onClick={toggleRelativeLineNumbers}
+                    >
+                      {relativeLineNumbers ? 'Relative Lines (F7) ✓' : 'Relative Lines (F7)'}
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.cheatsheetTaskButton}
+                      onClick={toggleCheatSheet}
+                    >
+                      {showCheatSheet ? 'Cheatsheet (F8) ✓' : 'Cheatsheet (F8)'}
+                    </button>
+                  </div>
                 )}
               </div>
 
               {/* Sidebar */}
               <div style={styles.sidebarColumn}>
+                {showCheatSheet && !useDockedCheatSheet && (
+                  <div style={styles.cheatSheetPanel}>
+                    <div style={styles.cheatSheetHeader}>
+                      <div style={styles.cheatSheetTitle}>Basic Cheat Sheet</div>
+                      <button
+                        type="button"
+                        style={styles.cheatSheetToggle}
+                        onClick={() => setShowCheatSheet(false)}
+                      >
+                        Hide
+                      </button>
+                    </div>
+                    {VIM_CHEATSHEET.map((section) => (
+                      <div key={section.title}>
+                        <div style={styles.cheatSheetSectionTitle}>{section.title}</div>
+                        {section.items.map((item) => (
+                          <div key={`${section.title}-${item.keys}`} style={styles.cheatSheetRow}>
+                            <div style={styles.cheatSheetKeys}>{item.keys}</div>
+                            <div style={styles.cheatSheetDescription}>{item.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div style={styles.keyLogContainer}>
                   <div style={styles.keyLogTitle}>Keys Pressed (Current Task)</div>
                   <div
@@ -1869,40 +2111,29 @@ const PracticeEditor: React.FC = () => {
                 </div>
 
                 <div style={styles.sidebarControls}>
-                  <button
-                    type="button"
-                    style={{
-                      ...styles.sidebarControlButton,
-                      ...styles.sidebarControlButtonCheckable,
-                    }}
-                    onClick={() => setShowCheatSheet((prev) => !prev)}
-                  >
-                    <span style={styles.sidebarControlButtonLabel}>Cheatsheet</span>
-                    {showCheatSheet && <span style={styles.sidebarToggleCheck}>✓</span>}
-                  </button>
-
-                  <button
-                    style={{
-                      ...styles.sidebarControlButton,
-                      ...styles.sidebarControlButtonCheckable,
-                    }}
-                    onClick={toggleRelativeLineNumbers}
-                  >
-                    <span style={styles.sidebarControlButtonLabel}>Relative Lines</span>
-                    {relativeLineNumbers && <span style={styles.sidebarToggleCheck}>✓</span>}
-                  </button>
-
                   <div style={styles.sidebarActionsRow}>
                     <button
-                      style={{ ...styles.sidebarControlButton, ...styles.sidebarActionNewTasks }}
+                      style={{
+                        ...styles.sidebarControlButton,
+                        ...styles.sidebarActionBase,
+                        ...(isNewTasksHovered ? styles.sidebarActionNewTasks : {}),
+                      }}
                       onClick={fetchPracticeSession}
+                      onMouseEnter={() => setIsNewTasksHovered(true)}
+                      onMouseLeave={() => setIsNewTasksHovered(false)}
                     >
                       <span style={styles.sidebarControlButtonLabel}>New Tasks</span>
                     </button>
 
                     <button
-                      style={{ ...styles.sidebarControlButton, ...styles.sidebarActionSameTasks }}
+                      style={{
+                        ...styles.sidebarControlButton,
+                        ...styles.sidebarActionBase,
+                        ...(isSameTasksHovered ? styles.sidebarActionSameTasks : {}),
+                      }}
                       onClick={restartSameTasks}
+                      onMouseEnter={() => setIsSameTasksHovered(true)}
+                      onMouseLeave={() => setIsSameTasksHovered(false)}
                     >
                       <span style={styles.sidebarControlButtonLabel}>Same Tasks</span>
                     </button>

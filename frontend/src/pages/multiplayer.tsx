@@ -89,6 +89,29 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.5,
   },
+  taskProgressInlineRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '14px',
+    color: colors.textSecondary,
+    fontSize: '13px',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  progressBar: {
+    width: '100%',
+    height: '8px',
+    background: colors.bgCard,
+    borderRadius: '4px',
+    overflow: 'hidden',
+    marginTop: '12px',
+  },
+  progressFill: {
+    height: '100%',
+    background: `linear-gradient(90deg, ${colors.primary}, ${colors.secondary})`,
+    transition: 'width 0.3s ease',
+    borderRadius: '4px',
+  },
   editorsContainer: {
     display: 'flex',
     gap: '24px',
@@ -490,6 +513,11 @@ const MultiplayerGame: React.FC = () => {
     setEditorReadyTick((prev) => prev + 1);
   }, []);
 
+  useEffect(() => {
+    if (editorReadyTick === 0) return;
+    editorRef.current?.setRelativeLineNumbers(relativeLineNumbers);
+  }, [editorReadyTick, relativeLineNumbers]);
+
   useEffect(() => () => {
     if (blockedHintTimerRef.current !== null) {
       window.clearTimeout(blockedHintTimerRef.current);
@@ -839,6 +867,12 @@ const MultiplayerGame: React.FC = () => {
     return `${seconds}.${tenths}s`;
   };
 
+  const myTaskProgress = me?.isFinished
+    ? (gameState.num_tasks ?? 0)
+    : (me?.taskProgress ?? 0);
+  const taskCount = Math.max(1, gameState.num_tasks ?? 1);
+  const taskProgressPercent = Math.min(100, (myTaskProgress / taskCount) * 100);
+
   // Render based on game state
   if (gameState.roomState === 'idle') {
     return (
@@ -849,6 +883,8 @@ const MultiplayerGame: React.FC = () => {
           initialMode={initialMode}
           error={error}
           queuePosition={queuePosition}
+          relativeLineNumbersEnabled={relativeLineNumbers}
+          onRelativeLineNumbersChange={setRelativeLineNumbers}
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onQuickMatch={quickMatch}
@@ -924,6 +960,15 @@ const MultiplayerGame: React.FC = () => {
               {gameState.task.type === 'navigate' ? 'Navigate to target' : 'Delete the highlighted text'}
             </div>
             <div style={styles.taskDescription}>{gameState.task.description}</div>
+            <div style={styles.taskProgressInlineRow}>
+              <span>Tasks Completed</span>
+              <span style={{ color: colors.primaryLight }}>
+                {myTaskProgress}/{taskCount}
+              </span>
+            </div>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${taskProgressPercent}%` }} />
+            </div>
           </div>
         )}
 
@@ -956,7 +1001,7 @@ const MultiplayerGame: React.FC = () => {
                   Reset (F6)
                 </button>
                 <button style={styles.lineNumbersButton} onClick={toggleRelativeLineNumbers}>
-                  {relativeLineNumbers ? 'Relative Lines ✓' : 'Relative Lines'} (F7)
+                  {relativeLineNumbers ? 'Relative Lines (F7) ✓' : 'Relative Lines (F7)'}
                 </button>
               </div>
             )}

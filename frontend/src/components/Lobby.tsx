@@ -6,6 +6,8 @@ interface LobbyProps {
   initialMode?: 'quick' | 'private' | null;
   error: string | null;
   queuePosition?: number | null;
+  relativeLineNumbersEnabled: boolean;
+  onRelativeLineNumbersChange: (enabled: boolean) => void;
   onCreateRoom: (playerName: string) => void;
   onJoinRoom: (roomId: string, playerName: string) => void;
   onQuickMatch: (playerName: string) => void;
@@ -237,6 +239,50 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
+  optionToggleRow: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '10px 2px',
+    marginBottom: '12px',
+  },
+  optionToggleLabel: {
+    color: colors.textSecondary,
+    fontSize: '13px',
+    fontWeight: 600,
+    fontFamily: '"JetBrains Mono", monospace',
+    letterSpacing: '0.3px',
+    userSelect: 'none' as const,
+    cursor: 'pointer',
+  },
+  optionToggleCheckbox: {
+    width: '16px',
+    height: '16px',
+    margin: 0,
+    cursor: 'pointer',
+    borderRadius: '4px',
+    border: `1px solid ${colors.borderLight}`,
+    background: colors.bgDark,
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.45)',
+    transition: 'all 0.15s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'transparent',
+    fontSize: '12px',
+    lineHeight: 1,
+    fontWeight: 700,
+    fontFamily: '"JetBrains Mono", monospace',
+    userSelect: 'none' as const,
+  },
+  optionToggleCheckboxChecked: {
+    background: `${colors.success}1f`,
+    border: `1px solid ${colors.success}`,
+    boxShadow: `0 0 0 1px ${colors.success}33`,
+    color: colors.success,
+  },
 };
 
 export const Lobby: React.FC<LobbyProps> = ({
@@ -245,6 +291,8 @@ export const Lobby: React.FC<LobbyProps> = ({
   initialMode = null,
   error,
   queuePosition = null,
+  relativeLineNumbersEnabled,
+  onRelativeLineNumbersChange,
   onCreateRoom,
   onJoinRoom,
   onQuickMatch,
@@ -468,6 +516,21 @@ export const Lobby: React.FC<LobbyProps> = ({
                 maxLength={20}
               />
             </div>
+            <label style={styles.optionToggleRow}>
+              <span style={styles.optionToggleLabel}>Start with Relative Line Numbers</span>
+              <button
+                type="button"
+                aria-label="Toggle relative line numbers"
+                aria-pressed={relativeLineNumbersEnabled}
+                onClick={() => onRelativeLineNumbersChange(!relativeLineNumbersEnabled)}
+                style={{
+                  ...styles.optionToggleCheckbox,
+                  ...(relativeLineNumbersEnabled ? styles.optionToggleCheckboxChecked : {}),
+                }}
+              >
+                ✓
+              </button>
+            </label>
 
             <button
               style={{
@@ -541,6 +604,21 @@ export const Lobby: React.FC<LobbyProps> = ({
             maxLength={20}
           />
         </div>
+        <label style={styles.optionToggleRow}>
+          <span style={styles.optionToggleLabel}>Start with Relative Line Numbers</span>
+          <button
+            type="button"
+            aria-label="Toggle relative line numbers"
+            aria-pressed={relativeLineNumbersEnabled}
+            onClick={() => onRelativeLineNumbersChange(!relativeLineNumbersEnabled)}
+            style={{
+              ...styles.optionToggleCheckbox,
+              ...(relativeLineNumbersEnabled ? styles.optionToggleCheckboxChecked : {}),
+            }}
+          >
+            ✓
+          </button>
+        </label>
 
         {/* Create or Join buttons */}
         {privateSubMode === 'select' && (

@@ -9,7 +9,9 @@ import WebSocket from 'ws';
 const LOCAL_WS_URL = 'ws://localhost:3002';
 const PROD_WS_URL = 'wss://vim-racing-matchmaker.fly.dev';
 
-const WS_URL = process.env.MATCHMAKING_URL || (process.env.PROD ? PROD_WS_URL : LOCAL_WS_URL);
+const WS_URL =
+  process.env.MATCHMAKING_URL ||
+  (process.env.PROD ? PROD_WS_URL : LOCAL_WS_URL);
 
 if (!process.env.MATCHMAKING_URL && !process.env.PROD) {
   console.log('ℹ️  No MATCHMAKING_URL set, defaulting to local:', LOCAL_WS_URL);
@@ -47,15 +49,25 @@ function assert(condition: boolean, name: string, error: string) {
   else fail(name, error);
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`${label} timed out after ${TIMEOUT_MS}ms`)),
-      TIMEOUT_MS,
+      TIMEOUT_MS
     );
     promise.then(
-      (val) => { clearTimeout(timer); resolve(val); },
-      (err) => { clearTimeout(timer); reject(err); },
+      (val) => {
+        clearTimeout(timer);
+        resolve(val);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
     );
   });
 }
@@ -70,16 +82,20 @@ async function httpTests() {
     const res = await fetch(`${HTTP_URL}/`);
     assert(res.status === 200, 'Health check returns 200', `got ${res.status}`);
     const body = await res.json();
-    assert(body.status === 'ok', 'Health check body has status:ok', `got ${JSON.stringify(body)}`);
-  } catch (err: any) {
-    fail('Health check', err.message);
+    assert(
+      body.status === 'ok',
+      'Health check body has status:ok',
+      `got ${JSON.stringify(body)}`
+    );
+  } catch (err: unknown) {
+    fail('Health check', errorMessage(err));
   }
 
   // CORS preflight
   try {
     const res = await fetch(`${HTTP_URL}/`, {
       method: 'OPTIONS',
-      headers: { 'Origin': PROD_ORIGIN },
+      headers: { Origin: PROD_ORIGIN },
     });
     assert(res.status === 204, 'Preflight returns 204', `got ${res.status}`);
 
@@ -87,17 +103,17 @@ async function httpTests() {
     assert(
       acao === PROD_ORIGIN,
       'Preflight CORS header reflects origin',
-      `Access-Control-Allow-Origin: ${acao ?? '(missing)'}`,
+      `Access-Control-Allow-Origin: ${acao ?? '(missing)'}`
     );
 
     const methods = res.headers.get('access-control-allow-methods') ?? '';
     assert(
       methods.includes('GET'),
       'Preflight allows GET method',
-      `Access-Control-Allow-Methods: ${methods}`,
+      `Access-Control-Allow-Methods: ${methods}`
     );
-  } catch (err: any) {
-    fail('Preflight', err.message);
+  } catch (err: unknown) {
+    fail('Preflight', errorMessage(err));
   }
 }
 
@@ -114,7 +130,11 @@ function connectWs(): Promise<WebSocket> {
   });
 }
 
-function waitForMessage(ws: WebSocket, type: string, opts?: { rejectOnError?: boolean }): Promise<any> {
+function waitForMessage(
+  ws: WebSocket,
+  type: string,
+  opts?: { rejectOnError?: boolean }
+): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const onMessage = (data: WebSocket.Data) => {
       try {
@@ -124,13 +144,19 @@ function waitForMessage(ws: WebSocket, type: string, opts?: { rejectOnError?: bo
           resolve(msg);
         } else if (opts?.rejectOnError && msg.type === 'error') {
           ws.off('message', onMessage);
-          reject(new Error(`Server error: ${msg.message || JSON.stringify(msg)}`));
+          reject(
+            new Error(`Server error: ${msg.message || JSON.stringify(msg)}`)
+          );
         }
-      } catch { /* ignore non-JSON */ }
+      } catch {
+        /* ignore non-JSON */
+      }
     };
     ws.on('message', onMessage);
     ws.on('error', reject);
-    ws.on('close', () => reject(new Error('WebSocket closed while waiting for ' + type)));
+    ws.on('close', () =>
+      reject(new Error('WebSocket closed while waiting for ' + type))
+    );
   });
 }
 
@@ -151,17 +177,26 @@ async function wsConnectivityTests() {
 
     // queue:join → queue:joined
     const joinedPromise = waitForMessage(ws, 'queue:joined');
-    ws.send(JSON.stringify({ type: 'queue:join', playerName: 'SmokeTest_Connectivity' }));
+    ws.send(
+      JSON.stringify({
+        type: 'queue:join',
+        playerName: 'SmokeTest_Connectivity',
+      })
+    );
     const joinedMsg = await withTimeout(joinedPromise, 'queue:join');
-    assert(typeof joinedMsg.playerId === 'string', 'queue:joined has playerId', `got ${typeof joinedMsg.playerId}`);
+    assert(
+      typeof joinedMsg.playerId === 'string',
+      'queue:joined has playerId',
+      `got ${typeof joinedMsg.playerId}`
+    );
 
     // queue:leave → queue:left
     const leftPromise = waitForMessage(ws, 'queue:left');
     ws.send(JSON.stringify({ type: 'queue:leave' }));
     await withTimeout(leftPromise, 'queue:leave');
     pass('queue:leave → queue:left');
-  } catch (err: any) {
-    fail('WebSocket connectivity', err.message);
+  } catch (err: unknown) {
+    fail('WebSocket connectivity', errorMessage(err));
   } finally {
     ws?.close();
   }
@@ -179,35 +214,53 @@ async function matchmakingFlowTests() {
     // Connect both players
     [ws1, ws2] = await withTimeout(
       Promise.all([connectWs(), connectWs()]),
-      'Connect both players',
+      'Connect both players'
     );
     pass('Both players connected');
 
     // Both join queue and wait for match:found
     // Room assignment is fast now but keep a generous timeout for network latency.
     const matchTimeoutMs = Math.max(TIMEOUT_MS, 30000);
-    const match1Promise = waitForMessage(ws1, 'match:found', { rejectOnError: true });
-    const match2Promise = waitForMessage(ws2, 'match:found', { rejectOnError: true });
+    const match1Promise = waitForMessage(ws1, 'match:found', {
+      rejectOnError: true,
+    });
+    const match2Promise = waitForMessage(ws2, 'match:found', {
+      rejectOnError: true,
+    });
 
-    ws1.send(JSON.stringify({ type: 'queue:join', playerName: 'SmokeTest_P1' }));
-    ws2.send(JSON.stringify({ type: 'queue:join', playerName: 'SmokeTest_P2' }));
+    ws1.send(
+      JSON.stringify({ type: 'queue:join', playerName: 'SmokeTest_P1' })
+    );
+    ws2.send(
+      JSON.stringify({ type: 'queue:join', playerName: 'SmokeTest_P2' })
+    );
 
-    const matchWithTimeout = <T>(promise: Promise<T>, label: string): Promise<T> => {
+    const matchWithTimeout = <T>(
+      promise: Promise<T>,
+      label: string
+    ): Promise<T> => {
       return new Promise((resolve, reject) => {
         const timer = setTimeout(
-          () => reject(new Error(`${label} timed out after ${matchTimeoutMs}ms`)),
-          matchTimeoutMs,
+          () =>
+            reject(new Error(`${label} timed out after ${matchTimeoutMs}ms`)),
+          matchTimeoutMs
         );
         promise.then(
-          (val) => { clearTimeout(timer); resolve(val); },
-          (err) => { clearTimeout(timer); reject(err); },
+          (val) => {
+            clearTimeout(timer);
+            resolve(val);
+          },
+          (err) => {
+            clearTimeout(timer);
+            reject(err);
+          }
         );
       });
     };
 
     const [match1, match2] = await matchWithTimeout(
       Promise.all([match1Promise, match2Promise]),
-      'Wait for match:found',
+      'Wait for match:found'
     );
 
     pass('Both players received match:found');
@@ -215,28 +268,29 @@ async function matchmakingFlowTests() {
     assert(
       typeof match1.roomId === 'string' && match1.roomId.length > 0,
       'match:found has roomId',
-      `roomId: ${match1.roomId}`,
+      `roomId: ${match1.roomId}`
     );
 
     assert(
-      typeof match1.connectionUrl === 'string' && match1.connectionUrl.length > 0,
+      typeof match1.connectionUrl === 'string' &&
+        match1.connectionUrl.length > 0,
       'match:found has connectionUrl',
-      `connectionUrl: ${match1.connectionUrl}`,
+      `connectionUrl: ${match1.connectionUrl}`
     );
 
     assert(
       match1.roomId === match2.roomId,
       'Both players matched to same room',
-      `P1: ${match1.roomId}, P2: ${match2.roomId}`,
+      `P1: ${match1.roomId}, P2: ${match2.roomId}`
     );
 
     assert(
       Array.isArray(match1.players) && match1.players.length === 2,
       'match:found includes 2 players',
-      `players: ${JSON.stringify(match1.players)}`,
+      `players: ${JSON.stringify(match1.players)}`
     );
-  } catch (err: any) {
-    fail('Matchmaking flow', err.message);
+  } catch (err: unknown) {
+    fail('Matchmaking flow', errorMessage(err));
   } finally {
     ws1?.close();
     ws2?.close();
@@ -255,8 +309,8 @@ async function run() {
   await matchmakingFlowTests();
 
   // Summary
-  const passed = results.filter(r => r.passed).length;
-  const failed = results.filter(r => !r.passed).length;
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.filter((r) => !r.passed).length;
 
   console.log('\n' + '='.repeat(50));
   console.log(`  ${passed} passed, ${failed} failed`);
@@ -264,7 +318,7 @@ async function run() {
 
   if (failed > 0) {
     console.log('Failed checks:');
-    for (const r of results.filter(r => !r.passed)) {
+    for (const r of results.filter((r) => !r.passed)) {
       console.log(`  - ${r.name}: ${r.error}`);
     }
     console.log('');

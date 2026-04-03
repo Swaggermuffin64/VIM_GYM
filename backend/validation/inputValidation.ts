@@ -1,6 +1,6 @@
 /**
  * Input Validation Utilities
- * 
+ *
  * Provides validation and sanitization for all user inputs to prevent
  * XSS, injection attacks, and malformed data.
  */
@@ -24,9 +24,8 @@ interface RawKeystrokeEvent {
 // Limits
 const PLAYER_NAME_MAX_LENGTH = 20;
 const PLAYER_NAME_MIN_LENGTH = 1;
-const ROOM_ID_LENGTH = 6;
 const MAX_EDITOR_TEXT_LENGTH = 10000; // 10KB max for editor content
-const MAX_CURSOR_OFFSET = 100000;     // Reasonable max for any code file
+const MAX_CURSOR_OFFSET = 100000; // Reasonable max for any code file
 const MAX_KEYSTROKES_PER_TASK = 2000;
 const MAX_KEY_NAME_LENGTH = 32;
 const MAX_KEYSTROKE_DT_MS = 10 * 60 * 1000; // 10 minutes
@@ -52,6 +51,7 @@ export function validatePlayerName(input: unknown): ValidationResult<string> {
   name = name.replace(/[<>'"&\\]/g, '');
 
   // Remove control characters
+  // eslint-disable-next-line no-control-regex -- strip C0 / DEL control chars from user input
   name = name.replace(/[\x00-\x1F\x7F]/g, '');
 
   // Ensure minimum length
@@ -133,15 +133,17 @@ export function validateEditorText(input: unknown): ValidationResult<string> {
 /**
  * Validate and sanitize task-end keystroke event payloads.
  */
-export function validateKeystrokeEvents(input: unknown): ValidationResult<Array<{
-  key: string;
-  altKey: boolean;
-  ctrlKey: boolean;
-  metaKey: boolean;
-  shiftKey: boolean;
-  repeat: boolean;
-  dtMs: number;
-}>> {
+export function validateKeystrokeEvents(input: unknown): ValidationResult<
+  Array<{
+    key: string;
+    altKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    shiftKey: boolean;
+    repeat: boolean;
+    dtMs: number;
+  }>
+> {
   if (!Array.isArray(input)) {
     return { valid: false, error: 'Keystroke events must be an array' };
   }
@@ -168,12 +170,21 @@ export function validateKeystrokeEvents(input: unknown): ValidationResult<Array<
       return { valid: false, error: 'Invalid keystroke event format' };
     }
 
-    if (typeof rawEvent.key !== 'string' || rawEvent.key.length < 1 || rawEvent.key.length > MAX_KEY_NAME_LENGTH) {
+    if (
+      typeof rawEvent.key !== 'string' ||
+      rawEvent.key.length < 1 ||
+      rawEvent.key.length > MAX_KEY_NAME_LENGTH
+    ) {
       return { valid: false, error: 'Invalid key value in keystroke event' };
     }
 
     const dtMs = rawEvent.dtMs;
-    if (typeof dtMs !== 'number' || !Number.isInteger(dtMs) || dtMs < 0 || dtMs > MAX_KEYSTROKE_DT_MS) {
+    if (
+      typeof dtMs !== 'number' ||
+      !Number.isInteger(dtMs) ||
+      dtMs < 0 ||
+      dtMs > MAX_KEYSTROKE_DT_MS
+    ) {
       return { valid: false, error: 'Invalid keystroke timestamp delta' };
     }
 
@@ -195,7 +206,10 @@ export function validateKeystrokeEvents(input: unknown): ValidationResult<Array<
  * Validate boolean input.
  * Coerces to boolean, defaults to false if not provided.
  */
-export function validateBoolean(input: unknown, defaultValue: boolean = false): ValidationResult<boolean> {
+export function validateBoolean(
+  input: unknown,
+  defaultValue: boolean = false
+): ValidationResult<boolean> {
   if (input === undefined || input === null) {
     return { valid: true, value: defaultValue };
   }
@@ -206,7 +220,9 @@ export function validateBoolean(input: unknown, defaultValue: boolean = false): 
 /**
  * Validate optional room ID (for room creation where ID might not be provided).
  */
-export function validateOptionalRoomId(input: unknown): ValidationResult<string | undefined> {
+export function validateOptionalRoomId(
+  input: unknown
+): ValidationResult<string | undefined> {
   if (input === undefined || input === null || input === '') {
     return { valid: true, value: undefined };
   }

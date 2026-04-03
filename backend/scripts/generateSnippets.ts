@@ -1,9 +1,9 @@
 /**
  * Script to generate codeSnippets.json from CODE_SNIPPETS_RAW
- * 
+ *
  * Parses raw code snippets and generates word indices, curly brace indices,
  * and parenthesis indices for each snippet.
- * 
+ *
  * Run with: npm run generate-snippets
  */
 
@@ -63,23 +63,23 @@ function getWordIndices(code: string): IntTuple[] {
   return wordIndiceArray;
 }
 
-function getNewlineOffsets(code: string) : IntTuple[] { 
-    //output list of lists where indice is line #, and [start offset, \n offset (or last char for last line)]
-    //be able to tell what line your on from offset
-    const allOffsetRanges: IntTuple[] = []; 
-    const splitText = code.split('\n');    
-    let startOffset = 0;
-    for (const line of splitText) {
-        const lineLength = line.length + startOffset; // length + 1 should be the \n char
-        allOffsetRanges.push([startOffset, lineLength] as IntTuple);
-        startOffset = lineLength + 1;
-    }
-    return allOffsetRanges; 
+function getNewlineOffsets(code: string): IntTuple[] {
+  //output list of lists where indice is line #, and [start offset, \n offset (or last char for last line)]
+  //be able to tell what line your on from offset
+  const allOffsetRanges: IntTuple[] = [];
+  const splitText = code.split('\n');
+  let startOffset = 0;
+  for (const line of splitText) {
+    const lineLength = line.length + startOffset; // length + 1 should be the \n char
+    allOffsetRanges.push([startOffset, lineLength] as IntTuple);
+    startOffset = lineLength + 1;
+  }
+  return allOffsetRanges;
 }
 
 function getCurlyBraceIndices(code: string): IntTuple[] {
-  let curlyBraceIndices: IntTuple[] = [];
-  let stack: number[] = [];
+  const curlyBraceIndices: IntTuple[] = [];
+  const stack: number[] = [];
   for (let i = 0; i < code.length; i++) {
     if (code[i] === '{') {
       stack.push(i);
@@ -93,8 +93,8 @@ function getCurlyBraceIndices(code: string): IntTuple[] {
 }
 
 function getParenthesisIndices(code: string): IntTuple[] {
-  let parenthesisIndices: IntTuple[] = [];
-  let stack: number[] = [];
+  const parenthesisIndices: IntTuple[] = [];
+  const stack: number[] = [];
   for (let i = 0; i < code.length; i++) {
     if (code[i] === '(') {
       stack.push(i);
@@ -108,8 +108,8 @@ function getParenthesisIndices(code: string): IntTuple[] {
 }
 
 function getBracketIndices(code: string): IntTuple[] {
-  let bracketIndices: IntTuple[] = [];
-  let stack: number[] = [];
+  const bracketIndices: IntTuple[] = [];
+  const stack: number[] = [];
   for (let i = 0; i < code.length; i++) {
     if (code[i] === '[') {
       stack.push(i);
@@ -126,7 +126,10 @@ function buildLineStartOffsets(lineOffsetRanges: IntTuple[]): number[] {
   return lineOffsetRanges.map(([lineStart]) => lineStart);
 }
 
-function buildOffsetToLineMap(code: string, lineOffsetRanges: IntTuple[]): number[] {
+function buildOffsetToLineMap(
+  code: string,
+  lineOffsetRanges: IntTuple[]
+): number[] {
   const lastValidOffset = Math.max(0, code.length - 1);
   const offsetToLine = new Array<number>(code.length).fill(0);
   lineOffsetRanges.forEach(([lineStart, lineEndInclusive], lineIndex) => {
@@ -138,7 +141,10 @@ function buildOffsetToLineMap(code: string, lineOffsetRanges: IntTuple[]): numbe
   return offsetToLine;
 }
 
-function buildMotionKeysByLine(code: string, lineOffsetRanges: IntTuple[]): string[][] {
+function buildMotionKeysByLine(
+  code: string,
+  lineOffsetRanges: IntTuple[]
+): string[][] {
   const baseKeys = ['h', 'j', 'k', 'l', 'w', 'e', 'b', '0', '$'];
   return lineOffsetRanges.map(([lineStart, lineEndExclusive]) => {
     const lineText = code.slice(lineStart, lineEndExclusive);
@@ -155,19 +161,19 @@ function buildMotionKeysByLine(code: string, lineOffsetRanges: IntTuple[]): stri
 function removeEmptyLines(code: string): string {
   return code
     .split('\n')
-    .filter(line => line.trim() !== '')
+    .filter((line) => line.trim() !== '')
     .join('\n');
 }
 
 function createCodeSnippetObjects(CODE_SNIPPETS: string[]): codeSnippet[] {
-  let codeSnippetObjects: codeSnippet[] = [];
+  const codeSnippetObjects: codeSnippet[] = [];
   for (let i = 0; i < CODE_SNIPPETS.length; i++) {
-    let raw_snippet = CODE_SNIPPETS[i];
+    const raw_snippet = CODE_SNIPPETS[i];
     if (raw_snippet) {
       // Remove empty lines first - indices must match the cleaned code used at runtime
       const code_snippet = removeEmptyLines(raw_snippet);
       const lineOffsetRanges = getNewlineOffsets(code_snippet);
-      let code_object: codeSnippet = {
+      const code_object: codeSnippet = {
         code: code_snippet,
         wordIndices: getWordIndices(code_snippet),
         curlyBraceIndices: getCurlyBraceIndices(code_snippet),
@@ -177,7 +183,10 @@ function createCodeSnippetObjects(CODE_SNIPPETS: string[]): codeSnippet[] {
         precomputed: {
           lineStartOffsets: buildLineStartOffsets(lineOffsetRanges),
           offsetToLine: buildOffsetToLineMap(code_snippet, lineOffsetRanges),
-          motionKeysByLine: buildMotionKeysByLine(code_snippet, lineOffsetRanges),
+          motionKeysByLine: buildMotionKeysByLine(
+            code_snippet,
+            lineOffsetRanges
+          ),
         },
       };
       codeSnippetObjects.push(code_object);
@@ -194,7 +203,7 @@ function extractRawSnippets(fileContent: string): string[] {
   if (startIdx === -1) {
     throw new Error('Could not find CODE_SNIPPETS_RAW in file');
   }
-  
+
   // Find the closing ]; by tracking backticks (we're only inside array when not in a string)
   let inString = false;
   let arrayEnd = -1;
@@ -207,13 +216,16 @@ function extractRawSnippets(fileContent: string): string[] {
       break;
     }
   }
-  
+
   if (arrayEnd === -1) {
     throw new Error('Could not find end of CODE_SNIPPETS_RAW array');
   }
-  
-  const arrayContent = fileContent.substring(startIdx + startMarker.length, arrayEnd);
-  
+
+  const arrayContent = fileContent.substring(
+    startIdx + startMarker.length,
+    arrayEnd
+  );
+
   // Extract template literals (backtick strings)
   const snippets: string[] = [];
   let i = 0;
@@ -221,38 +233,42 @@ function extractRawSnippets(fileContent: string): string[] {
     // Find next backtick
     const backtickStart = arrayContent.indexOf('`', i);
     if (backtickStart === -1) break;
-    
+
     // Find closing backtick
     const backtickEnd = arrayContent.indexOf('`', backtickStart + 1);
     if (backtickEnd === -1) break;
-    
+
     const snippet = arrayContent.substring(backtickStart + 1, backtickEnd);
     snippets.push(snippet);
     i = backtickEnd + 1;
   }
-  
+
   return snippets;
 }
 
 async function main() {
   const codeSnippetsPath = path.join(__dirname, '..', 'codeSnippets.ts');
   const jsonOutputPath = path.join(__dirname, '..', 'codeSnippets.json');
-  
+
   // Read the current file
   const fileContent = fs.readFileSync(codeSnippetsPath, 'utf-8');
-  
+
   // Extract raw snippets by parsing text (no import needed)
   const rawSnippets = extractRawSnippets(fileContent);
   console.log(`Found ${rawSnippets.length} raw snippets`);
-  
+
   // Generate the computed objects
   const computedObjects = createCodeSnippetObjects(rawSnippets);
-  console.log('Generated computed objects with word, curly brace, and parenthesis indices');
-  
+  console.log(
+    'Generated computed objects with word, curly brace, and parenthesis indices'
+  );
+
   // Write to JSON file
   fs.writeFileSync(jsonOutputPath, JSON.stringify(computedObjects, null, 2));
-  
-  console.log(`✅ Successfully wrote ${computedObjects.length} snippets to codeSnippets.json`);
+
+  console.log(
+    `✅ Successfully wrote ${computedObjects.length} snippets to codeSnippets.json`
+  );
 }
 
 main().catch(console.error);

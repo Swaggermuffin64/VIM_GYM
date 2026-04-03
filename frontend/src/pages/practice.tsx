@@ -1,18 +1,30 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Vim, getCM } from '@replit/codemirror-vim';
 import type { CodeMirrorV } from '@replit/codemirror-vim';
 import { Transaction } from '@codemirror/state';
 
 import type { PracticeSummary, Task, TaskSummary } from '../types/task';
-import type { KeystrokeEvent, TaskKeystrokeSubmission } from '../types/keystroke';
+import type {
+  KeystrokeEvent,
+  TaskKeystrokeSubmission,
+} from '../types/keystroke';
 import {
   formatKeyLabel as sharedFormatKeyLabel,
   formatTaskTypeLabel as sharedFormatTaskTypeLabel,
   expandRecommendedSequence as sharedExpandRecommendedSequence,
   formatKeysForDisplay as sharedFormatKeysForDisplay,
 } from '../utils/keyFormatting';
-import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
+import {
+  setTargetPosition,
+  setTargetRange,
+} from '../extensions/targetHighlight';
 import {
   allowReset,
   EditBlockReason,
@@ -20,7 +32,11 @@ import {
   setDeleteMode,
   setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
-import { VimRaceEditor, VimRaceEditorHandle, editorColors as colors } from '../components/VimRaceEditor';
+import {
+  VimRaceEditor,
+  VimRaceEditorHandle,
+  editorColors as colors,
+} from '../components/VimRaceEditor';
 import { SummaryTaskSandbox } from '../components/SummaryTaskSandbox';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -37,10 +53,24 @@ const clamp = (value: number, min: number, max: number): number => {
 };
 
 const canDockCheatSheetForWidth = (viewportWidth: number): boolean => {
-  const dockWidth = clamp(viewportWidth * 0.22, 18 * ROOT_FONT_SIZE_PX, 24 * ROOT_FONT_SIZE_PX);
-  const containerShift = clamp(viewportWidth * 0.0325, 2.375 * ROOT_FONT_SIZE_PX, 3.5 * ROOT_FONT_SIZE_PX);
-  const raceContainerLeft = Math.max(1.5 * ROOT_FONT_SIZE_PX, ((viewportWidth - 1200) / 2) + containerShift);
-  const dockLeft = Math.max(0.75 * ROOT_FONT_SIZE_PX, (raceContainerLeft - dockWidth) / 2);
+  const dockWidth = clamp(
+    viewportWidth * 0.22,
+    18 * ROOT_FONT_SIZE_PX,
+    24 * ROOT_FONT_SIZE_PX
+  );
+  const containerShift = clamp(
+    viewportWidth * 0.0325,
+    2.375 * ROOT_FONT_SIZE_PX,
+    3.5 * ROOT_FONT_SIZE_PX
+  );
+  const raceContainerLeft = Math.max(
+    1.5 * ROOT_FONT_SIZE_PX,
+    (viewportWidth - 1200) / 2 + containerShift
+  );
+  const dockLeft = Math.max(
+    0.75 * ROOT_FONT_SIZE_PX,
+    (raceContainerLeft - dockWidth) / 2
+  );
   const dockRight = dockLeft + dockWidth;
   return dockRight + CHEATSHEET_DOCK_GAP_PX <= raceContainerLeft;
 };
@@ -54,7 +84,10 @@ interface PracticeSessionResponse {
   practiceSummary?: PracticeSummary;
 }
 
-const VIM_CHEATSHEET: Array<{ title: string; items: Array<{ keys: string; description: string }> }> = [
+const VIM_CHEATSHEET: Array<{
+  title: string;
+  items: Array<{ keys: string; description: string }>;
+}> = [
   {
     title: 'Navigation',
     items: [
@@ -70,7 +103,10 @@ const VIM_CHEATSHEET: Array<{ title: string; items: Array<{ keys: string; descri
     title: 'Deletion',
     items: [
       { keys: 'x', description: 'Delete character under cursor' },
-      { keys: 'dw / d<count>e', description: 'Delete word / multiple word-ends' },
+      {
+        keys: 'dw / d<count>e',
+        description: 'Delete word / multiple word-ends',
+      },
       { keys: 'd$', description: 'Delete to end of line' },
       { keys: 'd%', description: 'Delete matching pair block' },
       { keys: 'di( di{ di[', description: 'Delete inside (), {}, []' },
@@ -1119,8 +1155,12 @@ const PracticeEditor: React.FC = () => {
   const [editorReadyTick, setEditorReadyTick] = useState(0);
   const [recentKeys, setRecentKeys] = useState<string[]>([]);
   const [taskSummaries, setTaskSummaries] = useState<TaskSummary[]>([]);
-  const [summaryTaskCompletion, setSummaryTaskCompletion] = useState<Record<string, boolean>>({});
-  const [summaryTaskResetTokens, setSummaryTaskResetTokens] = useState<Record<string, number>>({});
+  const [summaryTaskCompletion, setSummaryTaskCompletion] = useState<
+    Record<string, boolean>
+  >({});
+  const [summaryTaskResetTokens, setSummaryTaskResetTokens] = useState<
+    Record<string, number>
+  >({});
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const [blockedEditHint, setBlockedEditHint] = useState<string | null>(null);
   const [isNewTasksHovered, setIsNewTasksHovered] = useState(false);
@@ -1162,11 +1202,14 @@ const PracticeEditor: React.FC = () => {
     }
   }, [sessionStartTime, isSessionComplete]);
 
-  useEffect(() => () => {
-    if (blockedHintTimerRef.current !== null) {
-      window.clearTimeout(blockedHintTimerRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (blockedHintTimerRef.current !== null) {
+        window.clearTimeout(blockedHintTimerRef.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const handleResize = () => {
@@ -1193,16 +1236,12 @@ const PracticeEditor: React.FC = () => {
     return sharedFormatTaskTypeLabel(taskType);
   }, []);
 
-  const normalizeUserKeysForComparison = useCallback((events: KeystrokeEvent[]): string[] => {
-    const modifierKeys = new Set(['Shift', 'Control', 'Alt', 'Meta']);
-    return events
-      .map((event) => event.key)
-      .filter((key) => !modifierKeys.has(key));
-  }, []);
-
-  const expandRecommendedSequence = useCallback((recommendedSequence: string[]): string[] => {
-    return sharedExpandRecommendedSequence(recommendedSequence);
-  }, []);
+  const expandRecommendedSequence = useCallback(
+    (recommendedSequence: string[]): string[] => {
+      return sharedExpandRecommendedSequence(recommendedSequence);
+    },
+    []
+  );
 
   const formatKeysForDisplay = useCallback((keys: string[]): string => {
     return sharedFormatKeysForDisplay(keys);
@@ -1223,63 +1262,77 @@ const PracticeEditor: React.FC = () => {
     }
   }, []);
 
-  const handleBlockedEdit = useCallback((reason: EditBlockReason) => {
-    setBlockedEditHint(getBlockedEditHint(reason));
-    if (blockedHintTimerRef.current !== null) {
-      window.clearTimeout(blockedHintTimerRef.current);
-    }
-    blockedHintTimerRef.current = window.setTimeout(() => {
-      setBlockedEditHint(null);
-      blockedHintTimerRef.current = null;
-    }, 2400);
-  }, [getBlockedEditHint]);
+  const handleBlockedEdit = useCallback(
+    (reason: EditBlockReason) => {
+      setBlockedEditHint(getBlockedEditHint(reason));
+      if (blockedHintTimerRef.current !== null) {
+        window.clearTimeout(blockedHintTimerRef.current);
+      }
+      blockedHintTimerRef.current = window.setTimeout(() => {
+        setBlockedEditHint(null);
+        blockedHintTimerRef.current = null;
+      }, 2400);
+    },
+    [getBlockedEditHint]
+  );
 
-  const submitTaskKeystrokes = useCallback(async (
-    task: Task,
-    snapshot?: { startedAt: number; completedAt: number; events: KeystrokeEvent[] }
-  ) => {
-    if (submittedTaskIdsRef.current.has(task.id)) return;
+  const submitTaskKeystrokes = useCallback(
+    async (
+      task: Task,
+      snapshot?: {
+        startedAt: number;
+        completedAt: number;
+        events: KeystrokeEvent[];
+      }
+    ) => {
+      if (submittedTaskIdsRef.current.has(task.id)) return;
 
-    const startedAt = snapshot?.startedAt ?? taskStartedAtRef.current;
-    const completedAt = snapshot?.completedAt ?? Date.now();
-    const events = snapshot?.events ?? taskKeystrokesRef.current;
+      const startedAt = snapshot?.startedAt ?? taskStartedAtRef.current;
+      const completedAt = snapshot?.completedAt ?? Date.now();
+      const events = snapshot?.events ?? taskKeystrokesRef.current;
 
-    const payload: TaskKeystrokeSubmission = {
-      source: 'practice',
-      taskId: task.id,
-      taskType: task.type,
-      startedAt,
-      completedAt,
-      events,
-    };
+      const payload: TaskKeystrokeSubmission = {
+        source: 'practice',
+        taskId: task.id,
+        taskType: task.type,
+        startedAt,
+        completedAt,
+        events,
+      };
 
-    submittedTaskIdsRef.current.add(task.id);
+      submittedTaskIdsRef.current.add(task.id);
 
-    try {
-      await fetch(`${API_BASE}/api/task/keystrokes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      try {
+        await fetch(`${API_BASE}/api/task/keystrokes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (error) {
+        console.error('Failed to submit task keystrokes:', error);
+      }
+    },
+    []
+  );
+
+  const handleTaskKeyStroke = useCallback(
+    (event: KeystrokeEvent) => {
+      const currentTaskId = currentTaskIdRef.current;
+      if (!currentTaskId || isTaskCompleteRef.current || isSessionComplete)
+        return;
+
+      const dtMs = Math.max(0, Date.now() - taskStartedAtRef.current);
+      taskKeystrokesRef.current.push({
+        ...event,
+        dtMs,
       });
-    } catch (error) {
-      console.error('Failed to submit task keystrokes:', error);
-    }
-  }, []);
-
-  const handleTaskKeyStroke = useCallback((event: KeystrokeEvent) => {
-    const currentTaskId = currentTaskIdRef.current;
-    if (!currentTaskId || isTaskCompleteRef.current || isSessionComplete) return;
-
-    const dtMs = Math.max(0, Date.now() - taskStartedAtRef.current);
-    taskKeystrokesRef.current.push({
-      ...event,
-      dtMs,
-    });
-    const keyLabel = formatKeyLabel(event.key);
-    if (keyLabel) {
-      setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
-    }
-  }, [formatKeyLabel, isSessionComplete]);
+      const keyLabel = formatKeyLabel(event.key);
+      if (keyLabel) {
+        setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
+      }
+    },
+    [formatKeyLabel, isSessionComplete]
+  );
 
   // Start practice session when user clicks Ready
   const handleReady = useCallback(() => {
@@ -1436,10 +1489,7 @@ const PracticeEditor: React.FC = () => {
       const view = editorRef.current?.view;
       if (view) {
         view.dispatch({
-          effects: [
-            setTargetPosition.of(null),
-            setDeleteMode.of(false),
-          ],
+          effects: [setTargetPosition.of(null), setDeleteMode.of(false)],
         });
       }
       return;
@@ -1470,9 +1520,10 @@ const PracticeEditor: React.FC = () => {
         .map((event) => formatKeyLabel(event.key))
         .filter((label): label is string => Boolean(label));
       const visibleKeyCount = 30;
-      const keySequence = keyLabels.length <= visibleKeyCount
-        ? formatKeysForDisplay(keyLabels)
-        : `${formatKeysForDisplay(keyLabels.slice(0, visibleKeyCount))} ... (+${keyLabels.length - visibleKeyCount})`;
+      const keySequence =
+        keyLabels.length <= visibleKeyCount
+          ? formatKeysForDisplay(keyLabels)
+          : `${formatKeysForDisplay(keyLabels.slice(0, visibleKeyCount))} ... (+${keyLabels.length - visibleKeyCount})`;
       const taskRecommendation = {
         sequence: completedTask.recommendedSequence,
         weight: completedTask.recommendedWeight,
@@ -1485,7 +1536,9 @@ const PracticeEditor: React.FC = () => {
       if (hasOptimal) {
         const optimalKeys = taskRecommendation.sequence as string[];
         const expandedOptimalKeys = expandRecommendedSequence(optimalKeys);
-        const displayOptimalKeys = expandedOptimalKeys.map((key) => (key === ' ' ? 'Space' : key));
+        const displayOptimalKeys = expandedOptimalKeys.map((key) =>
+          key === ' ' ? 'Space' : key
+        );
         optimalSequence = formatKeysForDisplay(displayOptimalKeys);
         ourSolutionKeyCount = expandedOptimalKeys.length;
       }
@@ -1523,10 +1576,7 @@ const PracticeEditor: React.FC = () => {
     const view = editorRef.current?.view;
     if (view) {
       view.dispatch({
-        effects: [
-          setTargetPosition.of(null),
-          setDeleteMode.of(false),
-        ],
+        effects: [setTargetPosition.of(null), setDeleteMode.of(false)],
       });
       view.contentDOM.blur();
     }
@@ -1534,7 +1584,6 @@ const PracticeEditor: React.FC = () => {
     expandRecommendedSequence,
     formatKeysForDisplay,
     formatKeyLabel,
-    normalizeUserKeysForComparison,
     submitTaskKeystrokes,
   ]);
 
@@ -1549,7 +1598,8 @@ const PracticeEditor: React.FC = () => {
     };
 
     window.addEventListener('keydown', handleKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [isTaskComplete, advanceToNextTask]);
 
   // Toggle relative line numbers
@@ -1585,7 +1635,10 @@ const PracticeEditor: React.FC = () => {
     };
 
     window.addEventListener('keydown', handleResetHotkey, { capture: true });
-    return () => window.removeEventListener('keydown', handleResetHotkey, { capture: true });
+    return () =>
+      window.removeEventListener('keydown', handleResetHotkey, {
+        capture: true,
+      });
   }, [isReady, isSessionComplete, currentTask, resetCurrentTask]);
 
   useEffect(() => {
@@ -1598,8 +1651,13 @@ const PracticeEditor: React.FC = () => {
       toggleRelativeLineNumbers();
     };
 
-    window.addEventListener('keydown', handleRelativeLinesHotkey, { capture: true });
-    return () => window.removeEventListener('keydown', handleRelativeLinesHotkey, { capture: true });
+    window.addEventListener('keydown', handleRelativeLinesHotkey, {
+      capture: true,
+    });
+    return () =>
+      window.removeEventListener('keydown', handleRelativeLinesHotkey, {
+        capture: true,
+      });
   }, [isReady, isSessionComplete, currentTask, toggleRelativeLineNumbers]);
 
   useEffect(() => {
@@ -1612,44 +1670,58 @@ const PracticeEditor: React.FC = () => {
       toggleCheatSheet();
     };
 
-    window.addEventListener('keydown', handleCheatSheetHotkey, { capture: true });
-    return () => window.removeEventListener('keydown', handleCheatSheetHotkey, { capture: true });
+    window.addEventListener('keydown', handleCheatSheetHotkey, {
+      capture: true,
+    });
+    return () =>
+      window.removeEventListener('keydown', handleCheatSheetHotkey, {
+        capture: true,
+      });
   }, [isReady, isSessionComplete, currentTask, toggleCheatSheet]);
 
   // Handle cursor position changes (for navigate tasks)
-  const handleCursorChange = useCallback((offset: number) => {
-    const currentTasks = tasksRef.current;
-    const progress = taskProgressRef.current;
-    const completed = isTaskCompleteRef.current;
+  const handleCursorChange = useCallback(
+    (offset: number) => {
+      const currentTasks = tasksRef.current;
+      const progress = taskProgressRef.current;
+      const completed = isTaskCompleteRef.current;
 
-    const task = currentTasks[progress];
-    if (task && task.type === 'navigate' && !completed) {
-      if (offset === task.targetOffset) {
-        handleTaskComplete();
+      const task = currentTasks[progress];
+      if (task && task.type === 'navigate' && !completed) {
+        if (offset === task.targetOffset) {
+          handleTaskComplete();
+        }
       }
-    }
-  }, [handleTaskComplete]);
+    },
+    [handleTaskComplete]
+  );
 
   // Handle editor text changes (for delete tasks)
-  const handleEditorChange = useCallback((newText: string) => {
-    const currentTasks = tasksRef.current;
-    const progress = taskProgressRef.current;
-    const completed = isTaskCompleteRef.current;
+  const handleEditorChange = useCallback(
+    (newText: string) => {
+      const currentTasks = tasksRef.current;
+      const progress = taskProgressRef.current;
+      const completed = isTaskCompleteRef.current;
 
-    const task = currentTasks[progress];
-    if (task && task.type === 'delete' && !completed) {
-      if (newText === task.expectedResult) {
-        handleTaskComplete();
+      const task = currentTasks[progress];
+      if (task && task.type === 'delete' && !completed) {
+        if (newText === task.expectedResult) {
+          handleTaskComplete();
+        }
       }
-    }
-  }, [handleTaskComplete]);
+    },
+    [handleTaskComplete]
+  );
 
   const handleEditorReady = useCallback(() => {
     setEditorReadyTick((prev) => prev + 1);
   }, []);
 
   // Progress percentage
-  const progressPercent = numTasks > 0 ? ((taskProgress + (isTaskComplete ? 1 : 0)) / numTasks) * 100 : 0;
+  const progressPercent =
+    numTasks > 0
+      ? ((taskProgress + (isTaskComplete ? 1 : 0)) / numTasks) * 100
+      : 0;
   const summaryAverages = useMemo(() => {
     const count = taskSummaries.length;
     if (count === 0) return null;
@@ -1663,7 +1735,10 @@ const PracticeEditor: React.FC = () => {
     for (const summary of taskSummaries) {
       totalDurationMs += summary.durationMs;
       totalKeys += summary.keyCount;
-      totalKeysPerSecond += summary.durationMs > 0 ? summary.keyCount / (summary.durationMs / 1000) : 0;
+      totalKeysPerSecond +=
+        summary.durationMs > 0
+          ? summary.keyCount / (summary.durationMs / 1000)
+          : 0;
       if (typeof summary.ourSolutionKeyCount === 'number') {
         // +x means user's solution is x keys shorter than ours.
         totalDiscrepancy += summary.ourSolutionKeyCount - summary.keyCount;
@@ -1693,7 +1768,8 @@ const PracticeEditor: React.FC = () => {
   };
 
   const taskDisplay = getTaskTypeDisplay(currentTask);
-  const useDockedCheatSheet = showCheatSheet && !isSessionComplete && canDockCheatSheet;
+  const useDockedCheatSheet =
+    showCheatSheet && !isSessionComplete && canDockCheatSheet;
 
   // Ready screen before practice starts
   if (!isReady) {
@@ -1714,13 +1790,17 @@ const PracticeEditor: React.FC = () => {
             <div style={styles.readyCard}>
               <div style={styles.readyCardTitle}>What to expect</div>
               <div style={styles.readyInfo}>
-                Navigate to highlighted targets using Vim motions<br />
-                Delete highlighted text using Vim commands<br />
+                Navigate to highlighted targets using Vim motions
+                <br />
+                Delete highlighted text using Vim commands
+                <br />
                 Complete all tasks as fast as you can
               </div>
               <div style={styles.readyOptionsGroup}>
                 <div style={styles.readyOptionRow}>
-                  <span style={styles.readyOptionLabel}>Start with Relative Line Numbers</span>
+                  <span style={styles.readyOptionLabel}>
+                    Start with Relative Line Numbers
+                  </span>
                   <button
                     type="button"
                     aria-label="Toggle relative line numbers"
@@ -1728,14 +1808,18 @@ const PracticeEditor: React.FC = () => {
                     onClick={() => setRelativeLineNumbers((prev) => !prev)}
                     style={{
                       ...styles.readyOptionCheck,
-                      ...(relativeLineNumbers ? styles.readyOptionCheckActive : {}),
+                      ...(relativeLineNumbers
+                        ? styles.readyOptionCheckActive
+                        : {}),
                     }}
                   >
                     ✓
                   </button>
                 </div>
                 <div style={styles.readyOptionRow}>
-                  <span style={styles.readyOptionLabel}>Start with Cheatsheet Open</span>
+                  <span style={styles.readyOptionLabel}>
+                    Start with Cheatsheet Open
+                  </span>
                   <button
                     type="button"
                     aria-label="Toggle cheatsheet visibility"
@@ -1786,7 +1870,9 @@ const PracticeEditor: React.FC = () => {
           <div style={styles.leftCheatSheetDock}>
             <div style={styles.leftCheatSheetPanel}>
               <div style={styles.leftCheatSheetHeader}>
-                <div style={{ ...styles.cheatSheetTitle, marginBottom: 0 }}>Basic Cheat Sheet</div>
+                <div style={{ ...styles.cheatSheetTitle, marginBottom: 0 }}>
+                  Basic Cheat Sheet
+                </div>
                 <button
                   type="button"
                   style={styles.cheatSheetToggle}
@@ -1797,11 +1883,18 @@ const PracticeEditor: React.FC = () => {
               </div>
               {VIM_CHEATSHEET.map((section) => (
                 <div key={section.title}>
-                  <div style={styles.cheatSheetSectionTitle}>{section.title}</div>
+                  <div style={styles.cheatSheetSectionTitle}>
+                    {section.title}
+                  </div>
                   {section.items.map((item) => (
-                    <div key={`${section.title}-${item.keys}`} style={styles.cheatSheetRow}>
+                    <div
+                      key={`${section.title}-${item.keys}`}
+                      style={styles.cheatSheetRow}
+                    >
                       <div style={styles.cheatSheetKeys}>{item.keys}</div>
-                      <div style={styles.cheatSheetDescription}>{item.description}</div>
+                      <div style={styles.cheatSheetDescription}>
+                        {item.description}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1831,17 +1924,33 @@ const PracticeEditor: React.FC = () => {
                 <span style={styles.summaryOverviewLabel}>Avg Discrepancy</span>
               </div>
               <div style={styles.summaryOverviewValueRow}>
-                <span style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}>{formatTime(finalTime)}</span>
-                <span style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}>
-                  {summaryAverages ? summaryAverages.keysPerSecond.toFixed(2) : '--'}
+                <span
+                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
+                >
+                  {formatTime(finalTime)}
                 </span>
-                <span style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}>
-                  {summaryAverages ? formatTime(summaryAverages.durationMs) : '--'}
+                <span
+                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
+                >
+                  {summaryAverages
+                    ? summaryAverages.keysPerSecond.toFixed(2)
+                    : '--'}
                 </span>
-                <span style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}>
+                <span
+                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
+                >
+                  {summaryAverages
+                    ? formatTime(summaryAverages.durationMs)
+                    : '--'}
+                </span>
+                <span
+                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
+                >
                   {summaryAverages?.keys ?? '--'}
                 </span>
-                <span style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}>
+                <span
+                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
+                >
                   {summaryAverages && summaryAverages.discrepancy !== null
                     ? `${summaryAverages.discrepancy >= 0 ? '+' : ''}${summaryAverages.discrepancy.toFixed(1)}`
                     : '--'}
@@ -1861,17 +1970,25 @@ const PracticeEditor: React.FC = () => {
             </div>
             <div style={styles.summaryList}>
               {taskSummaries.length === 0 && (
-                <div style={{ ...styles.summaryEmpty, gridColumn: '1 / -1' }}>No task details recorded for this run.</div>
+                <div style={{ ...styles.summaryEmpty, gridColumn: '1 / -1' }}>
+                  No task details recorded for this run.
+                </div>
               )}
               {taskSummaries.map((summary, index) => {
-                const keysPerSecond = summary.durationMs > 0
-                  ? (summary.keyCount / (summary.durationMs / 1000)).toFixed(2)
-                  : '0.00';
+                const keysPerSecond =
+                  summary.durationMs > 0
+                    ? (summary.keyCount / (summary.durationMs / 1000)).toFixed(
+                        2
+                      )
+                    : '0.00';
                 const isDeleteTask = summary.taskType === 'delete';
-                const hasComparison = typeof summary.ourSolutionKeyCount === 'number';
+                const hasComparison =
+                  typeof summary.ourSolutionKeyCount === 'number';
                 const userKeyCount = summary.keyCount;
                 const ourKeyCount = summary.ourSolutionKeyCount ?? 0;
-                const discrepancy = hasComparison ? ourKeyCount - userKeyCount : 0;
+                const discrepancy = hasComparison
+                  ? ourKeyCount - userKeyCount
+                  : 0;
                 const positiveDiscrepancy = hasComparison && discrepancy > 0;
                 const negativeDiscrepancy = hasComparison && discrepancy < 0;
                 const comparisonStyle: React.CSSProperties = hasComparison
@@ -1901,42 +2018,87 @@ const PracticeEditor: React.FC = () => {
                   ...styles.summaryTaskBadge,
                   border: `1px solid ${isDeleteTask ? colors.secondary : colors.primary}40`,
                   background: `${isDeleteTask ? colors.secondary : colors.primary}20`,
-                  color: isDeleteTask ? colors.secondaryLight : colors.primaryLight,
+                  color: isDeleteTask
+                    ? colors.secondaryLight
+                    : colors.primaryLight,
                 };
-                const isSummaryTaskComplete = summaryTaskCompletion[summary.taskId] === true;
+                const isSummaryTaskComplete =
+                  summaryTaskCompletion[summary.taskId] === true;
                 return (
                   <div
                     key={summary.taskId}
-                    style={isSummaryTaskComplete ? { ...styles.summaryItem, ...styles.summaryItemComplete } : styles.summaryItem}
+                    style={
+                      isSummaryTaskComplete
+                        ? {
+                            ...styles.summaryItem,
+                            ...styles.summaryItemComplete,
+                          }
+                        : styles.summaryItem
+                    }
                   >
-                    {isSummaryTaskComplete && <div style={styles.summaryCompleteCheck}>✓</div>}
+                    {isSummaryTaskComplete && (
+                      <div style={styles.summaryCompleteCheck}>✓</div>
+                    )}
                     <div style={styles.summaryItemHeader}>
-                      <span style={styles.summaryItemTitle}>Task {summary.taskIndex}</span>
-                      <span style={badgeStyle}>{formatTaskTypeLabel(summary.taskType)}</span>
+                      <span style={styles.summaryItemTitle}>
+                        Task {summary.taskIndex}
+                      </span>
+                      <span style={badgeStyle}>
+                        {formatTaskTypeLabel(summary.taskType)}
+                      </span>
                     </div>
                     <div style={styles.summaryItemBody}>
                       <div style={styles.summaryAnalyticsColumn}>
                         <div style={styles.summaryMetaRow}>
-                          <div style={{ ...styles.summaryMetaCard, ...styles.summaryMetaCardApm }}>
+                          <div
+                            style={{
+                              ...styles.summaryMetaCard,
+                              ...styles.summaryMetaCardApm,
+                            }}
+                          >
                             <span style={styles.summaryMetaLabel}>Keys/s</span>
-                            <span style={styles.summaryMetaValue}>{keysPerSecond}</span>
+                            <span style={styles.summaryMetaValue}>
+                              {keysPerSecond}
+                            </span>
                           </div>
-                          <div style={{ ...styles.summaryMetaCard, ...styles.summaryMetaCardDuration }}>
-                            <span style={styles.summaryMetaLabel}>Duration</span>
-                            <span style={styles.summaryMetaValue}>{formatTime(summary.durationMs)}</span>
+                          <div
+                            style={{
+                              ...styles.summaryMetaCard,
+                              ...styles.summaryMetaCardDuration,
+                            }}
+                          >
+                            <span style={styles.summaryMetaLabel}>
+                              Duration
+                            </span>
+                            <span style={styles.summaryMetaValue}>
+                              {formatTime(summary.durationMs)}
+                            </span>
                           </div>
-                          <div style={{ ...styles.summaryMetaCard, ...styles.summaryMetaCardKeys }}>
+                          <div
+                            style={{
+                              ...styles.summaryMetaCard,
+                              ...styles.summaryMetaCardKeys,
+                            }}
+                          >
                             <span style={styles.summaryMetaLabel}>Keys</span>
-                            <span style={styles.summaryMetaValue}>{summary.keyCount}</span>
+                            <span style={styles.summaryMetaValue}>
+                              {summary.keyCount}
+                            </span>
                           </div>
                         </div>
                         <div style={styles.summaryKeys}>
-                          <div style={styles.summaryKeysLabel}>Your Solution</div>
-                          <div style={styles.summaryKeysValue}>{summary.keySequence || 'No key events recorded'}</div>
+                          <div style={styles.summaryKeysLabel}>
+                            Your Solution
+                          </div>
+                          <div style={styles.summaryKeysValue}>
+                            {summary.keySequence || 'No key events recorded'}
+                          </div>
                         </div>
                         {typeof summary.ourSolutionKeyCount === 'number' && (
                           <div style={styles.summaryKeys}>
-                            <div style={styles.summaryKeysLabel}>Our Solution</div>
+                            <div style={styles.summaryKeysLabel}>
+                              Our Solution
+                            </div>
                             <div style={styles.summaryKeysValue}>
                               {summary.optimalSequence
                                 ? summary.optimalSequence
@@ -1946,7 +2108,9 @@ const PracticeEditor: React.FC = () => {
                         )}
                         {typeof summary.ourSolutionKeyCount === 'number' && (
                           <div style={comparisonStyle}>
-                            <div style={styles.summaryComparisonLabel}>Discrepancy</div>
+                            <div style={styles.summaryComparisonLabel}>
+                              Discrepancy
+                            </div>
                             <div style={styles.summaryComparisonValue}>
                               {hasComparison
                                 ? `${discrepancy >= 0 ? '+' : ''}${discrepancy}`
@@ -1960,7 +2124,9 @@ const PracticeEditor: React.FC = () => {
                         <div style={styles.summaryCodeBox}>
                           <SummaryTaskSandbox
                             task={summary.task}
-                            resetToken={summaryTaskResetTokens[summary.taskId] ?? 0}
+                            resetToken={
+                              summaryTaskResetTokens[summary.taskId] ?? 0
+                            }
                             autoFocusOnMount={index === 0}
                             onCompletionChange={(isComplete) => {
                               setSummaryTaskCompletion((prev) => ({
@@ -1996,20 +2162,26 @@ const PracticeEditor: React.FC = () => {
         ) : (
           <>
             {/* Task Banner */}
-            <div style={isTaskComplete ? styles.taskBannerComplete : styles.taskBanner}>
-              <div style={{
-                ...styles.taskType,
-                color: isTaskComplete ? colors.successLight : colors.primaryLight,
-              }}>
+            <div
+              style={
+                isTaskComplete ? styles.taskBannerComplete : styles.taskBanner
+              }
+            >
+              <div
+                style={{
+                  ...styles.taskType,
+                  color: isTaskComplete
+                    ? colors.successLight
+                    : colors.primaryLight,
+                }}
+              >
                 {isTaskComplete ? 'Complete!' : taskDisplay.label}
               </div>
               <div style={styles.taskDescription}>
                 {currentTask?.description || 'Loading task...'}
               </div>
               {isTaskComplete && (
-                <div style={styles.nextTaskHint}>
-                  Press Enter for next task
-                </div>
+                <div style={styles.nextTaskHint}>Press Enter for next task</div>
               )}
               <div style={styles.taskProgressInlineRow}>
                 <span>Tasks Completed</span>
@@ -2018,7 +2190,12 @@ const PracticeEditor: React.FC = () => {
                 </span>
               </div>
               <div style={styles.progressBar}>
-                <div style={{ ...styles.progressFill, width: `${progressPercent}%` }} />
+                <div
+                  style={{
+                    ...styles.progressFill,
+                    width: `${progressPercent}%`,
+                  }}
+                />
               </div>
             </div>
 
@@ -2051,7 +2228,9 @@ const PracticeEditor: React.FC = () => {
                       style={styles.relativeLinesTaskButton}
                       onClick={toggleRelativeLineNumbers}
                     >
-                      {relativeLineNumbers ? 'Relative Lines (F7) ✓' : 'Relative Lines (F7)'}
+                      {relativeLineNumbers
+                        ? 'Relative Lines (F7) ✓'
+                        : 'Relative Lines (F7)'}
                     </button>
                     <button
                       type="button"
@@ -2069,7 +2248,9 @@ const PracticeEditor: React.FC = () => {
                 {showCheatSheet && !useDockedCheatSheet && (
                   <div style={styles.cheatSheetPanel}>
                     <div style={styles.cheatSheetHeader}>
-                      <div style={styles.cheatSheetTitle}>Basic Cheat Sheet</div>
+                      <div style={styles.cheatSheetTitle}>
+                        Basic Cheat Sheet
+                      </div>
                       <button
                         type="button"
                         style={styles.cheatSheetToggle}
@@ -2080,11 +2261,18 @@ const PracticeEditor: React.FC = () => {
                     </div>
                     {VIM_CHEATSHEET.map((section) => (
                       <div key={section.title}>
-                        <div style={styles.cheatSheetSectionTitle}>{section.title}</div>
+                        <div style={styles.cheatSheetSectionTitle}>
+                          {section.title}
+                        </div>
                         {section.items.map((item) => (
-                          <div key={`${section.title}-${item.keys}`} style={styles.cheatSheetRow}>
+                          <div
+                            key={`${section.title}-${item.keys}`}
+                            style={styles.cheatSheetRow}
+                          >
                             <div style={styles.cheatSheetKeys}>{item.keys}</div>
-                            <div style={styles.cheatSheetDescription}>{item.description}</div>
+                            <div style={styles.cheatSheetDescription}>
+                              {item.description}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2093,7 +2281,9 @@ const PracticeEditor: React.FC = () => {
                 )}
 
                 <div style={styles.keyLogContainer}>
-                  <div style={styles.keyLogTitle}>Keys Pressed (Current Task)</div>
+                  <div style={styles.keyLogTitle}>
+                    Keys Pressed (Current Task)
+                  </div>
                   <div
                     style={
                       recentKeys.length > 0
@@ -2101,9 +2291,11 @@ const PracticeEditor: React.FC = () => {
                         : { ...styles.keyLogBox, ...styles.keyLogBoxEmpty }
                     }
                   >
-                    {recentKeys.length > 0
-                      ? recentKeysDisplay
-                      : <span style={styles.keyLogEmpty}>No keys yet...</span>}
+                    {recentKeys.length > 0 ? (
+                      recentKeysDisplay
+                    ) : (
+                      <span style={styles.keyLogEmpty}>No keys yet...</span>
+                    )}
                   </div>
                   <div style={styles.blockedEditHint}>
                     {blockedEditHint ?? '\u00A0'}
@@ -2116,26 +2308,34 @@ const PracticeEditor: React.FC = () => {
                       style={{
                         ...styles.sidebarControlButton,
                         ...styles.sidebarActionBase,
-                        ...(isNewTasksHovered ? styles.sidebarActionNewTasks : {}),
+                        ...(isNewTasksHovered
+                          ? styles.sidebarActionNewTasks
+                          : {}),
                       }}
                       onClick={fetchPracticeSession}
                       onMouseEnter={() => setIsNewTasksHovered(true)}
                       onMouseLeave={() => setIsNewTasksHovered(false)}
                     >
-                      <span style={styles.sidebarControlButtonLabel}>New Tasks</span>
+                      <span style={styles.sidebarControlButtonLabel}>
+                        New Tasks
+                      </span>
                     </button>
 
                     <button
                       style={{
                         ...styles.sidebarControlButton,
                         ...styles.sidebarActionBase,
-                        ...(isSameTasksHovered ? styles.sidebarActionSameTasks : {}),
+                        ...(isSameTasksHovered
+                          ? styles.sidebarActionSameTasks
+                          : {}),
                       }}
                       onClick={restartSameTasks}
                       onMouseEnter={() => setIsSameTasksHovered(true)}
                       onMouseLeave={() => setIsSameTasksHovered(false)}
                     >
-                      <span style={styles.sidebarControlButtonLabel}>Same Tasks</span>
+                      <span style={styles.sidebarControlButtonLabel}>
+                        Same Tasks
+                      </span>
                     </button>
                   </div>
                 </div>

@@ -23,6 +23,7 @@ export function validatePlayerName(input: unknown): ValidationResult<string> {
 
   // Remove dangerous characters
   name = name.replace(/[<>'"&\\]/g, '');
+  // eslint-disable-next-line no-control-regex -- strip C0 / DEL control chars from user input
   name = name.replace(/[\x00-\x1F\x7F]/g, '');
 
   if (name.length < PLAYER_NAME_MIN_LENGTH) {

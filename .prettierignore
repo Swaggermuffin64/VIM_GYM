@@ -1,0 +1,14 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Builds & caches
+**/dist
+**/build
+**/.vite
+**/coverage
+
+# Lockfiles (large, noisy diffs)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

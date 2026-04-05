@@ -2,24 +2,48 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { Server, Socket } from 'socket.io';
-import { generatePositionTask, generatePositionTasks, generateDeleteTasks, checkPositionTask } from './tasks.js';
-import type { KeystrokeSource, PositionTask, PracticeSummary, Task, TaskKeystrokeSubmission, TaskResponse } from './types.js';
-import type { 
-  ClientToServerEvents, 
-  ServerToClientEvents, 
-  InterServerEvents, 
-  SocketData 
+import {
+  generatePositionTask,
+  generatePositionTasks,
+  generateDeleteTasks,
+  checkPositionTask,
+} from './tasks.js';
+import type {
+  KeystrokeSource,
+  PositionTask,
+  PracticeSummary,
+  Task,
+  TaskKeystrokeSubmission,
+  TaskResponse,
+} from './types.js';
+import type {
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData,
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
 import { BACKEND_PORT, CORS_ORIGINS } from './config.js';
-import { verifyMatchToken, extractTokenFromAuthHeader, extractTokenFromHandshake } from './auth/auth.js';
+import { dbHealthCheck } from './db/pool.js';
+import {
+  insertSessionLeaderboardRow,
+  isValidTasksPayload,
+  LEADERBOARD_TASK_SCHEMA_VERSION,
+  queryLeaderboardTop,
+  queryLeaderboardTasks,
+} from './db/leaderboard.js';
+import {
+  verifyMatchToken,
+  extractTokenFromAuthHeader,
+  extractTokenFromHandshake,
+} from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
-import { 
-  validatePlayerName, 
-  validateRoomId, 
+import {
+  validatePlayerName,
+  validateRoomId,
   validateOptionalRoomId,
-  validateCursorOffset, 
+  validateCursorOffset,
   validateEditorText,
   validateBoolean,
   validateKeystrokeEvents,
@@ -27,7 +51,7 @@ import {
 
 // Create Fastify with its own server
 const fastify = Fastify({
-  logger: true
+  logger: true,
 });
 
 // Enable CORS for frontend
@@ -37,7 +61,7 @@ await fastify.register(cors, {
 
 // HTTP rate limiting
 await fastify.register(fastifyRateLimit, {
-  max: 100,           // 100 requests
+  max: 100, // 100 requests
   timeWindow: '1 minute',
   // Skip rate limiting for health check
   allowList: (req: { url?: string }) => req.url === '/',
@@ -46,12 +70,18 @@ await fastify.register(fastifyRateLimit, {
 // Store active tasks with TTL to prevent unbounded memory growth
 const ACTIVE_TASKS_MAX = 10_000;
 const ACTIVE_TASKS_TTL_MS = 5 * 60 * 1000;
-const activeTasks = new Map<string, { task: PositionTask; createdAt: number }>();
+const activeTasks = new Map<
+  string,
+  { task: PositionTask; createdAt: number }
+>();
 
 // Task-end keystroke telemetry. In-memory for now; can be swapped for DB persistence later.
 const KEYSTROKE_RECORDS_MAX = 20_000;
 const KEYSTROKE_RECORDS_TTL_MS = 60 * 60 * 1000;
-const taskKeystrokeRecords = new Map<string, { data: TaskKeystrokeSubmission; createdAt: number }>();
+const taskKeystrokeRecords = new Map<
+  string,
+  { data: TaskKeystrokeSubmission; createdAt: number }
+>();
 
 setInterval(() => {
   const now = Date.now();
@@ -95,7 +125,7 @@ fastify.get('/api/task/position', async (): Promise<TaskResponse> => {
   }
   const task = generatePositionTask();
   activeTasks.set(task.id, { task, createdAt: Date.now() });
-  
+
   return {
     task,
     startTime: Date.now(),
@@ -107,34 +137,34 @@ fastify.post<{
   Body: { taskId: string; cursorOffset: number };
 }>('/api/task/validate', async (request) => {
   const { taskId, cursorOffset } = request.body;
-  
+
   // Validate taskId format (should be a UUID-like string)
   if (typeof taskId !== 'string' || taskId.length < 1 || taskId.length > 100) {
     return { success: false, error: 'Invalid task ID' };
   }
-  
+
   // Validate cursor offset
   const offsetResult = validateCursorOffset(cursorOffset);
   if (!offsetResult.valid) {
     return { success: false, error: offsetResult.error };
   }
-  
+
   const entry = activeTasks.get(taskId);
   if (!entry) {
     return { success: false, error: 'Task not found' };
   }
-  
+
   if (entry.task.type !== 'navigate') {
     return { success: false, error: 'Invalid task type' };
   }
-  
+
   const isComplete = checkPositionTask(entry.task, offsetResult.value!);
-  
+
   if (isComplete) {
     activeTasks.delete(taskId);
   }
-  
-  return { 
+
+  return {
     success: isComplete,
     cursorOffset: offsetResult.value,
   };
@@ -171,11 +201,19 @@ fastify.post<{
     return { success: false, error: 'Invalid task ID' };
   }
 
-  if (taskType !== 'navigate' && taskType !== 'delete' && taskType !== 'change') {
+  if (
+    taskType !== 'navigate' &&
+    taskType !== 'delete' &&
+    taskType !== 'change'
+  ) {
     return { success: false, error: 'Invalid task type' };
   }
 
-  if (!Number.isInteger(startedAt) || !Number.isInteger(completedAt) || completedAt < startedAt) {
+  if (
+    !Number.isInteger(startedAt) ||
+    !Number.isInteger(completedAt) ||
+    completedAt < startedAt
+  ) {
     return { success: false, error: 'Invalid task timestamps' };
   }
 
@@ -186,13 +224,21 @@ fastify.post<{
     }
   }
 
-  if (typeof playerId !== 'undefined' && (typeof playerId !== 'string' || playerId.length < 1 || playerId.length > 64)) {
+  if (
+    typeof playerId !== 'undefined' &&
+    (typeof playerId !== 'string' ||
+      playerId.length < 1 ||
+      playerId.length > 64)
+  ) {
     return { success: false, error: 'Invalid player ID' };
   }
 
   const eventsResult = validateKeystrokeEvents(events);
   if (!eventsResult.valid) {
-    return { success: false, error: eventsResult.error || 'Invalid keystroke events' };
+    return {
+      success: false,
+      error: eventsResult.error || 'Invalid keystroke events',
+    };
   }
 
   if (taskKeystrokeRecords.size >= KEYSTROKE_RECORDS_MAX) {
@@ -214,17 +260,20 @@ fastify.post<{
   };
 
   const recordId = `${source}:${taskId}:${completedAt}:${Math.random().toString(36).slice(2, 8)}`;
-  taskKeystrokeRecords.set(recordId, { data: submission, createdAt: Date.now() });
-  console.log(
-    JSON.stringify(
-      Array.from(taskKeystrokeRecords.entries()).map(([id, rec]) => ({
-        id,
-        ...rec.data,
-        createdAt: rec.createdAt,
-      })),
-      null,
-      2
-    )
+  taskKeystrokeRecords.set(recordId, {
+    data: submission,
+    createdAt: Date.now(),
+  });
+  request.log.debug(
+    {
+      recordId,
+      source,
+      taskId,
+      taskType,
+      eventCount: submission.events.length,
+      storeSize: taskKeystrokeRecords.size,
+    },
+    'recorded task keystrokes'
   );
   return {
     success: true,
@@ -232,12 +281,210 @@ fastify.post<{
   };
 });
 
+/** Persist a finished practice or client-reported session (ordered tasks for replay). */
+fastify.post<{
+  Body: {
+    play_mode: string;
+    duration_ms: number;
+    tasks: unknown;
+    task_schema_version?: number;
+    player_id?: string;
+    display_name?: string;
+  };
+}>('/api/leaderboard/session', async (request, reply) => {
+  const {
+    play_mode,
+    duration_ms,
+    tasks,
+    task_schema_version,
+    player_id,
+    display_name,
+  } = request.body;
+
+  request.log.info(
+    {
+      path: '/api/leaderboard/session',
+      play_mode,
+      taskCount: Array.isArray(tasks) ? tasks.length : null,
+    },
+    'leaderboard session request'
+  );
+
+  if (
+    typeof play_mode !== 'string' ||
+    play_mode.length < 1 ||
+    play_mode.length > 64
+  ) {
+    request.log.warn(
+      { err: 'Invalid play_mode' },
+      'leaderboard session rejected'
+    );
+    return reply
+      .status(400)
+      .send({ success: false, error: 'Invalid play_mode' });
+  }
+
+  if (play_mode !== 'practice') {
+    request.log.warn(
+      { err: 'play_mode not practice' },
+      'leaderboard session rejected'
+    );
+    return reply.status(400).send({
+      success: false,
+      error:
+        'Only practice sessions are accepted via this endpoint; multiplayer is recorded server-side',
+    });
+  }
+
+  if (!Number.isFinite(duration_ms) || duration_ms < 1) {
+    request.log.warn(
+      { err: 'Invalid duration_ms', duration_ms },
+      'leaderboard session rejected'
+    );
+    return reply
+      .status(400)
+      .send({ success: false, error: 'Invalid duration_ms' });
+  }
+
+  const schemaVersion =
+    typeof task_schema_version === 'number' &&
+    Number.isInteger(task_schema_version)
+      ? task_schema_version
+      : LEADERBOARD_TASK_SCHEMA_VERSION;
+
+  if (schemaVersion !== LEADERBOARD_TASK_SCHEMA_VERSION) {
+    request.log.warn(
+      { err: 'Unsupported task_schema_version', task_schema_version },
+      'leaderboard session rejected'
+    );
+    return reply
+      .status(400)
+      .send({ success: false, error: 'Unsupported task_schema_version' });
+  }
+
+  if (!isValidTasksPayload(tasks)) {
+    request.log.warn(
+      {
+        err: 'Invalid tasks',
+        isArray: Array.isArray(tasks),
+        length: Array.isArray(tasks) ? tasks.length : null,
+      },
+      'leaderboard session rejected'
+    );
+    return reply.status(400).send({ success: false, error: 'Invalid tasks' });
+  }
+
+  if (
+    typeof player_id !== 'undefined' &&
+    (typeof player_id !== 'string' || player_id.length > 64)
+  ) {
+    request.log.warn(
+      { err: 'Invalid player_id' },
+      'leaderboard session rejected'
+    );
+    return reply
+      .status(400)
+      .send({ success: false, error: 'Invalid player_id' });
+  }
+
+  if (
+    typeof display_name !== 'undefined' &&
+    (typeof display_name !== 'string' || display_name.length > 64)
+  ) {
+    request.log.warn(
+      { err: 'Invalid display_name' },
+      'leaderboard session rejected'
+    );
+    return reply
+      .status(400)
+      .send({ success: false, error: 'Invalid display_name' });
+  }
+
+  const result = await insertSessionLeaderboardRow({
+    playMode: play_mode,
+    durationMs: duration_ms,
+    tasks,
+    ...(player_id !== undefined ? { playerId: player_id } : {}),
+    ...(display_name !== undefined ? { displayName: display_name } : {}),
+  });
+
+  if (result.status === 'inserted') {
+    request.log.info(
+      { persisted: true, ranks: result.ranks },
+      'leaderboard session stored'
+    );
+    return { success: true, persisted: true, ranks: result.ranks };
+  }
+
+  if (result.status === 'skipped') {
+    request.log.warn(
+      { persisted: false, reason: result.reason },
+      'leaderboard session not stored'
+    );
+    return { success: true, persisted: false, reason: result.reason };
+  }
+
+  request.log.error(
+    { persisted: false, reason: result.reason },
+    'leaderboard session insert failed'
+  );
+  return reply
+    .status(500)
+    .send({ success: false, error: 'Database insert failed' });
+});
+
+fastify.get<{
+  Querystring: { limit?: string; play_mode?: string; time_range?: string };
+}>('/api/leaderboard', async (request, reply) => {
+  const limitRaw = request.query.limit;
+  const parsedLimit = limitRaw !== undefined ? Number(limitRaw) : 30;
+  const limit = Number.isFinite(parsedLimit) ? parsedLimit : 30;
+  const play_mode = (request.query.play_mode ?? 'all').trim().toLowerCase();
+  const time_range = (request.query.time_range ?? 'all_time')
+    .trim()
+    .toLowerCase();
+
+  const result = await queryLeaderboardTop({
+    limit,
+    playMode: play_mode,
+    timeRange: time_range,
+  });
+
+  if (!result.ok) {
+    return reply.status(400).send({ success: false, error: result.error });
+  }
+
+  return {
+    success: true,
+    entries: result.entries,
+    databaseConfigured: result.databaseConfigured,
+  };
+});
+
+fastify.get<{
+  Params: { id: string };
+}>('/api/leaderboard/:id/tasks', async (request, reply) => {
+  const { id } = request.params;
+  if (!/^\d+$/.test(id)) {
+    return reply.status(400).send({ success: false, error: 'Invalid id' });
+  }
+
+  const result = await queryLeaderboardTasks(id);
+  if (!result.ok) {
+    return reply.status(404).send({ success: false, error: result.error });
+  }
+
+  return { success: true, tasks: result.tasks };
+});
+
 fastify.get<{
   Params: { roomId: string };
 }>('/api/multiplayer/stats/:roomId', async (request, reply) => {
   const roomIdResult = validateRoomId(request.params.roomId);
   if (!roomIdResult.valid || !roomIdResult.value) {
-    return reply.status(400).send({ success: false, error: roomIdResult.error || 'Invalid room ID' });
+    return reply
+      .status(400)
+      .send({ success: false, error: roomIdResult.error || 'Invalid room ID' });
   }
 
   const roomId = roomIdResult.value;
@@ -251,14 +498,21 @@ fastify.get<{
   // only when we can confirm this is an active private room.
   if (!allowTokenlessStats) {
     if (!authResult.success || !authResult.matchedRoomId) {
-      return reply.status(401).send({ success: false, error: 'Authentication required' });
+      return reply
+        .status(401)
+        .send({ success: false, error: 'Authentication required' });
     }
     if (authResult.matchedRoomId !== roomId) {
-      return reply.status(403).send({ success: false, error: 'Forbidden for this room' });
+      return reply
+        .status(403)
+        .send({ success: false, error: 'Forbidden for this room' });
     }
   }
 
-  const summaries = new Map<string, { taskCount: number; totalDurationMs: number; totalKeys: number }>();
+  const summaries = new Map<
+    string,
+    { taskCount: number; totalDurationMs: number; totalKeys: number }
+  >();
 
   for (const { data } of taskKeystrokeRecords.values()) {
     if (data.source !== 'multiplayer') continue;
@@ -266,7 +520,11 @@ fastify.get<{
     if (!data.playerId) continue;
 
     const durationMs = Math.max(0, data.completedAt - data.startedAt);
-    const existing = summaries.get(data.playerId) || { taskCount: 0, totalDurationMs: 0, totalKeys: 0 };
+    const existing = summaries.get(data.playerId) || {
+      taskCount: 0,
+      totalDurationMs: 0,
+      totalKeys: 0,
+    };
     existing.taskCount += 1;
     existing.totalDurationMs += durationMs;
     existing.totalKeys += data.events.length;
@@ -277,11 +535,14 @@ fastify.get<{
     success: true,
     roomId,
     players: Array.from(summaries.entries()).map(([playerId, agg]) => {
-      const keysPerSecond = agg.totalDurationMs > 0
-        ? agg.totalKeys / (agg.totalDurationMs / 1000)
-        : 0;
-      const avgDurationMs = agg.taskCount > 0 ? agg.totalDurationMs / agg.taskCount : 0;
-      const avgKeys = agg.taskCount > 0 ? Math.round(agg.totalKeys / agg.taskCount) : 0;
+      const keysPerSecond =
+        agg.totalDurationMs > 0
+          ? agg.totalKeys / (agg.totalDurationMs / 1000)
+          : 0;
+      const avgDurationMs =
+        agg.taskCount > 0 ? agg.totalDurationMs / agg.taskCount : 0;
+      const avgKeys =
+        agg.taskCount > 0 ? Math.round(agg.totalKeys / agg.taskCount) : 0;
 
       return {
         playerId,
@@ -298,17 +559,26 @@ fastify.get<{
 fastify.get('/api/task/practice', async () => {
   const NUM_TASKS = 10;
   const tasksPerType = Math.floor(NUM_TASKS / 2);
-  
+
   const positionTasks: Task[] = generatePositionTasks(tasksPerType);
   const deleteTasks: Task[] = generateDeleteTasks(tasksPerType);
   const allTasks = shuffle([...positionTasks, ...deleteTasks]);
-  const navigateTasksWithRecommendation = positionTasks.reduce((count, task) => {
-    if (task.type !== 'navigate') return count;
-    return task.recommendedSequence && typeof task.recommendedWeight === 'number' ? count + 1 : count;
-  }, 0);
+  const navigateTasksWithRecommendation = positionTasks.reduce(
+    (count, task) => {
+      if (task.type !== 'navigate') return count;
+      return task.recommendedSequence &&
+        typeof task.recommendedWeight === 'number'
+        ? count + 1
+        : count;
+    },
+    0
+  );
   const deleteTasksWithRecommendation = deleteTasks.reduce((count, task) => {
     if (task.type !== 'delete') return count;
-    return task.recommendedSequence && typeof task.recommendedWeight === 'number' ? count + 1 : count;
+    return task.recommendedSequence &&
+      typeof task.recommendedWeight === 'number'
+      ? count + 1
+      : count;
   }, 0);
   const practiceSummary: PracticeSummary = {
     totalTasks: allTasks.length,
@@ -317,7 +587,7 @@ fastify.get('/api/task/practice', async () => {
     navigateTasksWithRecommendation,
     deleteTasksWithRecommendation,
   };
-  
+
   return {
     tasks: allTasks,
     numTasks: NUM_TASKS,
@@ -334,16 +604,24 @@ fastify.get('/health', async (request, reply) => {
   const memMB = process.memoryUsage().rss / 1024 / 1024;
   const rooms = roomManager?.roomCount ?? 0;
   if (memMB > MEMORY_LIMIT_MB) {
-    return reply.status(503).send({ status: 'unhealthy', memMB: Math.round(memMB), rooms });
+    return reply
+      .status(503)
+      .send({ status: 'unhealthy', memMB: Math.round(memMB), rooms });
   }
-  return { status: 'ok', memMB: Math.round(memMB), rooms };
+  const database = await dbHealthCheck();
+  return { status: 'ok', memMB: Math.round(memMB), rooms, database };
 });
 
 // Start Fastify first, then attach Socket.IO
 await fastify.listen({ port: BACKEND_PORT, host: '0.0.0.0' });
 
 // Now attach Socket.IO to the Fastify server
-const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(fastify.server, {
+const io = new Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>(fastify.server, {
   cors: {
     origin: CORS_ORIGINS,
     methods: ['GET', 'POST'],
@@ -356,11 +634,18 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEve
  * Uses the rightmost X-Forwarded-For entry (added by the closest trusted proxy)
  * rather than the leftmost (which is client-controlled and spoofable).
  */
-function getClientIp(handshake: { headers: Record<string, string | string[] | undefined>; address: string }): string {
+function getClientIp(handshake: {
+  headers: Record<string, string | string[] | undefined>;
+  address: string;
+}): string {
   const forwarded = handshake.headers['x-forwarded-for'];
   if (forwarded) {
-    const raw = typeof forwarded === 'string' ? forwarded : forwarded[0] ?? '';
-    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    const raw =
+      typeof forwarded === 'string' ? forwarded : (forwarded[0] ?? '');
+    const parts = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (parts.length > 0) {
       return parts[parts.length - 1]!;
     }
@@ -373,19 +658,27 @@ const LOAD_TEST_SECRET = process.env.LOAD_TEST_SECRET || '';
 // Connection limit middleware - runs first
 io.use((socket, next) => {
   const ip = getClientIp(socket.handshake);
-  
+
   // Store IP on socket for later cleanup
   socket.data.clientIp = ip;
 
-  const isLoadTest = LOAD_TEST_SECRET && socket.handshake.auth?.loadTestSecret === LOAD_TEST_SECRET;
-  
+  const isLoadTest =
+    LOAD_TEST_SECRET &&
+    socket.handshake.auth?.loadTestSecret === LOAD_TEST_SECRET;
+
   // Check and register connection (bypass for load tests)
   if (!isLoadTest && !connectionLimiter.addConnection(ip, socket.id)) {
-    console.log(`🚫 Connection limit exceeded for IP ${ip} (${connectionLimiter.getConnectionCount(ip)} connections)`);
-    return next(new Error('Too many connections from your IP. Please try again later.'));
+    console.log(
+      `🚫 Connection limit exceeded for IP ${ip} (${connectionLimiter.getConnectionCount(ip)} connections)`
+    );
+    return next(
+      new Error('Too many connections from your IP. Please try again later.')
+    );
   }
-  
-  console.log(`📊 Connection from ${ip} (${connectionLimiter.getConnectionCount(ip)}/${10} for this IP)`);
+
+  console.log(
+    `📊 Connection from ${ip} (${connectionLimiter.getConnectionCount(ip)}/${10} for this IP)`
+  );
   next();
 });
 
@@ -394,15 +687,15 @@ io.use((socket, next) => {
 io.use((socket, next) => {
   const token = extractTokenFromHandshake(socket.handshake);
   const authResult = verifyMatchToken(token);
-  
+
   if (!authResult.success) {
     const ip = socket.data.clientIp || 'unknown';
     connectionLimiter.removeConnection(ip, socket.id);
-    
+
     console.log(`🔒 Auth failed for socket ${socket.id}: ${authResult.error}`);
     return next(new Error(authResult.error || 'Authentication failed'));
   }
-  
+
   socket.data.userId = authResult.userId!;
   if (authResult.matchedRoomId) {
     socket.data.matchedRoomId = authResult.matchedRoomId;
@@ -415,7 +708,12 @@ io.use((socket, next) => {
 roomManager = new RoomManager(io);
 
 // Helper to wrap socket event handlers with rate limiting
-type SocketType = Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>;
+type SocketType = Socket<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+>;
 
 function rateLimitedHandler<T>(
   socket: SocketType,
@@ -425,8 +723,12 @@ function rateLimitedHandler<T>(
   return (data: T) => {
     const result = socketRateLimiter.check(socket.id, eventName);
     if (!result.allowed) {
-      console.log(`⚠️ Rate limited ${socket.id} on ${eventName} (reset in ${result.resetIn}ms)`);
-      socket.emit('room:error', { message: 'Too many requests. Please slow down.' });
+      console.log(
+        `⚠️ Rate limited ${socket.id} on ${eventName} (reset in ${result.resetIn}ms)`
+      );
+      socket.emit('room:error', {
+        message: 'Too many requests. Please slow down.',
+      });
       return;
     }
     if (data === null || data === undefined || typeof data !== 'object') {
@@ -436,7 +738,10 @@ function rateLimitedHandler<T>(
     try {
       handler(data);
     } catch (err) {
-      console.error(`Uncaught error in ${eventName}:`, err instanceof Error ? err.message : err);
+      console.error(
+        `Uncaught error in ${eventName}:`,
+        err instanceof Error ? err.message : err
+      );
       socket.emit('room:error', { message: 'Internal error' });
     }
   };
@@ -451,14 +756,21 @@ function rateLimitedVoidHandler(
   return () => {
     const result = socketRateLimiter.check(socket.id, eventName);
     if (!result.allowed) {
-      console.log(`⚠️ Rate limited ${socket.id} on ${eventName} (reset in ${result.resetIn}ms)`);
-      socket.emit('room:error', { message: 'Too many requests. Please slow down.' });
+      console.log(
+        `⚠️ Rate limited ${socket.id} on ${eventName} (reset in ${result.resetIn}ms)`
+      );
+      socket.emit('room:error', {
+        message: 'Too many requests. Please slow down.',
+      });
       return;
     }
     try {
       handler();
     } catch (err) {
-      console.error(`Uncaught error in ${eventName}:`, err instanceof Error ? err.message : err);
+      console.error(
+        `Uncaught error in ${eventName}:`,
+        err instanceof Error ? err.message : err
+      );
       socket.emit('room:error', { message: 'Internal error' });
     }
   };
@@ -470,84 +782,70 @@ function rateLimitedVoidHandler(
 // all sockets accessable via io.sockets.sockets // io.sockets.sockets.get('abc...')
 
 io.on('connection', (socket) => {
-  console.log(`🔌 Player connected: ${socket.id} (userId: ${socket.data.userId})`);
+  console.log(
+    `🔌 Player connected: ${socket.id} (userId: ${socket.data.userId})`
+  );
 
   // Create a new room
-  socket.on('room:create', rateLimitedHandler(socket, 'room:create', ({ playerName, roomId: externalRoomId, isPublic }) => {
-    // Validate inputs
-    const nameResult = validatePlayerName(playerName);
-    const roomIdResult = validateOptionalRoomId(externalRoomId);
-    const isPublicResult = validateBoolean(isPublic);
-    
-    if (!roomIdResult.valid) {
-      socket.emit('room:error', { message: roomIdResult.error || 'Invalid room ID' });
-      return;
-    }
-    
-    const safeName = nameResult.value!;
-    const safeRoomId = roomIdResult.value;
-    const safeIsPublic = isPublicResult.value!;
-    
-    console.log(`📥 room:create received: playerName=${safeName}, roomId=${safeRoomId}, isPublic=${safeIsPublic}`);
-    const room = roomManager.createRoom(socket, safeName, safeRoomId, safeIsPublic);
-    if (!room) return;
-    const player = room.players.get(socket.id)!;
-    socket.emit('room:created', { 
-      roomId: room.id, 
-      player,
-    });
-  }));
+  socket.on(
+    'room:create',
+    rateLimitedHandler(
+      socket,
+      'room:create',
+      ({ playerName, roomId: externalRoomId, isPublic }) => {
+        // Validate inputs
+        const nameResult = validatePlayerName(playerName);
+        const roomIdResult = validateOptionalRoomId(externalRoomId);
+        const isPublicResult = validateBoolean(isPublic);
+
+        if (!roomIdResult.valid) {
+          socket.emit('room:error', {
+            message: roomIdResult.error || 'Invalid room ID',
+          });
+          return;
+        }
+
+        const safeName = nameResult.value!;
+        const safeRoomId = roomIdResult.value;
+        const safeIsPublic = isPublicResult.value!;
+
+        console.log(
+          `📥 room:create received: playerName=${safeName}, roomId=${safeRoomId}, isPublic=${safeIsPublic}`
+        );
+        const room = roomManager.createRoom(
+          socket,
+          safeName,
+          safeRoomId,
+          safeIsPublic
+        );
+        if (!room) return;
+        const player = room.players.get(socket.id)!;
+        socket.emit('room:created', {
+          roomId: room.id,
+          player,
+        });
+      }
+    )
+  );
 
   // Join an existing room
-  socket.on('room:join', rateLimitedHandler(socket, 'room:join', ({ roomId, playerName }) => {
-    // Validate inputs
-    const nameResult = validatePlayerName(playerName);
-    const roomIdResult = validateRoomId(roomId);
-    
-    if (!roomIdResult.valid) {
-      socket.emit('room:error', { message: roomIdResult.error || 'Invalid room ID' });
-      return;
-    }
-    
-    const safeName = nameResult.value!;
-    const safeRoomId = roomIdResult.value!;
-    
-    const room = roomManager.joinRoom(socket, safeRoomId, safeName);
-    if (room) {
-      socket.emit('room:joined', {
-        roomId: room.id,
-        players: roomManager.getPlayersArray(room),
-      });
-    }
-  }));
+  socket.on(
+    'room:join',
+    rateLimitedHandler(socket, 'room:join', ({ roomId, playerName }) => {
+      // Validate inputs
+      const nameResult = validatePlayerName(playerName);
+      const roomIdResult = validateRoomId(roomId);
 
-  // Join a matched room (from matchmaking) - creates room if first player, joins if second
-  socket.on('room:join_matched', rateLimitedHandler(socket, 'room:join_matched', ({ roomId, playerName }) => {
-    // Validate inputs
-    const nameResult = validatePlayerName(playerName);
-    const roomIdResult = validateRoomId(roomId);
-    
-    if (!roomIdResult.valid) {
-      socket.emit('room:error', { message: roomIdResult.error || 'Invalid room ID' });
-      return;
-    }
-    
-    const safeName = nameResult.value!;
-    const safeRoomId = roomIdResult.value!;
+      if (!roomIdResult.valid) {
+        socket.emit('room:error', {
+          message: roomIdResult.error || 'Invalid room ID',
+        });
+        return;
+      }
 
-    // Enforce that the token's roomId matches the requested room
-    if (socket.data.matchedRoomId && socket.data.matchedRoomId !== safeRoomId) {
-      socket.emit('room:error', { message: 'Room ID does not match your match token' });
-      return;
-    }
-    
-    console.log(`📥 room:join_matched: roomId=${safeRoomId}, playerName=${safeName}`);
-    
-    // Check if room already exists (another matched player got here first)
-    const existingRoom = roomManager.getRoom(safeRoomId);
-    
-    if (existingRoom) {
-      // Room exists, join it
+      const safeName = nameResult.value!;
+      const safeRoomId = roomIdResult.value!;
+
       const room = roomManager.joinRoom(socket, safeRoomId, safeName);
       if (room) {
         socket.emit('room:joined', {
@@ -555,103 +853,182 @@ io.on('connection', (socket) => {
           players: roomManager.getPlayersArray(room),
         });
       }
-    } else {
-      // First player to arrive - create the room with the matched roomId
-      const room = roomManager.createRoom(socket, safeName, safeRoomId, true);
-      if (!room) return;
-      const player = room.players.get(socket.id)!;
-      socket.emit('room:created', { 
-        roomId: room.id, 
-        player,
-      });
-    }
-  }));
+    })
+  );
+
+  // Join a matched room (from matchmaking) - creates room if first player, joins if second
+  socket.on(
+    'room:join_matched',
+    rateLimitedHandler(
+      socket,
+      'room:join_matched',
+      ({ roomId, playerName }) => {
+        // Validate inputs
+        const nameResult = validatePlayerName(playerName);
+        const roomIdResult = validateRoomId(roomId);
+
+        if (!roomIdResult.valid) {
+          socket.emit('room:error', {
+            message: roomIdResult.error || 'Invalid room ID',
+          });
+          return;
+        }
+
+        const safeName = nameResult.value!;
+        const safeRoomId = roomIdResult.value!;
+
+        // Enforce that the token's roomId matches the requested room
+        if (
+          socket.data.matchedRoomId &&
+          socket.data.matchedRoomId !== safeRoomId
+        ) {
+          socket.emit('room:error', {
+            message: 'Room ID does not match your match token',
+          });
+          return;
+        }
+
+        console.log(
+          `📥 room:join_matched: roomId=${safeRoomId}, playerName=${safeName}`
+        );
+
+        // Check if room already exists (another matched player got here first)
+        const existingRoom = roomManager.getRoom(safeRoomId);
+
+        if (existingRoom) {
+          // Room exists, join it
+          const room = roomManager.joinRoom(socket, safeRoomId, safeName);
+          if (room) {
+            socket.emit('room:joined', {
+              roomId: room.id,
+              players: roomManager.getPlayersArray(room),
+            });
+          }
+        } else {
+          // First player to arrive - create the room with the matched roomId
+          const room = roomManager.createRoom(
+            socket,
+            safeName,
+            safeRoomId,
+            true
+          );
+          if (!room) return;
+          const player = room.players.get(socket.id)!;
+          socket.emit('room:created', {
+            roomId: room.id,
+            player,
+          });
+        }
+      }
+    )
+  );
 
   // Quick match - find or create a room automatically
-  socket.on('room:quick_match', rateLimitedHandler(socket, 'room:quick_match', ({ playerName }) => {
-    const startTime = performance.now();
-    // Validate input
-    const nameResult = validatePlayerName(playerName);
-    const safeName = nameResult.value!;
-    
-    const result = roomManager.findOrCreateQuickMatchRoom(socket, safeName);
-    if (!result) return;
-    const { room, isNewRoom } = result;
-    const player = room.players.get(socket.id)!;
-    
-    console.log(`⏱️ [quick_match] ${safeName} → ${isNewRoom ? 'created' : 'joined'} room ${room.id} (${(performance.now() - startTime).toFixed(0)}ms)`);
-    
-    if (isNewRoom) {
-      socket.emit('room:created', { roomId: room.id, player });
-    } else {
-      socket.emit('room:joined', {
-        roomId: room.id,
-        players: roomManager.getPlayersArray(room),
-      });
-    }
-  }));
+  socket.on(
+    'room:quick_match',
+    rateLimitedHandler(socket, 'room:quick_match', ({ playerName }) => {
+      const startTime = performance.now();
+      // Validate input
+      const nameResult = validatePlayerName(playerName);
+      const safeName = nameResult.value!;
+
+      const result = roomManager.findOrCreateQuickMatchRoom(socket, safeName);
+      if (!result) return;
+      const { room, isNewRoom } = result;
+      const player = room.players.get(socket.id)!;
+
+      console.log(
+        `⏱️ [quick_match] ${safeName} → ${isNewRoom ? 'created' : 'joined'} room ${room.id} (${(performance.now() - startTime).toFixed(0)}ms)`
+      );
+
+      if (isNewRoom) {
+        socket.emit('room:created', { roomId: room.id, player });
+      } else {
+        socket.emit('room:joined', {
+          roomId: room.id,
+          players: roomManager.getPlayersArray(room),
+        });
+      }
+    })
+  );
 
   // Leave room
-  socket.on('room:leave', rateLimitedVoidHandler(socket, 'room:leave', () => {
-    roomManager.leaveRoom(socket);
-  }));
+  socket.on(
+    'room:leave',
+    rateLimitedVoidHandler(socket, 'room:leave', () => {
+      roomManager.leaveRoom(socket);
+    })
+  );
 
   // Play again (reset room for new game)
-  socket.on('player:ready_to_play', rateLimitedVoidHandler(socket, 'player:ready_to_play', () => {
-    roomManager.playerReadyToPlay(socket);
-  }));
+  socket.on(
+    'player:ready_to_play',
+    rateLimitedVoidHandler(socket, 'player:ready_to_play', () => {
+      roomManager.playerReadyToPlay(socket);
+    })
+  );
 
   // Handle cursor movement during race
-  socket.on('player:cursor', rateLimitedHandler(socket, 'player:cursor', ({ offset }) => {
-    // Validate cursor offset
-    const offsetResult = validateCursorOffset(offset);
-    if (!offsetResult.valid) {
-      // Silently ignore invalid cursor data during gameplay
-      return;
-    }
-    roomManager.handleCursorMove(socket, offsetResult.value!);
-  }));
+  socket.on(
+    'player:cursor',
+    rateLimitedHandler(socket, 'player:cursor', ({ offset }) => {
+      // Validate cursor offset
+      const offsetResult = validateCursorOffset(offset);
+      if (!offsetResult.valid) {
+        // Silently ignore invalid cursor data during gameplay
+        return;
+      }
+      roomManager.handleCursorMove(socket, offsetResult.value!);
+    })
+  );
 
   // Handle editor text for delete task validation
-  socket.on('player:editorText', rateLimitedHandler(socket, 'player:editorText', ({ text }) => {
-    // Validate editor text
-    const textResult = validateEditorText(text);
-    if (!textResult.valid) {
-      socket.emit('room:error', { message: textResult.error || 'Invalid editor content' });
-      return;
-    }
-    roomManager.handleEditorText(socket, textResult.value!);
-  }));
+  socket.on(
+    'player:editorText',
+    rateLimitedHandler(socket, 'player:editorText', ({ text }) => {
+      // Validate editor text
+      const textResult = validateEditorText(text);
+      if (!textResult.valid) {
+        socket.emit('room:error', {
+          message: textResult.error || 'Invalid editor content',
+        });
+        return;
+      }
+      roomManager.handleEditorText(socket, textResult.value!);
+    })
+  );
 
   // Handle disconnect - no rate limit needed
   socket.on('disconnect', () => {
     console.log(`🔌 Player disconnected: ${socket.id}`);
     socketRateLimiter.removeSocket(socket.id);
-    
+
     // Remove from connection limiter
     const ip = socket.data.clientIp || 'unknown';
     connectionLimiter.removeConnection(ip, socket.id);
-    
+
     roomManager.leaveRoom(socket);
   });
 });
 
-console.log(`\n🏎️  Vim Racing BACKEND running at http://localhost:${BACKEND_PORT}`);
+console.log(
+  `\n🏎️  Vim Racing BACKEND running at http://localhost:${BACKEND_PORT}`
+);
 console.log(`🔌 WebSocket server ready`);
 console.log('');
 
 // Graceful shutdown handling
 const shutdown = async (signal: string) => {
   console.log(`\n${signal} received, shutting down gracefully...`);
-  
+
   // Close all socket connections
   io.disconnectSockets(true);
-  
+
   // Close the Socket.IO server
   io.close(() => {
     console.log('Socket.IO server closed');
   });
-  
+
   // Close Fastify
   await fastify.close();
   console.log('Server shutdown complete');

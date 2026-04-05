@@ -6,6 +6,8 @@ interface LobbyProps {
   initialMode?: 'quick' | 'private' | null;
   error: string | null;
   queuePosition?: number | null;
+  relativeLineNumbersEnabled: boolean;
+  onRelativeLineNumbersChange: (enabled: boolean) => void;
   onCreateRoom: (playerName: string) => void;
   onJoinRoom: (roomId: string, playerName: string) => void;
   onQuickMatch: (playerName: string) => void;
@@ -16,18 +18,18 @@ const colors = {
   bgDark: '#0a0a0f',
   bgGradientStart: '#0f172a',
   bgGradientEnd: '#1e1b4b',
-  
+
   accent: '#a78bfa',
   accentLight: '#c4b5fd',
   accentGlow: 'rgba(167, 139, 250, 0.25)',
-  
+
   textPrimary: '#f1f5f9',
   textSecondary: '#94a3b8',
   textMuted: '#64748b',
-  
+
   border: '#334155',
   borderLight: '#475569',
-  
+
   success: '#4ade80',
   warning: '#fbbf24',
   error: '#f87171',
@@ -237,6 +239,50 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
+  optionToggleRow: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '10px 2px',
+    marginBottom: '12px',
+  },
+  optionToggleLabel: {
+    color: colors.textSecondary,
+    fontSize: '13px',
+    fontWeight: 600,
+    fontFamily: '"JetBrains Mono", monospace',
+    letterSpacing: '0.3px',
+    userSelect: 'none' as const,
+    cursor: 'pointer',
+  },
+  optionToggleCheckbox: {
+    width: '16px',
+    height: '16px',
+    margin: 0,
+    cursor: 'pointer',
+    borderRadius: '4px',
+    border: `1px solid ${colors.borderLight}`,
+    background: colors.bgDark,
+    boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.45)',
+    transition: 'all 0.15s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'transparent',
+    fontSize: '12px',
+    lineHeight: 1,
+    fontWeight: 700,
+    fontFamily: '"JetBrains Mono", monospace',
+    userSelect: 'none' as const,
+  },
+  optionToggleCheckboxChecked: {
+    background: `${colors.success}1f`,
+    border: `1px solid ${colors.success}`,
+    boxShadow: `0 0 0 1px ${colors.success}33`,
+    color: colors.success,
+  },
 };
 
 export const Lobby: React.FC<LobbyProps> = ({
@@ -245,6 +291,8 @@ export const Lobby: React.FC<LobbyProps> = ({
   initialMode = null,
   error,
   queuePosition = null,
+  relativeLineNumbersEnabled,
+  onRelativeLineNumbersChange,
   onCreateRoom,
   onJoinRoom,
   onQuickMatch,
@@ -252,13 +300,16 @@ export const Lobby: React.FC<LobbyProps> = ({
 }) => {
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
-  
+
   // For private mode, track if we're joining (create is immediate)
-  const [privateSubMode, setPrivateSubMode] = useState<'select' | 'join'>('select');
+  const [privateSubMode, setPrivateSubMode] = useState<'select' | 'join'>(
+    'select'
+  );
 
   // Show a friendly nudge after waiting 10+ seconds in quick match
   const [showLongWaitMessage, setShowLongWaitMessage] = useState(false);
-  const isQuickMatchWaiting = initialMode === 'quick' && (isConnecting || queuePosition !== null);
+  const isQuickMatchWaiting =
+    initialMode === 'quick' && (isConnecting || queuePosition !== null);
 
   useEffect(() => {
     if (!isQuickMatchWaiting) {
@@ -276,7 +327,7 @@ export const Lobby: React.FC<LobbyProps> = ({
     }
   };
 
-    const handleJoin = () => {
+  const handleJoin = () => {
     if (playerName.trim() && roomCode.trim()) {
       onJoinRoom(roomCode.trim(), playerName.trim());
     }
@@ -318,18 +369,20 @@ export const Lobby: React.FC<LobbyProps> = ({
   };
 
   const longWaitMessage = showLongWaitMessage ? (
-    <div style={{
-      marginTop: '20px',
-      padding: '14px 18px',
-      background: `${colors.accent}10`,
-      border: `1px solid ${colors.accent}30`,
-      borderRadius: '10px',
-      fontSize: '13px',
-      lineHeight: 1.6,
-      color: colors.textSecondary,
-      textAlign: 'left' as const,
-    }}>
-      We're just getting started — it's possible no other players are
+    <div
+      style={{
+        marginTop: '20px',
+        padding: '14px 18px',
+        background: `${colors.accent}10`,
+        border: `1px solid ${colors.accent}30`,
+        borderRadius: '10px',
+        fontSize: '13px',
+        lineHeight: 1.6,
+        color: colors.textSecondary,
+        textAlign: 'left' as const,
+      }}
+    >
+      We&apos;re just getting started — it&apos;s possible no other players are
       matching right now. Feel free to try{' '}
       <a
         href="/practice"
@@ -344,7 +397,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   // Quick Play flow
   if (initialMode === 'quick') {
     const isInQueue = queuePosition !== null;
-    
+
     return (
       <div style={styles.pageWrapper}>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -356,142 +409,177 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.bgGlow2} />
           <div style={styles.container}>
             <div style={styles.header}>
-          <h1 style={styles.title}>{getTitle()}</h1>
-          <p style={styles.subtitle}>{getSubtitle()}</p>
-          
-          <div style={styles.connectionStatus}>
-            <div
-              style={{
-                ...styles.dot,
-                background: getStatusColor(),
-                boxShadow: `0 0 8px ${getStatusColor()}`,
-              }}
-            />
-            <span style={{ color: getStatusColor() }}>
-              {getStatusText()}
-            </span>
-          </div>
-        </div>
+              <h1 style={styles.title}>{getTitle()}</h1>
+              <p style={styles.subtitle}>{getSubtitle()}</p>
 
-        {error && <div style={styles.error}>{error}</div>}
-
-        {/* Show queue status when in queue */}
-        {isInQueue ? (
-          <div style={styles.quickPlayStatusPanel}>
-            <div style={{
-              textAlign: 'center' as const,
-              padding: '20px 0',
-            }}>
-              <div style={{
-                fontSize: '48px',
-                fontWeight: 700,
-                color: colors.accent,
-                marginBottom: '8px',
-                fontFamily: '"JetBrains Mono", monospace',
-              }}>
-                #{queuePosition}
+              <div style={styles.connectionStatus}>
+                <div
+                  style={{
+                    ...styles.dot,
+                    background: getStatusColor(),
+                    boxShadow: `0 0 8px ${getStatusColor()}`,
+                  }}
+                />
+                <span style={{ color: getStatusColor() }}>
+                  {getStatusText()}
+                </span>
               </div>
-              <div style={{
-                fontSize: '14px',
-                color: colors.textSecondary,
-              }}>
-                in queue
-              </div>
-              <div style={{
-                marginTop: '16px',
-                fontSize: '13px',
-                color: colors.textMuted,
-              }}>
-                Waiting for opponent...
-              </div>
-              {longWaitMessage}
             </div>
-            {onCancelQuickMatch && (
-              <button
-                style={{
-                  ...styles.button,
-                  ...styles.buttonOutline,
-                  marginTop: '16px',
-                }}
-                onClick={onCancelQuickMatch}
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        ) : isLoading ? (
-          /* Connecting phase — between clicking Find Match and entering
+
+            {error && <div style={styles.error}>{error}</div>}
+
+            {/* Show queue status when in queue */}
+            {isInQueue ? (
+              <div style={styles.quickPlayStatusPanel}>
+                <div
+                  style={{
+                    textAlign: 'center' as const,
+                    padding: '20px 0',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '48px',
+                      fontWeight: 700,
+                      color: colors.accent,
+                      marginBottom: '8px',
+                      fontFamily: '"JetBrains Mono", monospace',
+                    }}
+                  >
+                    #{queuePosition}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      color: colors.textSecondary,
+                    }}
+                  >
+                    in queue
+                  </div>
+                  <div
+                    style={{
+                      marginTop: '16px',
+                      fontSize: '13px',
+                      color: colors.textMuted,
+                    }}
+                  >
+                    Waiting for opponent...
+                  </div>
+                  {longWaitMessage}
+                </div>
+                {onCancelQuickMatch && (
+                  <button
+                    style={{
+                      ...styles.button,
+                      ...styles.buttonOutline,
+                      marginTop: '16px',
+                    }}
+                    onClick={onCancelQuickMatch}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            ) : isLoading ? (
+              /* Connecting phase — between clicking Find Match and entering
              the queue, or between match:found and joining the game room.
              Show a clear status with a cancel option. */
-          <div style={styles.quickPlayStatusPanel}>
-            <div style={{
-              textAlign: 'center' as const,
-              padding: '20px 0',
-            }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                border: `3px solid ${colors.border}`,
-                borderTopColor: colors.accent,
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite',
-                margin: '0 auto 16px',
-              }} />
-              <div style={styles.quickPlayStatusText}>
-                Searching for players...
+              <div style={styles.quickPlayStatusPanel}>
+                <div
+                  style={{
+                    textAlign: 'center' as const,
+                    padding: '20px 0',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      border: `3px solid ${colors.border}`,
+                      borderTopColor: colors.accent,
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      margin: '0 auto 16px',
+                    }}
+                  />
+                  <div style={styles.quickPlayStatusText}>
+                    Searching for players...
+                  </div>
+                  {longWaitMessage}
+                </div>
+                {onCancelQuickMatch && (
+                  <button
+                    style={{
+                      ...styles.button,
+                      ...styles.buttonOutline,
+                      marginTop: '16px',
+                    }}
+                    onClick={onCancelQuickMatch}
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
-              {longWaitMessage}
-            </div>
-            {onCancelQuickMatch && (
+            ) : (
+              <>
+                <div style={styles.card}>
+                  <div style={styles.cardTitle}>Your Name</div>
+                  <input
+                    type="text"
+                    placeholder="Enter your name..."
+                    value={playerName}
+                    onChange={(e) => setPlayerName(e.target.value)}
+                    style={styles.input}
+                    maxLength={20}
+                  />
+                </div>
+                <label style={styles.optionToggleRow}>
+                  <span style={styles.optionToggleLabel}>
+                    Start with Relative Line Numbers
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Toggle relative line numbers"
+                    aria-pressed={relativeLineNumbersEnabled}
+                    onClick={() =>
+                      onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
+                    }
+                    style={{
+                      ...styles.optionToggleCheckbox,
+                      ...(relativeLineNumbersEnabled
+                        ? styles.optionToggleCheckboxChecked
+                        : {}),
+                    }}
+                  >
+                    ✓
+                  </button>
+                </label>
+
+                <button
+                  style={{
+                    ...styles.button,
+                    background: `linear-gradient(135deg, ${colors.success} 0%, #059669 100%)`,
+                    ...(!canInteract || !playerName.trim()
+                      ? styles.buttonDisabled
+                      : {}),
+                  }}
+                  onClick={handleQuickMatch}
+                  disabled={!canInteract || !playerName.trim()}
+                >
+                  Find Match
+                </button>
+              </>
+            )}
+
+            {!((isInQueue || isLoading) && onCancelQuickMatch) && (
               <button
-                style={{
-                  ...styles.button,
-                  ...styles.buttonOutline,
-                  marginTop: '16px',
-                }}
-                onClick={onCancelQuickMatch}
+                style={styles.backButton}
+                onClick={handleBack}
+                disabled={false}
               >
-                Cancel
+                ← Back
               </button>
             )}
-          </div>
-        ) : (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Your Name</div>
-              <input
-                type="text"
-                placeholder="Enter your name..."
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                style={styles.input}
-                maxLength={20}
-              />
-            </div>
-
-            <button
-              style={{
-                ...styles.button,
-                background: `linear-gradient(135deg, ${colors.success} 0%, #059669 100%)`,
-                ...((!canInteract || !playerName.trim()) ? styles.buttonDisabled : {}),
-              }}
-              onClick={handleQuickMatch}
-              disabled={!canInteract || !playerName.trim()}
-            >
-              Find Match
-            </button>
-          </>
-        )}
-
-        {!((isInQueue || isLoading) && onCancelQuickMatch) && (
-          <button
-            style={styles.backButton}
-            onClick={handleBack}
-            disabled={false}
-          >
-            ← Back
-          </button>
-        )}
           </div>
         </div>
       </div>
@@ -510,100 +598,131 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.bgGlow2} />
           <div style={styles.container}>
             <div style={styles.header}>
-          <h1 style={styles.title}>{getTitle()}</h1>
-          <p style={styles.subtitle}>{getSubtitle()}</p>
-          
-          <div style={styles.connectionStatus}>
-            <div
-              style={{
-                ...styles.dot,
-                background: getStatusColor(),
-                boxShadow: `0 0 8px ${getStatusColor()}`,
-              }}
-            />
-            <span style={{ color: getStatusColor() }}>
-              {getStatusText()}
-            </span>
-          </div>
-        </div>
+              <h1 style={styles.title}>{getTitle()}</h1>
+              <p style={styles.subtitle}>{getSubtitle()}</p>
 
-        {error && <div style={styles.error}>{error}</div>}
+              <div style={styles.connectionStatus}>
+                <div
+                  style={{
+                    ...styles.dot,
+                    background: getStatusColor(),
+                    boxShadow: `0 0 8px ${getStatusColor()}`,
+                  }}
+                />
+                <span style={{ color: getStatusColor() }}>
+                  {getStatusText()}
+                </span>
+              </div>
+            </div>
 
-        {/* Name input - always shown */}
-        <div style={styles.card}>
-          <div style={styles.cardTitle}>Your Name</div>
-          <input
-            type="text"
-            placeholder="Enter your name..."
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            style={styles.input}
-            maxLength={20}
-          />
-        </div>
+            {error && <div style={styles.error}>{error}</div>}
 
-        {/* Create or Join buttons */}
-        {privateSubMode === 'select' && (
-          <>
-            <button
-              style={{
-                ...styles.button,
-                marginBottom: '12px',
-                ...((!canInteract || !playerName.trim() || isLoading) ? styles.buttonDisabled : {}),
-              }}
-              onClick={handleCreate}
-              disabled={!canInteract || !playerName.trim() || isLoading}
-            >
-              {isLoading ? 'Creating...' : 'Create Room'}
-            </button>
-            <button
-              style={{
-                ...styles.button,
-                ...styles.buttonOutline,
-                ...((!canInteract || !playerName.trim() || isLoading) ? styles.buttonDisabled : {}),
-              }}
-              onClick={() => playerName.trim() && setPrivateSubMode('join')}
-              disabled={!canInteract || !playerName.trim() || isLoading}
-            >
-              Join Room
-            </button>
-          </>
-        )}
-
-        {/* Join Room */}
-        {privateSubMode === 'join' && (
-          <>
-            <div style={{ ...styles.card, marginBottom: '16px' }}>
-              <div style={styles.cardTitle}>Room Code</div>
+            {/* Name input - always shown */}
+            <div style={styles.card}>
+              <div style={styles.cardTitle}>Your Name</div>
               <input
                 type="text"
-                placeholder="Paste room ID here..."
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value)}
+                placeholder="Enter your name..."
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
                 style={styles.input}
-                maxLength={50}
+                maxLength={20}
               />
             </div>
-            <button
-              style={{
-                ...styles.button,
-                ...((!roomCode.trim() || isLoading) ? styles.buttonDisabled : {}),
-              }}
-              onClick={handleJoin}
-              disabled={!canInteract || !roomCode.trim() || isLoading}
-            >
-              {isLoading ? 'Joining...' : 'Join Room'}
-            </button>
-          </>
-        )}
+            <label style={styles.optionToggleRow}>
+              <span style={styles.optionToggleLabel}>
+                Start with Relative Line Numbers
+              </span>
+              <button
+                type="button"
+                aria-label="Toggle relative line numbers"
+                aria-pressed={relativeLineNumbersEnabled}
+                onClick={() =>
+                  onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
+                }
+                style={{
+                  ...styles.optionToggleCheckbox,
+                  ...(relativeLineNumbersEnabled
+                    ? styles.optionToggleCheckboxChecked
+                    : {}),
+                }}
+              >
+                ✓
+              </button>
+            </label>
 
-        <button
-          style={styles.backButton}
-          onClick={privateSubMode === 'select' ? handleBack : () => setPrivateSubMode('select')}
-          disabled={isLoading}
-        >
-          ← Back
-        </button>
+            {/* Create or Join buttons */}
+            {privateSubMode === 'select' && (
+              <>
+                <button
+                  style={{
+                    ...styles.button,
+                    marginBottom: '12px',
+                    ...(!canInteract || !playerName.trim() || isLoading
+                      ? styles.buttonDisabled
+                      : {}),
+                  }}
+                  onClick={handleCreate}
+                  disabled={!canInteract || !playerName.trim() || isLoading}
+                >
+                  {isLoading ? 'Creating...' : 'Create Room'}
+                </button>
+                <button
+                  style={{
+                    ...styles.button,
+                    ...styles.buttonOutline,
+                    ...(!canInteract || !playerName.trim() || isLoading
+                      ? styles.buttonDisabled
+                      : {}),
+                  }}
+                  onClick={() => playerName.trim() && setPrivateSubMode('join')}
+                  disabled={!canInteract || !playerName.trim() || isLoading}
+                >
+                  Join Room
+                </button>
+              </>
+            )}
+
+            {/* Join Room */}
+            {privateSubMode === 'join' && (
+              <>
+                <div style={{ ...styles.card, marginBottom: '16px' }}>
+                  <div style={styles.cardTitle}>Room Code</div>
+                  <input
+                    type="text"
+                    placeholder="Paste room ID here..."
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value)}
+                    style={styles.input}
+                    maxLength={50}
+                  />
+                </div>
+                <button
+                  style={{
+                    ...styles.button,
+                    ...(!roomCode.trim() || isLoading
+                      ? styles.buttonDisabled
+                      : {}),
+                  }}
+                  onClick={handleJoin}
+                  disabled={!canInteract || !roomCode.trim() || isLoading}
+                >
+                  {isLoading ? 'Joining...' : 'Join Room'}
+                </button>
+              </>
+            )}
+
+            <button
+              style={styles.backButton}
+              onClick={
+                privateSubMode === 'select'
+                  ? handleBack
+                  : () => setPrivateSubMode('select')
+              }
+              disabled={isLoading}
+            >
+              ← Back
+            </button>
           </div>
         </div>
       </div>
@@ -621,15 +740,14 @@ export const Lobby: React.FC<LobbyProps> = ({
         <div style={styles.bgGlow2} />
         <div style={styles.container}>
           <div style={styles.header}>
-        <h1 style={styles.title}>{getTitle()}</h1>
-        <p style={styles.subtitle}>{getSubtitle()}</p>
-      </div>
-      <button style={styles.backButton} onClick={handleBack}>
-        ← Back to Home
-      </button>
+            <h1 style={styles.title}>{getTitle()}</h1>
+            <p style={styles.subtitle}>{getSubtitle()}</p>
+          </div>
+          <button style={styles.backButton} onClick={handleBack}>
+            ← Back to Home
+          </button>
         </div>
       </div>
     </div>
   );
 };
-

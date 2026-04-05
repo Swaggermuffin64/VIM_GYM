@@ -1,7 +1,28 @@
 # Docker Compose for local development and testing
 # Usage: docker compose up --build
+#
+# Local Postgres (leaderboard / migrations):
+#   docker compose up -d postgres
+#   docker compose exec -T postgres psql -U vimracing -d vimracing < migrations/001_leaderboard_runs.sql
+# Connection: postgresql://vimracing:vimracing@localhost:5433/vimracing
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vimracing
+      POSTGRES_PASSWORD: vimracing
+      POSTGRES_DB: vimracing
+    ports:
+      - "5433:5432"
+    volumes:
+      - vim-racing-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vimracing -d vimracing"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+
   vim-racing-backend:
     build:
       context: .
@@ -19,5 +40,6 @@ services:
       retries: 3
       start_period: 5s
 
-
+volumes:
+  vim-racing-pgdata:
 

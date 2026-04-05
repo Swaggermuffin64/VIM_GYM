@@ -1,4 +1,4 @@
-import { Task, PositionTask } from './task'
+import { Task, PositionTask } from './task';
 // Multiplayer types for frontend
 
 // Default empty task used before game starts
@@ -31,14 +31,26 @@ export interface GameTask {
   targetOffset: number;
 }
 
+export type LeaderboardRanks = {
+  daily: number | null;
+  monthly: number | null;
+  allTime: number | null;
+};
+
 export interface Ranking {
   playerId: string;
   playerName: string;
   time: number;
   position: number;
+  ranks?: LeaderboardRanks | null;
 }
 
-export type RoomState = 'idle' | 'waiting' | 'countdown' | 'racing' | 'finished';
+export type RoomState =
+  | 'idle'
+  | 'waiting'
+  | 'countdown'
+  | 'racing'
+  | 'finished';
 
 export interface GameState {
   roomId: string | null;
@@ -51,6 +63,5 @@ export interface GameState {
   startTime: number | null;
   rankings: Ranking[] | null;
   myPlayerId: string | null;
-  shouldResetEditor: boolean;  // Set to true when validation fails, cleared after reset
+  shouldResetEditor: boolean; // Set to true when validation fails, cleared after reset
 }
-

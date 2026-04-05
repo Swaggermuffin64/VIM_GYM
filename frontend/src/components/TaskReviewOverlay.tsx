@@ -27,10 +27,17 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
   onPracticeTasks,
   onPlayAgain,
 }) => {
-  const [taskCompletion, setTaskCompletion] = useState<Record<string, boolean>>({});
-  const [taskResetTokens, setTaskResetTokens] = useState<Record<string, number>>({});
+  const [taskCompletion, setTaskCompletion] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [taskResetTokens, setTaskResetTokens] = useState<
+    Record<string, number>
+  >({});
 
-  const averages = useMemo(() => computeTaskSummaryAverages(taskSummaries), [taskSummaries]);
+  const averages = useMemo(
+    () => computeTaskSummaryAverages(taskSummaries),
+    [taskSummaries]
+  );
 
   return (
     <div style={styles.overlay}>
@@ -70,9 +77,7 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
             <span style={styles.overviewValue}>
               {averages ? averages.keysPerSecond.toFixed(2) : '--'}
             </span>
-            <span style={styles.overviewValue}>
-              {averages?.keys ?? '--'}
-            </span>
+            <span style={styles.overviewValue}>{averages?.keys ?? '--'}</span>
             <span style={styles.overviewValue}>
               {averages && averages.discrepancy !== null
                 ? `${averages.discrepancy >= 0 ? '+' : ''}${averages.discrepancy.toFixed(1)}`
@@ -83,14 +88,18 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
 
         <div style={styles.taskList}>
           {taskSummaries.length === 0 && (
-            <div style={styles.empty}>No task details recorded for this race.</div>
+            <div style={styles.empty}>
+              No task details recorded for this race.
+            </div>
           )}
           {taskSummaries.map((summary, index) => {
-            const keysPerSecond = summary.durationMs > 0
-              ? (summary.keyCount / (summary.durationMs / 1000)).toFixed(2)
-              : '0.00';
+            const keysPerSecond =
+              summary.durationMs > 0
+                ? (summary.keyCount / (summary.durationMs / 1000)).toFixed(2)
+                : '0.00';
             const isDeleteTask = summary.taskType === 'delete';
-            const hasComparison = typeof summary.ourSolutionKeyCount === 'number';
+            const hasComparison =
+              typeof summary.ourSolutionKeyCount === 'number';
             const userKeyCount = summary.keyCount;
             const ourKeyCount = summary.ourSolutionKeyCount ?? 0;
             const discrepancy = hasComparison ? ourKeyCount - userKeyCount : 0;
@@ -98,11 +107,27 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
             const negativeDiscrepancy = hasComparison && discrepancy < 0;
             const comparisonStyle: React.CSSProperties = hasComparison
               ? positiveDiscrepancy
-                ? { ...styles.comparisonBox, border: '1px solid #22c55e60', background: '#22c55e20' }
+                ? {
+                    ...styles.comparisonBox,
+                    border: '1px solid #22c55e60',
+                    background: '#22c55e20',
+                  }
                 : negativeDiscrepancy
-                  ? { ...styles.comparisonBox, border: '1px solid #ef444460', background: '#ef444420' }
-                  : { ...styles.comparisonBox, border: `1px solid ${colors.textMuted}60`, background: `${colors.textMuted}20` }
-              : { ...styles.comparisonBox, border: `1px solid ${colors.textMuted}60`, background: `${colors.textMuted}20` };
+                  ? {
+                      ...styles.comparisonBox,
+                      border: '1px solid #ef444460',
+                      background: '#ef444420',
+                    }
+                  : {
+                      ...styles.comparisonBox,
+                      border: `1px solid ${colors.textMuted}60`,
+                      background: `${colors.textMuted}20`,
+                    }
+              : {
+                  ...styles.comparisonBox,
+                  border: `1px solid ${colors.textMuted}60`,
+                  background: `${colors.textMuted}20`,
+                };
             const badgeStyle: React.CSSProperties = {
               ...styles.taskBadge,
               border: `1px solid ${isDeleteTask ? colors.secondary : colors.primary}40`,
@@ -114,32 +139,60 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
             return (
               <div
                 key={summary.taskId}
-                style={isComplete ? { ...styles.taskItem, ...styles.taskItemComplete } : styles.taskItem}
+                style={
+                  isComplete
+                    ? { ...styles.taskItem, ...styles.taskItemComplete }
+                    : styles.taskItem
+                }
               >
                 {isComplete && <div style={styles.completeCheck}>✓</div>}
                 <div style={styles.taskHeader}>
                   <span style={styles.taskTitle}>Task {summary.taskIndex}</span>
-                  <span style={badgeStyle}>{formatTaskTypeLabel(summary.taskType)}</span>
+                  <span style={badgeStyle}>
+                    {formatTaskTypeLabel(summary.taskType)}
+                  </span>
                 </div>
                 <div style={styles.taskBody}>
                   <div style={styles.analyticsColumn}>
                     <div style={styles.metaRow}>
-                      <div style={{ ...styles.metaCard, borderColor: `${colors.primary}60`, background: `${colors.primary}16` }}>
+                      <div
+                        style={{
+                          ...styles.metaCard,
+                          borderColor: `${colors.primary}60`,
+                          background: `${colors.primary}16`,
+                        }}
+                      >
                         <span style={styles.metaLabel}>Keys/s</span>
                         <span style={styles.metaValue}>{keysPerSecond}</span>
                       </div>
-                      <div style={{ ...styles.metaCard, borderColor: `${colors.secondary}60`, background: `${colors.secondary}16` }}>
+                      <div
+                        style={{
+                          ...styles.metaCard,
+                          borderColor: `${colors.secondary}60`,
+                          background: `${colors.secondary}16`,
+                        }}
+                      >
                         <span style={styles.metaLabel}>Duration</span>
-                        <span style={styles.metaValue}>{formatTime(summary.durationMs)}</span>
+                        <span style={styles.metaValue}>
+                          {formatTime(summary.durationMs)}
+                        </span>
                       </div>
-                      <div style={{ ...styles.metaCard, borderColor: `${colors.warning}60`, background: `${colors.warning}16` }}>
+                      <div
+                        style={{
+                          ...styles.metaCard,
+                          borderColor: `${colors.warning}60`,
+                          background: `${colors.warning}16`,
+                        }}
+                      >
                         <span style={styles.metaLabel}>Keys</span>
                         <span style={styles.metaValue}>{summary.keyCount}</span>
                       </div>
                     </div>
                     <div style={styles.keysBox}>
                       <div style={styles.keysLabel}>Your Solution</div>
-                      <div style={styles.keysValue}>{summary.keySequence || 'No key events recorded'}</div>
+                      <div style={styles.keysValue}>
+                        {summary.keySequence || 'No key events recorded'}
+                      </div>
                     </div>
                     {typeof summary.ourSolutionKeyCount === 'number' && (
                       <div style={styles.keysBox}>
@@ -168,7 +221,10 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
                         resetToken={taskResetTokens[summary.taskId] ?? 0}
                         autoFocusOnMount={index === 0}
                         onCompletionChange={(complete) => {
-                          setTaskCompletion((prev) => ({ ...prev, [summary.taskId]: complete }));
+                          setTaskCompletion((prev) => ({
+                            ...prev,
+                            [summary.taskId]: complete,
+                          }));
                         }}
                       />
                     </div>
@@ -176,7 +232,10 @@ export const TaskReviewOverlay: React.FC<TaskReviewOverlayProps> = ({
                       type="button"
                       style={styles.resetButton}
                       onClick={() => {
-                        setTaskCompletion((prev) => ({ ...prev, [summary.taskId]: false }));
+                        setTaskCompletion((prev) => ({
+                          ...prev,
+                          [summary.taskId]: false,
+                        }));
                         setTaskResetTokens((prev) => ({
                           ...prev,
                           [summary.taskId]: (prev[summary.taskId] ?? 0) + 1,
@@ -212,7 +271,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   container: {
     width: '100%',
-    maxWidth: '1200px',
+    maxWidth: '1500px',
     padding: '40px 24px',
   },
   header: {

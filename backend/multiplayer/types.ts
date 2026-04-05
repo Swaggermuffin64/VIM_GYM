@@ -1,5 +1,6 @@
 // Shared multiplayer types
-import type { PositionTask, Task } from "../types.js";
+import type { Task } from '../types.js';
+import type { LeaderboardRanks } from '../db/leaderboard.js';
 //NEED TO SYNC MAX PLAYERS WITH MATCHMAKING SERVICE
 export const MAX_PLAYERS_PER_ROOM = 2;
 
@@ -30,7 +31,11 @@ export interface GameRoom {
 
 // Client → Server Events
 export interface ClientToServerEvents {
-  'room:create': (data: { playerName: string; roomId?: string; isPublic?: boolean }) => void;
+  'room:create': (data: {
+    playerName: string;
+    roomId?: string;
+    isPublic?: boolean;
+  }) => void;
   'room:join': (data: { roomId: string; playerName: string }) => void;
   'room:join_matched': (data: { roomId: string; playerName: string }) => void;
   'room:quick_match': (data: { playerName: string }) => void;
@@ -42,24 +47,47 @@ export interface ClientToServerEvents {
 
 // Server → Client Events
 export interface ServerToClientEvents {
-  'room:created': (data: { roomId: string; player: Player; }) => void;
-  'room:joined': (data: { roomId: string; players: Player[]; }) => void;
+  'room:created': (data: { roomId: string; player: Player }) => void;
+  'room:joined': (data: { roomId: string; players: Player[] }) => void;
   'room:player_joined': (data: { player: Player }) => void;
   'room:player_left': (data: { playerId: string }) => void;
   'room:player_ready': (data: { playerId: string }) => void;
   'room:reset': (data: { players: Player[] }) => void;
   'room:error': (data: { message: string }) => void;
   'game:countdown': (data: { seconds: number }) => void;
-  'game:start': (data: { startTime: number; initialTask: Task | undefined; tasks: Task[]; num_tasks: number }) => void;
-  'game:opponent_finished_task': (data: { playerId: string; taskProgress: number;}) => void;
-  'game:player_finished_task': (data: { playerId: string; taskProgress: number }) => void;
+  'game:start': (data: {
+    startTime: number;
+    initialTask: Task | undefined;
+    tasks: Task[];
+    num_tasks: number;
+  }) => void;
+  'game:opponent_finished_task': (data: {
+    playerId: string;
+    taskProgress: number;
+  }) => void;
+  'game:player_finished_task': (data: {
+    playerId: string;
+    taskProgress: number;
+  }) => void;
   'game:validation_failed': (playerId: string) => void;
-  'game:player_finished': (data: { playerId: string; time: number; position: number }) => void;
-  'game:complete': (data: { rankings: Array<{ playerId: string; playerName: string; time: number; position: number }> }) => void;
+  'game:player_finished': (data: {
+    playerId: string;
+    time: number;
+    position: number;
+  }) => void;
+  'game:complete': (data: {
+    rankings: Array<{
+      playerId: string;
+      playerName: string;
+      time: number;
+      position: number;
+      ranks?: LeaderboardRanks | null;
+    }>;
+  }) => void;
 }
 
-// For Socket.IO typing
-export interface InterServerEvents {}
+// For Socket.IO typing (no inter-server events yet)
+export type InterServerEvents = Record<string, never>;
 
 export interface SocketData {
   playerId: string;
@@ -72,4 +100,3 @@ export interface SocketData {
   /** Client IP address for connection limiting */
   clientIp?: string;
 }
-

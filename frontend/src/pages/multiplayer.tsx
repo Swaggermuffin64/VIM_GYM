@@ -89,6 +89,29 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.5,
   },
+  taskProgressInlineRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '14px',
+    color: colors.textSecondary,
+    fontSize: '13px',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  progressBar: {
+    width: '100%',
+    height: '8px',
+    background: colors.bgCard,
+    borderRadius: '4px',
+    overflow: 'hidden',
+    marginTop: '12px',
+  },
+  progressFill: {
+    height: '100%',
+    background: `linear-gradient(90deg, ${colors.primary}, ${colors.secondary})`,
+    transition: 'width 0.3s ease',
+    borderRadius: '4px',
+  },
   editorsContainer: {
     display: 'flex',
     gap: '24px',
@@ -279,6 +302,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.4,
   },
+  editorButtonRow: {
+    display: 'flex',
+    gap: '10px',
+    marginTop: '10px',
+  },
+  lineNumbersButton: {
+    padding: '8px 14px',
+    fontSize: '12px',
+    background: 'transparent',
+    border: `1px solid ${colors.primary}`,
+    borderRadius: '8px',
+    color: colors.primary,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    fontWeight: 600,
+    marginTop: '10px',
+  },
 };
 
 const MultiplayerGame: React.FC = () => {
@@ -314,6 +354,7 @@ const MultiplayerGame: React.FC = () => {
   const [raceFinishTime, setRaceFinishTime] = React.useState(0);
   const [playerAveragesById, setPlayerAveragesById] = React.useState<Record<string, PlayerTaskAverages>>({});
   const [blockedEditHint, setBlockedEditHint] = React.useState<string | null>(null);
+  const [relativeLineNumbers, setRelativeLineNumbers] = React.useState(true);
 
   const taskSummariesRef = useRef<TaskSummary[]>([]);
   const currentTaskObjRef = useRef<Task | null>(null);
@@ -471,6 +512,11 @@ const MultiplayerGame: React.FC = () => {
     currentTaskIdRef.current = null;
     setEditorReadyTick((prev) => prev + 1);
   }, []);
+
+  useEffect(() => {
+    if (editorReadyTick === 0) return;
+    editorRef.current?.setRelativeLineNumbers(relativeLineNumbers);
+  }, [editorReadyTick, relativeLineNumbers]);
 
   useEffect(() => () => {
     if (blockedHintTimerRef.current !== null) {
@@ -704,6 +750,26 @@ const MultiplayerGame: React.FC = () => {
     };
   }, [gameState.roomId, gameState.roomState, gameState.players, me?.isFinished, getMatchToken]);
 
+  const toggleRelativeLineNumbers = useCallback(() => {
+    const newValue = !relativeLineNumbers;
+    setRelativeLineNumbers(newValue);
+    editorRef.current?.setRelativeLineNumbers(newValue);
+  }, [relativeLineNumbers]);
+
+  useEffect(() => {
+    const handleLineNumbersHotkey = (e: KeyboardEvent) => {
+      if (e.key !== 'F7') return;
+      if (gameState.roomState !== 'racing' || me?.isFinished || !gameState.task.id) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      toggleRelativeLineNumbers();
+    };
+
+    window.addEventListener('keydown', handleLineNumbersHotkey, { capture: true });
+    return () => window.removeEventListener('keydown', handleLineNumbersHotkey, { capture: true });
+  }, [gameState.roomState, gameState.task.id, me?.isFinished, toggleRelativeLineNumbers]);
+
   const recentKeysDisplay = React.useMemo(() => {
     if (recentKeys.length === 0) return '';
     return recentKeys.slice(-KEY_LOG_VISIBLE_KEYS).join(' ');
@@ -801,6 +867,12 @@ const MultiplayerGame: React.FC = () => {
     return `${seconds}.${tenths}s`;
   };
 
+  const myTaskProgress = me?.isFinished
+    ? (gameState.num_tasks ?? 0)
+    : (me?.taskProgress ?? 0);
+  const taskCount = Math.max(1, gameState.num_tasks ?? 1);
+  const taskProgressPercent = Math.min(100, (myTaskProgress / taskCount) * 100);
+
   // Render based on game state
   if (gameState.roomState === 'idle') {
     return (
@@ -811,6 +883,8 @@ const MultiplayerGame: React.FC = () => {
           initialMode={initialMode}
           error={error}
           queuePosition={queuePosition}
+          relativeLineNumbersEnabled={relativeLineNumbers}
+          onRelativeLineNumbersChange={setRelativeLineNumbers}
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onQuickMatch={quickMatch}
@@ -886,6 +960,15 @@ const MultiplayerGame: React.FC = () => {
               {gameState.task.type === 'navigate' ? 'Navigate to target' : 'Delete the highlighted text'}
             </div>
             <div style={styles.taskDescription}>{gameState.task.description}</div>
+            <div style={styles.taskProgressInlineRow}>
+              <span>Tasks Completed</span>
+              <span style={{ color: colors.primaryLight }}>
+                {myTaskProgress}/{taskCount}
+              </span>
+            </div>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${taskProgressPercent}%` }} />
+            </div>
           </div>
         )}
 
@@ -913,9 +996,14 @@ const MultiplayerGame: React.FC = () => {
               </div>
             )}
             {!me?.isFinished && gameState.task.id && (
-              <button style={styles.resetTaskButton} onClick={resetCurrentTask}>
-                Reset (F6)
-              </button>
+              <div style={styles.editorButtonRow}>
+                <button style={styles.resetTaskButton} onClick={resetCurrentTask}>
+                  Reset (F6)
+                </button>
+                <button style={styles.lineNumbersButton} onClick={toggleRelativeLineNumbers}>
+                  {relativeLineNumbers ? 'Relative Lines (F7) ✓' : 'Relative Lines (F7)'}
+                </button>
+              </div>
             )}
           </div>
 

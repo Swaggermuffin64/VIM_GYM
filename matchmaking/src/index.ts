@@ -14,7 +14,9 @@ import { validatePlayerName } from './validation.js';
 const CORS_ORIGINS: string[] = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  ...(process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(url => url.trim()) : []),
+  ...(process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',').map((url) => url.trim())
+    : []),
 ];
 
 /**
@@ -36,7 +38,7 @@ function getCorsHeaders(req: IncomingMessage): Record<string, string> {
   const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Vary': 'Origin',
+    Vary: 'Origin',
   };
   if (origin) {
     headers['Access-Control-Allow-Origin'] = origin;
@@ -47,7 +49,7 @@ function getCorsHeaders(req: IncomingMessage): Record<string, string> {
 // --- HTTP Rate Limiting ---
 // Separate rate limiter for HTTP endpoints, keyed by client IP
 const httpRateLimiter = new RateLimiter({
-  maxRequests: 60,       // 60 requests per minute
+  maxRequests: 60, // 60 requests per minute
   windowMs: 60000,
   blockDurationMs: 60000, // block for 1 minute if exceeded
 });
@@ -64,13 +66,19 @@ const connectionMeta = new Map<string, { ip: string }>();
 function getClientIp(req: IncomingMessage): string {
   const flyClientIp = req.headers['fly-client-ip'];
   if (flyClientIp) {
-    return (Array.isArray(flyClientIp) ? flyClientIp[0] : flyClientIp)?.trim() || 'unknown';
+    return (
+      (Array.isArray(flyClientIp) ? flyClientIp[0] : flyClientIp)?.trim() ||
+      'unknown'
+    );
   }
 
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
-    const raw = Array.isArray(forwarded) ? forwarded[0] ?? '' : forwarded;
-    const parts = raw.split(',').map(s => s.trim()).filter(Boolean);
+    const raw = Array.isArray(forwarded) ? (forwarded[0] ?? '') : forwarded;
+    const parts = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (parts.length > 0) {
       return parts[parts.length - 1]!;
     }
@@ -80,7 +88,8 @@ function getClientIp(req: IncomingMessage): string {
 }
 
 // Auth is required in production, optional in development
-const REQUIRE_AUTH = process.env.NODE_ENV === 'production' || process.env.REQUIRE_AUTH === 'true';
+const REQUIRE_AUTH =
+  process.env.NODE_ENV === 'production' || process.env.REQUIRE_AUTH === 'true';
 
 const PORT = parseInt(process.env.PORT || '3002', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -107,16 +116,27 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
 
     // Health check endpoint (exempt from rate limiting)
     if (req.url === '/' && req.method === 'GET') {
-      res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'ok', service: 'vim-racing-matchmaking' }));
+      res.writeHead(200, {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      });
+      res.end(
+        JSON.stringify({ status: 'ok', service: 'vim-racing-matchmaking' })
+      );
       return;
     }
 
     // Apply HTTP rate limiting to all non-health-check routes
     const clientIp = getClientIp(req);
     if (!httpRateLimiter.check(clientIp)) {
-      res.writeHead(429, { ...corsHeaders, 'Content-Type': 'application/json', 'Retry-After': '60' });
-      res.end(JSON.stringify({ error: 'Too many requests. Please try again later.' }));
+      res.writeHead(429, {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'Retry-After': '60',
+      });
+      res.end(
+        JSON.stringify({ error: 'Too many requests. Please try again later.' })
+      );
       return;
     }
 
@@ -126,7 +146,10 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
   } catch (err) {
     console.error('HTTP handler error:', err);
     if (!res.headersSent) {
-      res.writeHead(500, { ...corsHeaders, 'Content-Type': 'application/json' });
+      res.writeHead(500, {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+      });
       res.end(JSON.stringify({ error: 'Internal server error' }));
     }
   }
@@ -140,28 +163,37 @@ wss.on('connection', (socket, req) => {
   const clientIp = getClientIp(req);
 
   const url = new URL(req.url || '/', `http://${req.headers.host}`);
-  const isLoadTest = LOAD_TEST_SECRET && url.searchParams.get('loadtest') === LOAD_TEST_SECRET;
-  
+  const isLoadTest =
+    LOAD_TEST_SECRET && url.searchParams.get('loadtest') === LOAD_TEST_SECRET;
+
   // Check connection limit (bypass for load tests)
   if (!isLoadTest && !connectionLimiter.addConnection(clientIp, connectionId)) {
     console.log(`🚫 Connection limit exceeded for IP ${clientIp}`);
-    send(socket, { type: 'error', message: 'Too many connections from your IP. Please try again later.' });
+    send(socket, {
+      type: 'error',
+      message: 'Too many connections from your IP. Please try again later.',
+    });
     socket.close();
     return;
   }
-  
+
   // Store metadata for cleanup
   connectionMeta.set(connectionId, { ip: clientIp });
-  
-  console.log(`🔌 New connection: ${connectionId} from ${clientIp} (${connectionLimiter.getConnectionCount(clientIp)}/5)`);
+
+  console.log(
+    `🔌 New connection: ${connectionId} from ${clientIp} (${connectionLimiter.getConnectionCount(clientIp)}/5)`
+  );
 
   socket.on('message', (data) => {
     // Check rate limit
     if (!rateLimiter.check(connectionId)) {
-      send(socket, { type: 'error', message: 'Too many requests. Please slow down.' });
+      send(socket, {
+        type: 'error',
+        message: 'Too many requests. Please slow down.',
+      });
       return;
     }
-    
+
     try {
       const parsed: unknown = JSON.parse(data.toString());
       if (!isValidClientMessage(parsed)) {
@@ -169,7 +201,7 @@ wss.on('connection', (socket, req) => {
         return;
       }
       handleMessage(socket, connectionId, parsed);
-    } catch (err) {
+    } catch {
       send(socket, { type: 'error', message: 'Invalid message format' });
     }
   });
@@ -181,7 +213,7 @@ wss.on('connection', (socket, req) => {
       connectionLimiter.removeConnection(meta.ip, connectionId);
       connectionMeta.delete(connectionId);
     }
-    
+
     rateLimiter.remove(connectionId);
     await matchmaker.removePlayerBySocket(socket);
     console.log(`🔌 Connection closed: ${connectionId}`);
@@ -209,22 +241,31 @@ function isValidClientMessage(msg: unknown): msg is ClientMessage {
   }
 }
 
-async function handleMessage(socket: WebSocket, connectionId: string, message: ClientMessage) {
+async function handleMessage(
+  socket: WebSocket,
+  connectionId: string,
+  message: ClientMessage
+) {
   switch (message.type) {
     case 'queue:join': {
       // Verify auth token
       const authResult = verifyToken(message.token, REQUIRE_AUTH);
       if (!authResult.success) {
         console.log(`🔒 Auth failed for ${connectionId}: ${authResult.error}`);
-        send(socket, { type: 'error', message: authResult.error || 'Authentication failed' });
+        send(socket, {
+          type: 'error',
+          message: authResult.error || 'Authentication failed',
+        });
         return;
       }
-      console.log(`🔒 Auth success for ${connectionId}: userId=${authResult.userId}`);
-      
+      console.log(
+        `🔒 Auth success for ${connectionId}: userId=${authResult.userId}`
+      );
+
       // Validate and sanitize player name
       const nameResult = validatePlayerName(message.playerName);
       const safeName = nameResult.value || 'Anonymous';
-      
+
       // Remove from queue if already queued (rejoin)
       await matchmaker.removePlayerBySocket(socket);
 
@@ -238,7 +279,7 @@ async function handleMessage(socket: WebSocket, connectionId: string, message: C
       };
 
       await matchmaker.addPlayer(player);
-      
+
       send(socket, { type: 'queue:joined', playerId });
       break;
     }
@@ -300,4 +341,3 @@ server.listen(PORT, HOST, () => {
   console.log(`   Auth required: ${REQUIRE_AUTH}`);
   console.log(`   CORS origins: ${CORS_ORIGINS.join(', ')}`);
 });
-

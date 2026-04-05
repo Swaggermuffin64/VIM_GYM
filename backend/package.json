@@ -8,7 +8,8 @@
     "build": "tsc && cp codeSnippets.json dist/",
     "generate-snippets": "tsx ./scripts/generateSnippets.ts",
     "start": "node dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -19,12 +20,15 @@
     "@fastify/rate-limit": "^10.3.0",
     "fastify": "^5.6.1",
     "jsonwebtoken": "^9.0.3",
+    "pg": "^8.13.1",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/pg": "^8.11.10",
     "@types/node": "^24.7.2",
     "tsx": "^4.20.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
   }
 }

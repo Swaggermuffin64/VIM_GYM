@@ -12,8 +12,15 @@ export class Matchmaker {
   private retryScheduled: boolean = false;
   private readonly retryDelayMs: number = 3000;
 
-  constructor(options?: { playersPerMatch?: number; retryDelayMs?: number; gameServerUrl?: string }) {
-    this.gameServerUrl = options?.gameServerUrl || process.env.GAME_SERVER_URL || 'http://localhost:3001';
+  constructor(options?: {
+    playersPerMatch?: number;
+    retryDelayMs?: number;
+    gameServerUrl?: string;
+  }) {
+    this.gameServerUrl =
+      options?.gameServerUrl ||
+      process.env.GAME_SERVER_URL ||
+      'http://localhost:3001';
     this.playersPerMatch = options?.playersPerMatch ?? 2;
     this.retryDelayMs = options?.retryDelayMs ?? 3000;
   }
@@ -31,7 +38,9 @@ export class Matchmaker {
   async addPlayer(player: QueuedPlayer): Promise<void> {
     const shouldTryMatch = await this.mutex.runExclusive(() => {
       this.queue.set(player.id, player);
-      console.log(`Player "${player.name}" (${player.id}) joined queue (size: ${this.queue.size + 1})`);
+      console.log(
+        `Player "${player.name}" (${player.id}) joined queue (size: ${this.queue.size + 1})`
+      );
       return this.queue.size >= this.playersPerMatch;
     });
 
@@ -71,10 +80,12 @@ export class Matchmaker {
 
   private scheduleRetry(): void {
     if (this.retryScheduled) return;
-    
+
     this.retryScheduled = true;
-    console.log(`🔄 Scheduling retry in ${this.retryDelayMs}ms (queue size: ${this.queue.size})`);
-    
+    console.log(
+      `🔄 Scheduling retry in ${this.retryDelayMs}ms (queue size: ${this.queue.size})`
+    );
+
     setTimeout(() => {
       this.retryScheduled = false;
       if (this.queue.size >= this.playersPerMatch) {
@@ -84,7 +95,10 @@ export class Matchmaker {
     }, this.retryDelayMs);
   }
 
-  groupPlayers(): { roomGroups: QueuedPlayer[][], groupedPlayers: QueuedPlayer[] } {
+  groupPlayers(): {
+    roomGroups: QueuedPlayer[][];
+    groupedPlayers: QueuedPlayer[];
+  } {
     const roomGroups: QueuedPlayer[][] = [];
     let currentGroup: QueuedPlayer[] = [];
     const playerArray = Array.from(this.queue.values());
@@ -101,14 +115,14 @@ export class Matchmaker {
     if (currentGroup.length === 1) {
       return {
         roomGroups,
-        groupedPlayers: playerArray.slice(0,-1)
+        groupedPlayers: playerArray.slice(0, -1),
       };
     }
 
     roomGroups.push(currentGroup);
     return {
       roomGroups,
-      groupedPlayers: playerArray
+      groupedPlayers: playerArray,
     };
   }
 
@@ -130,7 +144,7 @@ export class Matchmaker {
     });
 
     if (!result) {
-      console.log("Failed to group players")
+      console.log('Failed to group players');
       return;
     }
 
@@ -138,12 +152,21 @@ export class Matchmaker {
     if (!groupedPlayers) {
       return;
     }
-    console.log(`🎯 Matching ${groupedPlayers.length} players:`, groupedPlayers.map((p) => p.name).join(', '));
-    console.log(`⏱️ [tryMatch] Grouped players (${(performance.now() - tryMatchStartTime).toFixed(0)}ms)`);
+    console.log(
+      `🎯 Matching ${groupedPlayers.length} players:`,
+      groupedPlayers.map((p) => p.name).join(', ')
+    );
+    console.log(
+      `⏱️ [tryMatch] Grouped players (${(performance.now() - tryMatchStartTime).toFixed(0)}ms)`
+    );
 
     try {
-      const matchResults = roomGroups.map((roomGroup) => this.assignRoom(roomGroup));
-      console.log(`⏱️ [tryMatch] All rooms assigned (${(performance.now() - tryMatchStartTime).toFixed(0)}ms for ${roomGroups.length} room(s))`);
+      const matchResults = roomGroups.map((roomGroup) =>
+        this.assignRoom(roomGroup)
+      );
+      console.log(
+        `⏱️ [tryMatch] All rooms assigned (${(performance.now() - tryMatchStartTime).toFixed(0)}ms for ${roomGroups.length} room(s))`
+      );
 
       for (let i = 0; i < roomGroups.length; i++) {
         const roomGroup = roomGroups[i];
@@ -163,9 +186,14 @@ export class Matchmaker {
         }
       }
 
-      console.log(`⏱️ [tryMatch] Complete (${(performance.now() - tryMatchStartTime).toFixed(0)}ms total)`);
-    } catch (err: any) {
-      console.error('❌ Failed to create match:', err?.message);
+      console.log(
+        `⏱️ [tryMatch] Complete (${(performance.now() - tryMatchStartTime).toFixed(0)}ms total)`
+      );
+    } catch (err: unknown) {
+      console.error(
+        '❌ Failed to create match:',
+        err instanceof Error ? err.message : err
+      );
 
       await this.mutex.runExclusive(() => {
         for (const player of groupedPlayers) {
@@ -176,7 +204,7 @@ export class Matchmaker {
           });
         }
       });
-      
+
       this.scheduleRetry();
     }
   }

@@ -71,7 +71,10 @@ export function validatePlayerName(input: unknown): ValidationResult<string> {
   }
 
   if (profanityMatcher.hasMatch(name)) {
-    name = 'Player';
+    return {
+      valid: false,
+      error: 'Display name contains inappropriate language',
+    };
   }
 
   return { valid: true, value: name };

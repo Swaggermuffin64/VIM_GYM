@@ -1171,13 +1171,15 @@ const PracticeEditor: React.FC = () => {
   // Practice session state
   const [playerName, setPlayerName] = useState(() => {
     try {
-      return localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? '';
+      return (localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? '').slice(0, 20);
     } catch {
       return '';
     }
   });
   const [isReady, setIsReady] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [taskProgress, setTaskProgress] = useState(0);
   const [numTasks, setNumTasks] = useState(0);
   const [isTaskComplete, setIsTaskComplete] = useState(false);
@@ -1527,8 +1529,13 @@ const PracticeEditor: React.FC = () => {
   const fetchPracticeSession = useCallback(async () => {
     if (isFetchingPracticeSessionRef.current) return;
     isFetchingPracticeSessionRef.current = true;
+    setIsLoadingTasks(true);
+    setLoadError(null);
     try {
       const response = await fetch(`${API_BASE}/api/task/practice`);
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
       const data = (await response.json()) as PracticeSessionResponse;
 
       skipLeaderboardRef.current = false;
@@ -1537,8 +1544,12 @@ const PracticeEditor: React.FC = () => {
       resetPracticeRunState();
     } catch (error) {
       console.error('Failed to fetch practice session:', error);
+      setLoadError(
+        error instanceof Error ? error.message : 'Failed to load tasks'
+      );
     } finally {
       isFetchingPracticeSessionRef.current = false;
+      setIsLoadingTasks(false);
     }
   }, [resetPracticeRunState]);
 
@@ -1956,7 +1967,7 @@ const PracticeEditor: React.FC = () => {
                     value={playerName}
                     onChange={handlePlayerNameChange}
                     placeholder="Anonymous"
-                    maxLength={64}
+                    maxLength={20}
                     autoComplete="off"
                     style={{
                       width: '140px',
@@ -2010,18 +2021,41 @@ const PracticeEditor: React.FC = () => {
               </div>
             </div>
 
-            <button
-              style={{
-                ...styles.readyButton,
-                ...(tasks.length === 0
-                  ? { opacity: 0.5, cursor: 'not-allowed' }
-                  : {}),
-              }}
-              onClick={handleReady}
-              disabled={tasks.length === 0}
-            >
-              {tasks.length === 0 ? 'Loading...' : 'Ready'}
-            </button>
+            {loadError ? (
+              <>
+                <div
+                  style={{
+                    color: colors.warning,
+                    fontSize: '13px',
+                    textAlign: 'center' as const,
+                    marginBottom: '8px',
+                    fontFamily: '"JetBrains Mono", monospace',
+                  }}
+                >
+                  Failed to load tasks
+                </div>
+                <button
+                  style={styles.readyButton}
+                  onClick={() => void fetchPracticeSession()}
+                  disabled={isLoadingTasks}
+                >
+                  {isLoadingTasks ? 'Loading...' : 'Retry'}
+                </button>
+              </>
+            ) : (
+              <button
+                style={{
+                  ...styles.readyButton,
+                  ...(isLoadingTasks || tasks.length === 0
+                    ? { opacity: 0.5, cursor: 'not-allowed' }
+                    : {}),
+                }}
+                onClick={handleReady}
+                disabled={isLoadingTasks || tasks.length === 0}
+              >
+                {isLoadingTasks ? 'Loading...' : 'Ready'}
+              </button>
+            )}
             <button style={styles.backButton} onClick={() => navigate('/')}>
               Back
             </button>

@@ -387,10 +387,20 @@ fastify.post<{
       .send({ success: false, error: 'Invalid player_id' });
   }
 
-  const sanitizedDisplayName =
-    display_name !== undefined
-      ? validatePlayerName(display_name).value
-      : undefined;
+  const displayNameResult =
+    display_name !== undefined ? validatePlayerName(display_name) : undefined;
+
+  if (displayNameResult && !displayNameResult.valid) {
+    request.log.warn(
+      { err: displayNameResult.error },
+      'leaderboard session rejected'
+    );
+    return reply
+      .status(400)
+      .send({ success: false, error: displayNameResult.error });
+  }
+
+  const sanitizedDisplayName = displayNameResult?.value;
 
   const result = await insertSessionLeaderboardRow({
     playMode: play_mode,
@@ -792,6 +802,13 @@ io.on('connection', (socket) => {
         const roomIdResult = validateOptionalRoomId(externalRoomId);
         const isPublicResult = validateBoolean(isPublic);
 
+        if (!nameResult.valid) {
+          socket.emit('room:error', {
+            message: nameResult.error || 'Invalid player name',
+          });
+          return;
+        }
+
         if (!roomIdResult.valid) {
           socket.emit('room:error', {
             message: roomIdResult.error || 'Invalid room ID',
@@ -830,6 +847,13 @@ io.on('connection', (socket) => {
       const nameResult = validatePlayerName(playerName);
       const roomIdResult = validateRoomId(roomId);
 
+      if (!nameResult.valid) {
+        socket.emit('room:error', {
+          message: nameResult.error || 'Invalid player name',
+        });
+        return;
+      }
+
       if (!roomIdResult.valid) {
         socket.emit('room:error', {
           message: roomIdResult.error || 'Invalid room ID',
@@ -860,6 +884,13 @@ io.on('connection', (socket) => {
         // Validate inputs
         const nameResult = validatePlayerName(playerName);
         const roomIdResult = validateRoomId(roomId);
+
+        if (!nameResult.valid) {
+          socket.emit('room:error', {
+            message: nameResult.error || 'Invalid player name',
+          });
+          return;
+        }
 
         if (!roomIdResult.valid) {
           socket.emit('room:error', {
@@ -924,6 +955,14 @@ io.on('connection', (socket) => {
       const startTime = performance.now();
       // Validate input
       const nameResult = validatePlayerName(playerName);
+
+      if (!nameResult.valid) {
+        socket.emit('room:error', {
+          message: nameResult.error || 'Invalid player name',
+        });
+        return;
+      }
+
       const safeName = nameResult.value!;
 
       const result = roomManager.findOrCreateQuickMatchRoom(socket, safeName);

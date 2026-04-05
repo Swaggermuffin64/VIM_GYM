@@ -24,8 +24,7 @@ export type LeaderboardRanks = {
 const RANK_CUTOFF = 5;
 
 async function queryLeaderboardRanks(
-  durationMs: number,
-  playMode: string
+  durationMs: number
 ): Promise<LeaderboardRanks> {
   const pool = getPool();
   if (!pool) return { weekly: null, monthly: null, allTime: null };
@@ -41,8 +40,8 @@ async function queryLeaderboardRanks(
          COUNT(*) FILTER (WHERE achieved_at >= date_trunc('month', NOW() AT TIME ZONE 'UTC')) + 1 AS monthly_rank,
          COUNT(*) + 1 AS all_time_rank
        FROM leaderboard_runs
-       WHERE duration_ms < $1 AND play_mode = $2`,
-      [durationMs, playMode]
+       WHERE duration_ms < $1`,
+      [durationMs]
     );
 
     const row = result.rows[0];
@@ -54,9 +53,6 @@ async function queryLeaderboardRanks(
 
     console.log('[leaderboard] queryLeaderboardRanks raw', {
       durationMs,
-      weekly_rank: row.weekly_rank,
-      monthly_rank: row.monthly_rank,
-      all_time_rank: row.all_time_rank,
       parsed: { weekly, monthly, allTime },
     });
 
@@ -171,7 +167,7 @@ export async function insertSessionLeaderboardRow(params: {
       durationMs,
       taskCount: params.tasks.length,
     });
-    const ranks = await queryLeaderboardRanks(durationMs, params.playMode);
+    const ranks = await queryLeaderboardRanks(durationMs);
     return { status: 'inserted', ranks };
   } catch (err) {
     console.error('[leaderboard] insertSessionLeaderboardRow failed', {
@@ -246,7 +242,7 @@ export async function insertMultiplayerRaceLeaderboardRows(params: {
         ]
       );
       inserted += 1;
-      const ranks = await queryLeaderboardRanks(durationMs, playMode);
+      const ranks = await queryLeaderboardRanks(durationMs);
       ranksMap.set(r.playerId, ranks);
       console.log('[leaderboard] insertMultiplayerRaceLeaderboardRow ok', {
         roomId: params.roomId,

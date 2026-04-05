@@ -1,5 +1,6 @@
 // Shared multiplayer types
 import type { Task } from '../types.js';
+import type { LeaderboardRanks } from '../db/leaderboard.js';
 //NEED TO SYNC MAX PLAYERS WITH MATCHMAKING SERVICE
 export const MAX_PLAYERS_PER_ROOM = 2;
 
@@ -80,6 +81,7 @@ export interface ServerToClientEvents {
       playerName: string;
       time: number;
       position: number;
+      ranks?: LeaderboardRanks | null;
     }>;
   }) => void;
 }

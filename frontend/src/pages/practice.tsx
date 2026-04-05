@@ -11,6 +11,7 @@ import type { CodeMirrorV } from '@replit/codemirror-vim';
 import { Transaction } from '@codemirror/state';
 
 import type { PracticeSummary, Task, TaskSummary } from '../types/task';
+import type { LeaderboardRanks } from '../types/multiplayer';
 import type {
   KeystrokeEvent,
   TaskKeystrokeSubmission,
@@ -20,6 +21,7 @@ import {
   formatTaskTypeLabel as sharedFormatTaskTypeLabel,
   expandRecommendedSequence as sharedExpandRecommendedSequence,
   formatKeysForDisplay as sharedFormatKeysForDisplay,
+  buildOptimalInfo,
 } from '../utils/keyFormatting';
 import {
   setTargetPosition,
@@ -40,6 +42,7 @@ import {
 import { SummaryTaskSandbox } from '../components/SummaryTaskSandbox';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const LEADERBOARD_TASK_SCHEMA_VERSION = 1;
 const KEY_LOG_VISIBLE_KEYS = 5;
 const CHEATSHEET_DOCK_WIDTH = 'clamp(18rem, 22vw, 24rem)';
 const CHEATSHEET_CONTAINER_SHIFT = 'clamp(2.375rem, 3.25vw, 3.5rem)';
@@ -583,6 +586,29 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
     transition: 'all 0.2s ease',
+  },
+  hintTaskButton: {
+    padding: '10px 16px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: colors.warning,
+    background: 'transparent',
+    border: `1px solid ${colors.warning}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    transition: 'all 0.2s ease',
+  },
+  hintReveal: {
+    marginTop: '8px',
+    padding: '10px 14px',
+    fontSize: '13px',
+    fontFamily: '"JetBrains Mono", monospace',
+    color: colors.warning,
+    background: `${colors.warning}10`,
+    border: `1px solid ${colors.warning}30`,
+    borderRadius: '8px',
+    lineHeight: 1.6,
   },
   sessionComplete: {
     display: 'flex',
@@ -1162,6 +1188,7 @@ const PracticeEditor: React.FC = () => {
     Record<string, number>
   >({});
   const [showCheatSheet, setShowCheatSheet] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [blockedEditHint, setBlockedEditHint] = useState<string | null>(null);
   const [isNewTasksHovered, setIsNewTasksHovered] = useState(false);
   const [isSameTasksHovered, setIsSameTasksHovered] = useState(false);
@@ -1169,9 +1196,17 @@ const PracticeEditor: React.FC = () => {
     if (typeof window === 'undefined') return false;
     return canDockCheatSheetForWidth(window.innerWidth);
   });
+  const [leaderboardRanks, setLeaderboardRanks] =
+    useState<LeaderboardRanks | null>(null);
 
   // Current task derived from state
   const currentTask = tasks[taskProgress] || null;
+
+  const currentTaskHint = useMemo(() => {
+    if (!currentTask) return null;
+    const { optimalSequence } = buildOptimalInfo(currentTask);
+    return optimalSequence ?? null;
+  }, [currentTask]);
 
   // Use refs to avoid stale closures
   const tasksRef = useRef<Task[]>([]);
@@ -1181,6 +1216,8 @@ const PracticeEditor: React.FC = () => {
   const taskStartedAtRef = useRef<number>(Date.now());
   const taskKeystrokesRef = useRef<KeystrokeEvent[]>([]);
   const submittedTaskIdsRef = useRef<Set<string>>(new Set());
+  const leaderboardSessionSubmittedRef = useRef(false);
+  const skipLeaderboardRef = useRef(false);
   const isFetchingPracticeSessionRef = useRef(false);
   const blockedHintTimerRef = useRef<number | null>(null);
 
@@ -1201,6 +1238,62 @@ const PracticeEditor: React.FC = () => {
       return () => clearInterval(interval);
     }
   }, [sessionStartTime, isSessionComplete]);
+
+  useEffect(() => {
+    if (!isSessionComplete || sessionStartTime == null) return;
+    const taskList = tasksRef.current;
+    if (taskList.length === 0) return;
+    if (leaderboardSessionSubmittedRef.current) return;
+    leaderboardSessionSubmittedRef.current = true;
+
+    if (skipLeaderboardRef.current) return;
+
+    const duration_ms = Date.now() - sessionStartTime;
+    void fetch(`${API_BASE}/api/leaderboard/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        play_mode: 'practice',
+        duration_ms,
+        tasks: taskList,
+        task_schema_version: LEADERBOARD_TASK_SCHEMA_VERSION,
+      }),
+    })
+      .then(async (res) => {
+        const text = await res.text();
+        let body: unknown;
+        try {
+          body = text ? JSON.parse(text) : null;
+        } catch {
+          body = text;
+        }
+        if (!res.ok) {
+          console.error(
+            '[leaderboard] session record HTTP error',
+            res.status,
+            body
+          );
+          return;
+        }
+        if (
+          body &&
+          typeof body === 'object' &&
+          'persisted' in body &&
+          (body as { persisted?: boolean }).persisted === false
+        ) {
+          console.warn('[leaderboard] session not persisted', body);
+          return;
+        }
+        console.info('[leaderboard] session recorded', body);
+        if (body && typeof body === 'object' && 'ranks' in body) {
+          const ranks = (body as { ranks?: LeaderboardRanks }).ranks ?? null;
+          setLeaderboardRanks(ranks);
+        }
+      })
+      .catch((err) => {
+        console.error('[leaderboard] session record network error:', err);
+      });
+  }, [isSessionComplete, sessionStartTime]);
 
   useEffect(
     () => () => {
@@ -1366,6 +1459,7 @@ const PracticeEditor: React.FC = () => {
     taskStartedAtRef.current = Date.now();
     taskKeystrokesRef.current = [];
     setRecentKeys([]);
+    setShowHint(false);
 
     if (task.type === 'navigate') {
       view.dispatch({
@@ -1391,12 +1485,14 @@ const PracticeEditor: React.FC = () => {
     setIsTaskComplete(false);
     isTaskCompleteRef.current = false;
     setIsSessionComplete(false);
-    setSessionStartTime(Date.now());
+    setSessionStartTime(null);
     setElapsedTime(0);
     setFinalTime(0);
     currentTaskIdRef.current = null;
     taskKeystrokesRef.current = [];
     submittedTaskIdsRef.current.clear();
+    leaderboardSessionSubmittedRef.current = false;
+    setLeaderboardRanks(null);
     setRecentKeys([]);
     setTaskSummaries([]);
     setSummaryTaskCompletion({});
@@ -1411,6 +1507,7 @@ const PracticeEditor: React.FC = () => {
       const response = await fetch(`${API_BASE}/api/task/practice`);
       const data = (await response.json()) as PracticeSessionResponse;
 
+      skipLeaderboardRef.current = false;
       setTasks(data.tasks);
       setNumTasks(data.numTasks);
       resetPracticeRunState();
@@ -1428,9 +1525,11 @@ const PracticeEditor: React.FC = () => {
       return;
     }
 
+    skipLeaderboardRef.current = true;
     setNumTasks(sameTasks.length);
     resetPracticeRunState();
     setupTaskInEditor(sameTasks[0]!);
+    setSessionStartTime(Date.now());
     editorRef.current?.view?.focus();
   }, [fetchPracticeSession, resetPracticeRunState, setupTaskInEditor]);
 
@@ -1446,6 +1545,7 @@ const PracticeEditor: React.FC = () => {
     // Clear the navigation state so a page refresh fetches fresh tasks
     window.history.replaceState({}, '');
 
+    skipLeaderboardRef.current = true;
     setTasks(incoming);
     setNumTasks(incoming.length);
     resetPracticeRunState();
@@ -1467,11 +1567,15 @@ const PracticeEditor: React.FC = () => {
     }
   }, [isReady, tasks.length, fetchPracticeSession]);
 
-  // Set up the first task when tasks are loaded (or reloaded on restart)
+  // Set up the first task when tasks are loaded (or reloaded on restart).
+  // Also starts the session timer — the editor view only exists after the
+  // Ready screen, so this naturally gates the timer on user action.
   useEffect(() => {
     if (tasks.length === 0 || taskProgress !== 0) return;
+    if (!editorRef.current?.view) return;
     setupTaskInEditor(tasks[0]);
-    editorRef.current?.view?.focus();
+    editorRef.current.view.focus();
+    setSessionStartTime(Date.now());
   }, [tasks, taskProgress, setupTaskInEditor, editorReadyTick]);
 
   useEffect(() => {
@@ -1678,6 +1782,24 @@ const PracticeEditor: React.FC = () => {
         capture: true,
       });
   }, [isReady, isSessionComplete, currentTask, toggleCheatSheet]);
+
+  useEffect(() => {
+    const handleHintHotkey = (e: KeyboardEvent) => {
+      if (e.key !== 'F9') return;
+      if (!isReady || isSessionComplete || !currentTask || !currentTaskHint)
+        return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      setShowHint((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', handleHintHotkey, { capture: true });
+    return () =>
+      window.removeEventListener('keydown', handleHintHotkey, {
+        capture: true,
+      });
+  }, [isReady, isSessionComplete, currentTask, currentTaskHint]);
 
   // Handle cursor position changes (for navigate tasks)
   const handleCursorChange = useCallback(
@@ -1957,6 +2079,52 @@ const PracticeEditor: React.FC = () => {
                 </span>
               </div>
             </div>
+            {(() => {
+              if (!leaderboardRanks) return null;
+              const badges: Array<{ label: string; rank: number }> = [];
+              if (leaderboardRanks.daily != null)
+                badges.push({ label: 'Today', rank: leaderboardRanks.daily });
+              if (leaderboardRanks.monthly != null)
+                badges.push({
+                  label: 'This Month',
+                  rank: leaderboardRanks.monthly,
+                });
+              if (leaderboardRanks.allTime != null)
+                badges.push({
+                  label: 'All Time',
+                  rank: leaderboardRanks.allTime,
+                });
+              if (badges.length === 0) return null;
+              return (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '10px',
+                    flexWrap: 'wrap',
+                    marginTop: '14px',
+                  }}
+                >
+                  {badges.map((b) => (
+                    <span
+                      key={b.label}
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 700,
+                        padding: '6px 14px',
+                        borderRadius: '999px',
+                        background: `${colors.success}20`,
+                        border: `1px solid ${colors.success}60`,
+                        color: colors.successLight,
+                        fontFamily: '"JetBrains Mono", monospace',
+                        letterSpacing: '0.3px',
+                      }}
+                    >
+                      #{b.rank} {b.label}
+                    </span>
+                  ))}
+                </div>
+              );
+            })()}
             <div style={styles.completeButtons}>
               <button style={styles.completeButton} onClick={restartSameTasks}>
                 Restart Same Tasks
@@ -2239,6 +2407,20 @@ const PracticeEditor: React.FC = () => {
                     >
                       {showCheatSheet ? 'Cheatsheet (F8) ✓' : 'Cheatsheet (F8)'}
                     </button>
+                    {currentTaskHint && (
+                      <button
+                        type="button"
+                        style={styles.hintTaskButton}
+                        onClick={() => setShowHint((prev) => !prev)}
+                      >
+                        {showHint ? 'Hint (F9) ✓' : 'Hint (F9)'}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {showHint && currentTaskHint && (
+                  <div style={styles.hintReveal}>
+                    Recommended: {currentTaskHint}
                   </div>
                 )}
               </div>

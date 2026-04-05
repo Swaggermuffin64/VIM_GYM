@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import PracticeEditor from './pages/practice';
 import MultiplayerGame from './pages/multiplayer';
 import About from './pages/about';
+import { LeaderboardTable } from './components/LeaderboardTable';
 import { colors } from './theme';
 import './App.css';
 
@@ -36,30 +37,23 @@ function DiscordIcon({ style }: { style?: React.CSSProperties }) {
   );
 }
 
-const homeStyles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100vh',
-    background: `linear-gradient(180deg, ${colors.bgDark} 0%, #0f0f1a 100%)`,
-    display: 'flex',
-    flexDirection: 'column',
-    position: 'relative' as const,
-    overflow: 'hidden',
-  },
+/* ------------------------------------------------------------------ */
+/*  Shared banner styles (used by both Landing and PlayHome)          */
+/* ------------------------------------------------------------------ */
+
+const bannerStyles: Record<string, React.CSSProperties> = {
   topBanner: {
     width: '100%',
+    minHeight: '56px',
+    boxSizing: 'border-box',
     padding: '16px 32px',
     background: '#000000',
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  topBannerTitle: {
-    fontSize: '20px',
-    fontWeight: 700,
-    color: colors.textPrimary,
-    fontFamily: '"JetBrains Mono", monospace',
-    margin: 0,
+    position: 'relative',
+    zIndex: 1000,
   },
   navLinks: {
     display: 'flex',
@@ -72,7 +66,7 @@ const homeStyles: Record<string, React.CSSProperties> = {
     color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", monospace',
     textDecoration: 'none',
-    textTransform: 'uppercase' as const,
+    textTransform: 'uppercase',
     transition: 'color 0.2s ease',
   },
   navLinkWithIcon: {
@@ -85,53 +79,79 @@ const homeStyles: Record<string, React.CSSProperties> = {
     height: '16px',
     flexShrink: 0,
   },
+  bannerTitle: {
+    fontSize: '20px',
+    fontWeight: 700,
+    color: colors.textPrimary,
+    fontFamily: '"JetBrains Mono", monospace',
+    margin: 0,
+    textDecoration: 'none',
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/*  Home page (game mode cards + leaderboard)                         */
+/* ------------------------------------------------------------------ */
+
+const playStyles: Record<string, React.CSSProperties> = {
+  leaderboardWrap: {
+    width: '100%',
+    maxWidth: '836px',
+    marginTop: '24px',
+    background: 'transparent',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '12px',
+    padding: '16px 20px',
+  },
+  container: {
+    minHeight: '100vh',
+    background: `linear-gradient(180deg, ${colors.bgDark} 0%, #0f0f1a 100%)`,
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    overflow: 'hidden',
+  },
   mainContent: {
     flex: 1,
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: '32px',
+    padding: '12vh 32px 32px',
   },
-  // Decorative background elements
   bgGlow1: {
-    position: 'absolute' as const,
+    position: 'absolute',
     top: '10%',
     left: '10%',
     width: '500px',
     height: '500px',
     background: `radial-gradient(circle, ${colors.primaryGlow} 0%, transparent 70%)`,
     filter: 'blur(80px)',
-    pointerEvents: 'none' as const,
-    animation: 'float 15s ease-in-out infinite, pulse-glow 4s ease-in-out infinite',
+    pointerEvents: 'none',
+    animation:
+      'float 15s ease-in-out infinite, pulse-glow 4s ease-in-out infinite',
   },
   bgGlow2: {
-    position: 'absolute' as const,
+    position: 'absolute',
     bottom: '10%',
     right: '10%',
     width: '500px',
     height: '500px',
     background: `radial-gradient(circle, ${colors.secondaryGlow} 0%, transparent 70%)`,
     filter: 'blur(80px)',
-    pointerEvents: 'none' as const,
-    animation: 'float 18s ease-in-out infinite reverse, pulse-glow 5s ease-in-out infinite 1s',
+    pointerEvents: 'none',
+    animation:
+      'float 18s ease-in-out infinite reverse, pulse-glow 5s ease-in-out infinite 1s',
   },
   content: {
-    position: 'relative' as const,
+    position: 'relative',
     zIndex: 1,
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     alignItems: 'center',
   },
   header: {
-    textAlign: 'center' as const,
-    marginBottom: '48px',
-  },
-  titleContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: '16px',
+    textAlign: 'center',
+    marginBottom: '32px',
   },
   title: {
     fontSize: '56px',
@@ -150,7 +170,7 @@ const homeStyles: Record<string, React.CSSProperties> = {
   buttons: {
     display: 'flex',
     gap: '24px',
-    flexWrap: 'wrap' as const,
+    flexWrap: 'wrap',
     justifyContent: 'center',
     maxWidth: '1000px',
   },
@@ -168,12 +188,12 @@ const homeStyles: Record<string, React.CSSProperties> = {
     transition: 'all 0.3s ease',
     cursor: 'pointer',
     display: 'flex',
-    flexDirection: 'column' as const,
-    position: 'relative' as const,
-    overflow: 'hidden' as const,
+    flexDirection: 'column',
+    position: 'relative',
+    overflow: 'hidden',
   },
   cardGlow: {
-    position: 'absolute' as const,
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
@@ -206,190 +226,219 @@ const homeStyles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     letterSpacing: '0.5px',
     marginTop: '16px',
-    textTransform: 'uppercase' as const,
+    textTransform: 'uppercase',
   },
 };
 
-function Home() {
+function PlayHome() {
   return (
-    <div style={homeStyles.container}>
-      {/* Top Banner */}
-      <div style={homeStyles.topBanner}>
-        <div style={homeStyles.topBannerTitle}>VIM_GYM</div>
-        <div style={homeStyles.navLinks}>
+    <div style={playStyles.container}>
+      <div style={bannerStyles.topBanner}>
+        <div style={bannerStyles.bannerTitle}>VIM_GYM</div>
+        <div style={bannerStyles.navLinks}>
           <a
             href="https://github.com/swaggermuffin64/vim-racing"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ ...homeStyles.navLink, ...homeStyles.navLinkWithIcon }}
+            style={{ ...bannerStyles.navLink, ...bannerStyles.navLinkWithIcon }}
           >
-            <GitHubIcon style={homeStyles.navIcon} />
+            <GitHubIcon style={bannerStyles.navIcon} />
             GITHUB
           </a>
           <a
             href="https://discord.gg/JNHRpdEbaG"
             target="_blank"
             rel="noopener noreferrer"
-            style={{ ...homeStyles.navLink, ...homeStyles.navLinkWithIcon }}
+            style={{ ...bannerStyles.navLink, ...bannerStyles.navLinkWithIcon }}
           >
-            <DiscordIcon style={homeStyles.navIcon} />
+            <DiscordIcon style={bannerStyles.navIcon} />
             DISCORD
           </a>
-          <Link to="/about" style={homeStyles.navLink}>
-           ABOUT
+          <Link to="/about" style={bannerStyles.navLink}>
+            ABOUT
           </Link>
           <a
             href="https://buymeacoffee.com/jacksonfisk"
             target="_blank"
             rel="noopener noreferrer"
-            style={homeStyles.navLink}
+            style={bannerStyles.navLink}
           >
-           SUPPORT 
+            SUPPORT
           </a>
         </div>
       </div>
 
-      <div style={homeStyles.mainContent}>
-        {/* Background glow effects */}
-        <div style={homeStyles.bgGlow1} />
-        <div style={homeStyles.bgGlow2} />
-        
-        <div style={homeStyles.content}>
-          {/* Header */}
-          <div style={homeStyles.header}>
-            <div style={homeStyles.titleContainer}>
-              <h1 style={homeStyles.title}>VIM_GYM</h1>
+      <div style={playStyles.mainContent}>
+        <div style={playStyles.bgGlow1} />
+        <div style={playStyles.bgGlow2} />
+
+        <div style={playStyles.content}>
+          <div style={playStyles.header}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px',
+              }}
+            >
+              <h1 style={playStyles.title}>VIM_GYM</h1>
             </div>
-            <p style={homeStyles.subtitle}>
-              Train your Vim muscles.
-            </p>
+            <p style={playStyles.subtitle}>Train your Vim muscles.</p>
           </div>
-          
-          {/* Game Mode Cards */}
-          <div style={homeStyles.buttons}>
-          {/* Quick Play Card */}
-          <Link to="/multiplayer?mode=quick" style={homeStyles.cardLink}>
-            <div
-              style={homeStyles.card}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-6px) scale(1.02)';
-                e.currentTarget.style.borderColor = colors.success;
-                e.currentTarget.style.boxShadow = `0 12px 40px ${colors.successGlow}, inset 0 1px 0 rgba(255,255,255,0.1)`;
-                const glow = e.currentTarget.querySelector('.card-glow') as HTMLElement;
-                if (glow) glow.style.background = `linear-gradient(90deg, transparent, ${colors.success}, transparent)`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.borderColor = colors.border;
-                e.currentTarget.style.boxShadow = 'none';
-                const glow = e.currentTarget.querySelector('.card-glow') as HTMLElement;
-                if (glow) glow.style.background = 'transparent';
-              }}
-            >
-              <div className="card-glow" style={homeStyles.cardGlow} />
-              <div style={homeStyles.cardTitle}>Quick Play</div>
-              <div style={homeStyles.cardDescription}>
-                Jump into a match instantly. Get paired with another player automatically.
-              </div>
-              <div 
-                style={{
-                  ...homeStyles.badge,
-                  background: `${colors.success}15`,
-                  color: colors.successLight,
-                  border: `1px solid ${colors.success}40`,
-                }}
-              >
-                Fastest
-              </div>
-            </div>
-          </Link>
 
-          {/* Private Match Card */}
-          <Link to="/multiplayer?mode=private" style={homeStyles.cardLink}>
-            <div
-              style={homeStyles.card}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-6px) scale(1.02)';
-                e.currentTarget.style.borderColor = colors.secondary;
-                e.currentTarget.style.boxShadow = `0 12px 40px ${colors.secondaryGlow}, inset 0 1px 0 rgba(255,255,255,0.1)`;
-                const glow = e.currentTarget.querySelector('.card-glow') as HTMLElement;
-                if (glow) glow.style.background = `linear-gradient(90deg, transparent, ${colors.secondary}, transparent)`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.borderColor = colors.border;
-                e.currentTarget.style.boxShadow = 'none';
-                const glow = e.currentTarget.querySelector('.card-glow') as HTMLElement;
-                if (glow) glow.style.background = 'transparent';
-              }}
-            >
-              <div className="card-glow" style={homeStyles.cardGlow} />
-              <div style={homeStyles.cardTitle}>Private Match</div>
-              <div style={homeStyles.cardDescription}>
-                Create a private room or join with a code. Challenge your friends!
-              </div>
-              <div 
-                style={{
-                  ...homeStyles.badge,
-                  background: `${colors.secondary}15`,
-                  color: colors.secondaryLight,
-                  border: `1px solid ${colors.secondary}40`,
+          <div style={playStyles.buttons}>
+            {/* Quick Play */}
+            <Link to="/multiplayer?mode=quick" style={playStyles.cardLink}>
+              <div
+                style={playStyles.card}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    'translateY(-6px) scale(1.02)';
+                  e.currentTarget.style.borderColor = colors.success;
+                  e.currentTarget.style.boxShadow = `0 12px 40px ${colors.successGlow}, inset 0 1px 0 rgba(255,255,255,0.1)`;
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow)
+                    glow.style.background = `linear-gradient(90deg, transparent, ${colors.success}, transparent)`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow) glow.style.background = 'transparent';
                 }}
               >
-                With Friends
+                <div className="card-glow" style={playStyles.cardGlow} />
+                <div style={playStyles.cardTitle}>Quick Play</div>
+                <div style={playStyles.cardDescription}>
+                  Jump into a match instantly. Get paired with another player
+                  automatically.
+                </div>
+                <div
+                  style={{
+                    ...playStyles.badge,
+                    background: `${colors.success}15`,
+                    color: colors.successLight,
+                    border: `1px solid ${colors.success}40`,
+                  }}
+                >
+                  Fastest
+                </div>
               </div>
-            </div>
-          </Link>
+            </Link>
 
-          {/* Practice Card */}
-          <Link to="/practice" style={homeStyles.cardLink}>
-            <div
-              style={homeStyles.card}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-6px) scale(1.02)';
-                e.currentTarget.style.borderColor = colors.primary;
-                e.currentTarget.style.boxShadow = `0 12px 40px ${colors.primaryGlow}, inset 0 1px 0 rgba(255,255,255,0.1)`;
-                const glow = e.currentTarget.querySelector('.card-glow') as HTMLElement;
-                if (glow) glow.style.background = `linear-gradient(90deg, transparent, ${colors.primary}, transparent)`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.borderColor = colors.border;
-                e.currentTarget.style.boxShadow = 'none';
-                const glow = e.currentTarget.querySelector('.card-glow') as HTMLElement;
-                if (glow) glow.style.background = 'transparent';
-              }}
-            >
-              <div className="card-glow" style={homeStyles.cardGlow} />
-              <div style={homeStyles.cardTitle}>Practice</div>
-              <div style={homeStyles.cardDescription}>
-                Hone your Vim skills. Complete navigation and deletion challenges.
-              </div>
-              <div 
-                style={{
-                  ...homeStyles.badge,
-                  background: `${colors.primary}15`,
-                  color: colors.primaryLight,
-                  border: `1px solid ${colors.primary}40`,
+            {/* Private Match */}
+            <Link to="/multiplayer?mode=private" style={playStyles.cardLink}>
+              <div
+                style={playStyles.card}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    'translateY(-6px) scale(1.02)';
+                  e.currentTarget.style.borderColor = colors.secondary;
+                  e.currentTarget.style.boxShadow = `0 12px 40px ${colors.secondaryGlow}, inset 0 1px 0 rgba(255,255,255,0.1)`;
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow)
+                    glow.style.background = `linear-gradient(90deg, transparent, ${colors.secondary}, transparent)`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow) glow.style.background = 'transparent';
                 }}
               >
-                Solo
+                <div className="card-glow" style={playStyles.cardGlow} />
+                <div style={playStyles.cardTitle}>Private Match</div>
+                <div style={playStyles.cardDescription}>
+                  Create a private room or join with a code. Challenge your
+                  friends!
+                </div>
+                <div
+                  style={{
+                    ...playStyles.badge,
+                    background: `${colors.secondary}15`,
+                    color: colors.secondaryLight,
+                    border: `1px solid ${colors.secondary}40`,
+                  }}
+                >
+                  With Friends
+                </div>
               </div>
+            </Link>
+
+            {/* Practice */}
+            <Link to="/practice" style={playStyles.cardLink}>
+              <div
+                style={playStyles.card}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    'translateY(-6px) scale(1.02)';
+                  e.currentTarget.style.borderColor = colors.primary;
+                  e.currentTarget.style.boxShadow = `0 12px 40px ${colors.primaryGlow}, inset 0 1px 0 rgba(255,255,255,0.1)`;
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow)
+                    glow.style.background = `linear-gradient(90deg, transparent, ${colors.primary}, transparent)`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow) glow.style.background = 'transparent';
+                }}
+              >
+                <div className="card-glow" style={playStyles.cardGlow} />
+                <div style={playStyles.cardTitle}>Practice</div>
+                <div style={playStyles.cardDescription}>
+                  Hone your Vim skills. Complete navigation and deletion
+                  challenges.
+                </div>
+                <div
+                  style={{
+                    ...playStyles.badge,
+                    background: `${colors.primary}15`,
+                    color: colors.primaryLight,
+                    border: `1px solid ${colors.primary}40`,
+                  }}
+                >
+                  Solo
+                </div>
               </div>
             </Link>
           </div>
 
+          <div style={playStyles.leaderboardWrap}>
+            <LeaderboardTable />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Router                                                            */
+/* ------------------------------------------------------------------ */
+
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<PlayHome />} />
         <Route path="/about" element={<About />} />
         <Route path="/practice" element={<PracticeEditor />} />
         <Route path="/multiplayer" element={<MultiplayerGame />} />

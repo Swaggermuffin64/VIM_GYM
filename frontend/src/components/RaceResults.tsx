@@ -17,19 +17,19 @@ const colors = {
   bgDark: '#0a0a0f',
   bgGradientStart: '#0f172a',
   bgGradientEnd: '#1e1b4b',
-  
+
   accent: '#a78bfa',
   accentLight: '#c4b5fd',
   accentGlow: 'rgba(167, 139, 250, 0.25)',
-  
+
   textPrimary: '#f1f5f9',
   textSecondary: '#94a3b8',
   textMuted: '#64748b',
-  
+
   border: '#334155',
   success: '#22c55e',
   successLight: '#86efac',
-  
+
   gold: '#fbbf24',
   silver: '#94a3b8',
   bronze: '#d97706',
@@ -181,7 +181,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
 }) => {
   const winner = rankings[0] ?? null;
   const isWinner = winner?.playerId === myPlayerId;
-  
+
   const formatTime = (ms: number): string => {
     if (ms === 0) return raceComplete ? 'DNF' : 'Racing...';
     const seconds = ms / 1000;
@@ -189,7 +189,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
   };
 
   const getMyPosition = () => {
-    const idx = rankings.findIndex(r => r.playerId === myPlayerId);
+    const idx = rankings.findIndex((r) => r.playerId === myPlayerId);
     return idx >= 0 ? idx + 1 : null;
   };
 
@@ -199,7 +199,12 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
         <span
           style={{
             ...styles.positionTag,
-            color: ranking.position === 1 ? colors.gold : ranking.position === 2 ? colors.silver : colors.textMuted,
+            color:
+              ranking.position === 1
+                ? colors.gold
+                : ranking.position === 2
+                  ? colors.silver
+                  : colors.textMuted,
           }}
         >
           {positionLabels[ranking.position - 1] || `#${ranking.position}`}
@@ -214,7 +219,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
 
   const getBestPlayerIds = (
     getter: (ranking: Ranking) => number | null,
-    higherIsBetter: boolean,
+    higherIsBetter: boolean
   ): Set<string> => {
     let best: number | null = null;
     const bestIds = new Set<string>();
@@ -244,15 +249,19 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
 
   const bestFinishTimeIds = getBestPlayerIds(
     (ranking) => (ranking.time > 0 ? ranking.time : null),
-    false,
+    false
   );
   const bestAvgDurationIds = getBestPlayerIds((ranking) => {
     const stats = playerAveragesById[ranking.playerId];
-    return typeof stats?.avgDurationMs === 'number' ? stats.avgDurationMs : null;
+    return typeof stats?.avgDurationMs === 'number'
+      ? stats.avgDurationMs
+      : null;
   }, false);
   const bestKeysPerSecondIds = getBestPlayerIds((ranking) => {
     const stats = playerAveragesById[ranking.playerId];
-    return typeof stats?.keysPerSecond === 'number' ? stats.keysPerSecond : null;
+    return typeof stats?.keysPerSecond === 'number'
+      ? stats.keysPerSecond
+      : null;
   }, true);
   const bestAvgKeysIds = getBestPlayerIds((ranking) => {
     const stats = playerAveragesById[ranking.playerId];
@@ -267,14 +276,18 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
           {isWinner ? 'Victory!' : 'Race Complete'}
         </div>
         <p style={styles.subtitle}>
-          {isWinner 
-            ? 'Congratulations, you won!' 
-            : `You finished #${getMyPosition()}`
-          }
+          {isWinner
+            ? 'Congratulations, you won!'
+            : `You finished #${getMyPosition()}`}
         </p>
 
         <div style={styles.tableWrap}>
-          <div style={{ ...styles.tableHeader, gridTemplateColumns: columnTemplate }}>
+          <div
+            style={{
+              ...styles.tableHeader,
+              gridTemplateColumns: columnTemplate,
+            }}
+          >
             <div style={styles.headerCell}>Player</div>
             <div style={styles.headerCell}>Finish Time</div>
             <div style={styles.headerCell}>Duration/Task</div>
@@ -289,23 +302,73 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
                 <div
                   key={ranking.playerId}
                   style={{
-                    ...styles.row, gridTemplateColumns: columnTemplate,
+                    ...styles.row,
+                    gridTemplateColumns: columnTemplate,
                     ...(isLast ? styles.rowLast : {}),
                   }}
                 >
-                  <div style={styles.rowTitle}>{renderPlayerHeader(ranking)}</div>
-                  <div
-                    style={{
-                      ...styles.statValue,
-                      ...(bestFinishTimeIds.has(ranking.playerId) ? styles.statValueBetter : {}),
-                    }}
-                  >
-                    {formatTime(ranking.time)}
+                  <div style={styles.rowTitle}>
+                    {renderPlayerHeader(ranking)}
                   </div>
                   <div
                     style={{
                       ...styles.statValue,
-                      ...(bestAvgDurationIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                      ...(bestFinishTimeIds.has(ranking.playerId)
+                        ? styles.statValueBetter
+                        : {}),
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {formatTime(ranking.time)}
+                    {ranking.ranks &&
+                      (() => {
+                        const badges: Array<{ label: string; rank: number }> =
+                          [];
+                        if (ranking.ranks.daily != null)
+                          badges.push({
+                            label: 'Today',
+                            rank: ranking.ranks.daily,
+                          });
+                        if (ranking.ranks.monthly != null)
+                          badges.push({
+                            label: 'Month',
+                            rank: ranking.ranks.monthly,
+                          });
+                        if (ranking.ranks.allTime != null)
+                          badges.push({
+                            label: 'All Time',
+                            rank: ranking.ranks.allTime,
+                          });
+                        return badges.map((b) => (
+                          <span
+                            key={b.label}
+                            style={{
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '999px',
+                              background: `${colors.success}20`,
+                              border: `1px solid ${colors.success}66`,
+                              color: colors.successLight,
+                              fontFamily: '"JetBrains Mono", monospace',
+                              letterSpacing: '0.3px',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            #{b.rank} {b.label}
+                          </span>
+                        ));
+                      })()}
+                  </div>
+                  <div
+                    style={{
+                      ...styles.statValue,
+                      ...(bestAvgDurationIds.has(ranking.playerId)
+                        ? styles.statValueBetter
+                        : {}),
                     }}
                   >
                     {stats ? formatTenthsDuration(stats.avgDurationMs) : '--'}
@@ -313,7 +376,9 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
                   <div
                     style={{
                       ...styles.statValue,
-                      ...(bestKeysPerSecondIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                      ...(bestKeysPerSecondIds.has(ranking.playerId)
+                        ? styles.statValueBetter
+                        : {}),
                     }}
                   >
                     {stats ? stats.keysPerSecond.toFixed(2) : '--'}
@@ -321,7 +386,9 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
                   <div
                     style={{
                       ...styles.statValue,
-                      ...(bestAvgKeysIds.has(ranking.playerId) ? styles.statValueBetter : {}),
+                      ...(bestAvgKeysIds.has(ranking.playerId)
+                        ? styles.statValueBetter
+                        : {}),
                     }}
                   >
                     {typeof stats?.avgKeys === 'number' ? stats.avgKeys : '--'}
@@ -358,4 +425,3 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
     </div>
   );
 };
-

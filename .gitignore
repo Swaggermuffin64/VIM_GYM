@@ -1,6 +1,7 @@
 # Environment files
 .env
 *.env
+backend/supabase
 node_modules/
 .DS_Store
 

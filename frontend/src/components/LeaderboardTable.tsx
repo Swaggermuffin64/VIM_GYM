@@ -15,10 +15,10 @@ type LeaderboardEntry = {
 
 type PlayModeFilter = 'all' | 'practice' | 'quick_play' | 'private_match';
 
-type TimeRange = 'all_time' | 'today' | 'month';
+type TimeRange = 'all_time' | 'week' | 'month';
 
 const TIME_RANGE_OPTIONS: readonly (readonly [TimeRange, string])[] = [
-  ['today', 'Today'],
+  ['week', 'This Week'],
   ['month', 'This Month'],
   ['all_time', 'All Time'],
 ];
@@ -474,12 +474,48 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div style={{ marginBottom: '16px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '16px',
+          }}
+        >
           <ToggleRow
             options={TIME_RANGE_OPTIONS}
             value={timeRange}
             onChange={setTimeRange}
           />
+          <p
+            style={{
+              ...mono,
+              fontSize: '12px',
+              color: colors.textMuted,
+              margin: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                border: `1px solid ${colors.textMuted}`,
+                fontSize: '11px',
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              i
+            </span>
+            Replayed tasks are not eligible for the leaderboard.
+          </p>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>

@@ -387,25 +387,19 @@ fastify.post<{
       .send({ success: false, error: 'Invalid player_id' });
   }
 
-  if (
-    typeof display_name !== 'undefined' &&
-    (typeof display_name !== 'string' || display_name.length > 64)
-  ) {
-    request.log.warn(
-      { err: 'Invalid display_name' },
-      'leaderboard session rejected'
-    );
-    return reply
-      .status(400)
-      .send({ success: false, error: 'Invalid display_name' });
-  }
+  const sanitizedDisplayName =
+    display_name !== undefined
+      ? validatePlayerName(display_name).value
+      : undefined;
 
   const result = await insertSessionLeaderboardRow({
     playMode: play_mode,
     durationMs: duration_ms,
     tasks,
     ...(player_id !== undefined ? { playerId: player_id } : {}),
-    ...(display_name !== undefined ? { displayName: display_name } : {}),
+    ...(sanitizedDisplayName !== undefined
+      ? { displayName: sanitizedDisplayName }
+      : {}),
   });
 
   if (result.status === 'inserted') {

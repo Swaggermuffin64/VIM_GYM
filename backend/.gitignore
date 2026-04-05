@@ -6,3 +6,4 @@ bin/
 .env.test
 *.log
 .DS_Store
+supabase

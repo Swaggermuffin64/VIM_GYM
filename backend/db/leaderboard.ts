@@ -16,7 +16,7 @@ function pgErrorDetails(err: unknown): Record<string, string> {
 }
 
 export type LeaderboardRanks = {
-  daily: number | null;
+  weekly: number | null;
   monthly: number | null;
   allTime: number | null;
 };
@@ -28,16 +28,16 @@ async function queryLeaderboardRanks(
   playMode: string
 ): Promise<LeaderboardRanks> {
   const pool = getPool();
-  if (!pool) return { daily: null, monthly: null, allTime: null };
+  if (!pool) return { weekly: null, monthly: null, allTime: null };
 
   try {
     const result = await pool.query<{
-      daily_rank: string;
+      weekly_rank: string;
       monthly_rank: string;
       all_time_rank: string;
     }>(
       `SELECT
-         COUNT(*) FILTER (WHERE achieved_at >= (NOW() AT TIME ZONE 'UTC')::date) + 1 AS daily_rank,
+         COUNT(*) FILTER (WHERE achieved_at >= date_trunc('week', NOW() AT TIME ZONE 'UTC')) + 1 AS weekly_rank,
          COUNT(*) FILTER (WHERE achieved_at >= date_trunc('month', NOW() AT TIME ZONE 'UTC')) + 1 AS monthly_rank,
          COUNT(*) + 1 AS all_time_rank
        FROM leaderboard_runs
@@ -46,22 +46,22 @@ async function queryLeaderboardRanks(
     );
 
     const row = result.rows[0];
-    if (!row) return { daily: null, monthly: null, allTime: null };
+    if (!row) return { weekly: null, monthly: null, allTime: null };
 
-    const daily = Number(row.daily_rank);
+    const weekly = Number(row.weekly_rank);
     const monthly = Number(row.monthly_rank);
     const allTime = Number(row.all_time_rank);
 
     console.log('[leaderboard] queryLeaderboardRanks raw', {
       durationMs,
-      daily_rank: row.daily_rank,
+      weekly_rank: row.weekly_rank,
       monthly_rank: row.monthly_rank,
       all_time_rank: row.all_time_rank,
-      parsed: { daily, monthly, allTime },
+      parsed: { weekly, monthly, allTime },
     });
 
     return {
-      daily: daily <= RANK_CUTOFF ? daily : null,
+      weekly: weekly <= RANK_CUTOFF ? weekly : null,
       monthly: monthly <= RANK_CUTOFF ? monthly : null,
       allTime: allTime <= RANK_CUTOFF ? allTime : null,
     };
@@ -70,7 +70,7 @@ async function queryLeaderboardRanks(
       '[leaderboard] queryLeaderboardRanks failed',
       pgErrorDetails(err)
     );
-    return { daily: null, monthly: null, allTime: null };
+    return { weekly: null, monthly: null, allTime: null };
   }
 }
 
@@ -295,15 +295,15 @@ const ALLOWED_PLAY_MODE_FILTERS = new Set([
   'private_match',
 ]);
 
-const ALLOWED_TIME_RANGES = new Set(['all_time', 'today', 'month']);
+const ALLOWED_TIME_RANGES = new Set(['all_time', 'week', 'month']);
 
 function timeRangeWhereClause(timeRange: string): {
   sql: string;
   params: unknown[];
 } {
-  if (timeRange === 'today') {
+  if (timeRange === 'week') {
     return {
-      sql: `achieved_at >= (NOW() AT TIME ZONE 'UTC')::date`,
+      sql: `achieved_at >= date_trunc('week', NOW() AT TIME ZONE 'UTC')`,
       params: [],
     };
   }

@@ -29,5 +29,8 @@
     "*.{css,json,md}": [
       "prettier --write"
     ]
+  },
+  "dependencies": {
+    "obscenity": "^0.4.6"
   }
 }

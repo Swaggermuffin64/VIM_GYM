@@ -43,6 +43,7 @@ import { SummaryTaskSandbox } from '../components/SummaryTaskSandbox';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const LEADERBOARD_TASK_SCHEMA_VERSION = 1;
+const PLAYER_NAME_STORAGE_KEY = 'vim_gym_player_name';
 const KEY_LOG_VISIBLE_KEYS = 5;
 const CHEATSHEET_DOCK_WIDTH = 'clamp(18rem, 22vw, 24rem)';
 const CHEATSHEET_CONTAINER_SHIFT = 'clamp(2.375rem, 3.25vw, 3.5rem)';
@@ -1168,6 +1169,13 @@ const PracticeEditor: React.FC = () => {
   const timerRef = useRef<number>(0);
 
   // Practice session state
+  const [playerName, setPlayerName] = useState(() => {
+    try {
+      return localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [isReady, setIsReady] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [taskProgress, setTaskProgress] = useState(0);
@@ -1218,6 +1226,7 @@ const PracticeEditor: React.FC = () => {
   const submittedTaskIdsRef = useRef<Set<string>>(new Set());
   const leaderboardSessionSubmittedRef = useRef(false);
   const skipLeaderboardRef = useRef(false);
+  const playerNameRef = useRef(playerName);
   const isFetchingPracticeSessionRef = useRef(false);
   const blockedHintTimerRef = useRef<number | null>(null);
 
@@ -1226,7 +1235,8 @@ const PracticeEditor: React.FC = () => {
     tasksRef.current = tasks;
     taskProgressRef.current = taskProgress;
     isTaskCompleteRef.current = isTaskComplete;
-  }, [tasks, taskProgress, isTaskComplete]);
+    playerNameRef.current = playerName;
+  }, [tasks, taskProgress, isTaskComplete, playerName]);
 
   // Timer effect
   useEffect(() => {
@@ -1257,6 +1267,7 @@ const PracticeEditor: React.FC = () => {
         duration_ms,
         tasks: taskList,
         task_schema_version: LEADERBOARD_TASK_SCHEMA_VERSION,
+        display_name: playerNameRef.current.trim() || 'Anonymous',
       }),
     })
       .then(async (res) => {
@@ -1425,6 +1436,19 @@ const PracticeEditor: React.FC = () => {
       }
     },
     [formatKeyLabel, isSessionComplete]
+  );
+
+  const handlePlayerNameChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setPlayerName(value);
+      try {
+        localStorage.setItem(PLAYER_NAME_STORAGE_KEY, value);
+      } catch {
+        /* storage full or unavailable */
+      }
+    },
+    []
   );
 
   // Start practice session when user clicks Ready
@@ -1920,6 +1944,34 @@ const PracticeEditor: React.FC = () => {
               </div>
               <div style={styles.readyOptionsGroup}>
                 <div style={styles.readyOptionRow}>
+                  <label
+                    htmlFor="player-name-input"
+                    style={styles.readyOptionLabel}
+                  >
+                    Player Name (optional)
+                  </label>
+                  <input
+                    id="player-name-input"
+                    type="text"
+                    value={playerName}
+                    onChange={handlePlayerNameChange}
+                    placeholder="Anonymous"
+                    maxLength={64}
+                    autoComplete="off"
+                    style={{
+                      width: '140px',
+                      padding: '6px 10px',
+                      fontSize: '13px',
+                      fontFamily: '"JetBrains Mono", monospace',
+                      background: colors.bgDark,
+                      border: `1px solid ${colors.borderLight}`,
+                      borderRadius: '6px',
+                      color: colors.textPrimary,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+                <div style={styles.readyOptionRow}>
                   <span style={styles.readyOptionLabel}>
                     Start with Relative Line Numbers
                   </span>
@@ -1958,8 +2010,17 @@ const PracticeEditor: React.FC = () => {
               </div>
             </div>
 
-            <button style={styles.readyButton} onClick={handleReady}>
-              Ready
+            <button
+              style={{
+                ...styles.readyButton,
+                ...(tasks.length === 0
+                  ? { opacity: 0.5, cursor: 'not-allowed' }
+                  : {}),
+              }}
+              onClick={handleReady}
+              disabled={tasks.length === 0}
+            >
+              {tasks.length === 0 ? 'Loading...' : 'Ready'}
             </button>
             <button style={styles.backButton} onClick={() => navigate('/')}>
               Back
@@ -2082,8 +2143,11 @@ const PracticeEditor: React.FC = () => {
             {(() => {
               if (!leaderboardRanks) return null;
               const badges: Array<{ label: string; rank: number }> = [];
-              if (leaderboardRanks.daily != null)
-                badges.push({ label: 'Today', rank: leaderboardRanks.daily });
+              if (leaderboardRanks.weekly != null)
+                badges.push({
+                  label: 'This Week',
+                  rank: leaderboardRanks.weekly,
+                });
               if (leaderboardRanks.monthly != null)
                 badges.push({
                   label: 'This Month',

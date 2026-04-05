@@ -19,4 +19,4 @@ export const CORS_ORIGINS = [
 export const MATCH_TOKEN_SECRET = process.env.MATCH_TOKEN_SECRET;
 
 /** Supabase / Postgres connection string; optional until leaderboard persistence is used. */
-export const DATABASE_URL = process.env.DATABASE_URL;
+export const DATABASE_URL = process.env.DATABASE_URL?.trim() || undefined;

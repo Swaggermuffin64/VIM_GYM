@@ -11,6 +11,9 @@ export function getPool(): pg.Pool | null {
       connectionString: DATABASE_URL,
       max: 8,
     });
+    pool.on('error', (err) => {
+      console.error('Unexpected error on idle pg client', err);
+    });
   }
   return pool;
 }

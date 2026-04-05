@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS leaderboard_runs (
   CONSTRAINT leaderboard_runs_single_task_or_session
     CHECK (
       (tasks_json IS NULL AND task_id IS NOT NULL AND task_type IS NOT NULL)
-      OR (tasks_json IS NOT NULL AND jsonb_typeof(tasks_json) = 'array')
+      OR (tasks_json IS NOT NULL AND jsonb_typeof(tasks_json) = 'array'
+          AND task_id IS NULL AND task_type IS NULL)
     )
 );
 

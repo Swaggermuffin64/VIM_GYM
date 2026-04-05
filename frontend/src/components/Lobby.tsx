@@ -300,6 +300,7 @@ export const Lobby: React.FC<LobbyProps> = ({
 }) => {
   const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
+  const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
 
   // For private mode, track if we're joining (create is immediate)
   const [privateSubMode, setPrivateSubMode] = useState<'select' | 'join'>(
@@ -327,10 +328,24 @@ export const Lobby: React.FC<LobbyProps> = ({
     }
   };
 
+  const isValidRoomCode = (code: string): boolean =>
+    /^[A-Za-z0-9]{6}$/.test(code) || /^[A-Za-z0-9]{10,20}$/.test(code);
+
+  const handleRoomCodeChange = (raw: string) => {
+    const sanitized = raw.replace(/[^A-Za-z0-9]/g, '').slice(0, 20);
+    setRoomCode(sanitized);
+    setRoomCodeError(null);
+  };
+
   const handleJoin = () => {
-    if (playerName.trim() && roomCode.trim()) {
-      onJoinRoom(roomCode.trim(), playerName.trim());
+    const trimmed = roomCode.trim();
+    if (!playerName.trim() || !trimmed) return;
+    if (!isValidRoomCode(trimmed)) {
+      setRoomCodeError('Room code must be 6 or 10–20 alphanumeric characters');
+      return;
     }
+    setRoomCodeError(null);
+    onJoinRoom(trimmed, playerName.trim());
   };
 
   const handleQuickMatch = () => {
@@ -692,10 +707,21 @@ export const Lobby: React.FC<LobbyProps> = ({
                     type="text"
                     placeholder="Paste room ID here..."
                     value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value)}
+                    onChange={(e) => handleRoomCodeChange(e.target.value)}
                     style={styles.input}
-                    maxLength={50}
+                    maxLength={20}
                   />
+                  {roomCodeError && (
+                    <div
+                      style={{
+                        color: colors.error,
+                        fontSize: '12px',
+                        marginTop: '6px',
+                      }}
+                    >
+                      {roomCodeError}
+                    </div>
+                  )}
                 </div>
                 <button
                   style={{

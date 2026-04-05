@@ -363,6 +363,10 @@ export function useGameSocket(): UseGameSocketReturn {
               case 'error':
                 console.error('Matchmaking error:', msg.message);
                 setError(msg.message);
+                setIsConnecting(false);
+                setQueuePosition(null);
+                ws.close();
+                matchmakingWsRef.current = null;
                 break;
             }
           } catch (err) {

@@ -32,7 +32,7 @@ export interface GameTask {
 }
 
 export type LeaderboardRanks = {
-  daily: number | null;
+  weekly: number | null;
   monthly: number | null;
   allTime: number | null;
 };

@@ -267,7 +267,16 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
     const stats = playerAveragesById[ranking.playerId];
     return typeof stats?.avgKeys === 'number' ? stats.avgKeys : null;
   }, false);
-  const columnTemplate = '1.6fr repeat(4, minmax(0, 1fr))';
+  const hasAnyRanks = rankings.some(
+    (r) =>
+      r.ranks &&
+      (r.ranks.weekly != null ||
+        r.ranks.monthly != null ||
+        r.ranks.allTime != null)
+  );
+  const columnTemplate = hasAnyRanks
+    ? '1.4fr repeat(4, minmax(0, 1fr)) 1.2fr'
+    : '1.6fr repeat(4, minmax(0, 1fr))';
 
   return (
     <div style={styles.overlay}>
@@ -293,6 +302,7 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
             <div style={styles.headerCell}>Duration/Task</div>
             <div style={styles.headerCell}>Keys/Second</div>
             <div style={styles.headerCell}>Keys/Task</div>
+            {hasAnyRanks && <div style={styles.headerCell}>Leaderboard</div>}
           </div>
           <div style={styles.tableBody}>
             {rankings.map((ranking, index) => {
@@ -316,52 +326,9 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
                       ...(bestFinishTimeIds.has(ranking.playerId)
                         ? styles.statValueBetter
                         : {}),
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      flexWrap: 'wrap',
                     }}
                   >
                     {formatTime(ranking.time)}
-                    {ranking.ranks &&
-                      (() => {
-                        const badges: Array<{ label: string; rank: number }> =
-                          [];
-                        if (ranking.ranks.daily != null)
-                          badges.push({
-                            label: 'Today',
-                            rank: ranking.ranks.daily,
-                          });
-                        if (ranking.ranks.monthly != null)
-                          badges.push({
-                            label: 'Month',
-                            rank: ranking.ranks.monthly,
-                          });
-                        if (ranking.ranks.allTime != null)
-                          badges.push({
-                            label: 'All Time',
-                            rank: ranking.ranks.allTime,
-                          });
-                        return badges.map((b) => (
-                          <span
-                            key={b.label}
-                            style={{
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              padding: '2px 7px',
-                              borderRadius: '999px',
-                              background: `${colors.success}20`,
-                              border: `1px solid ${colors.success}66`,
-                              color: colors.successLight,
-                              fontFamily: '"JetBrains Mono", monospace',
-                              letterSpacing: '0.3px',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            #{b.rank} {b.label}
-                          </span>
-                        ));
-                      })()}
                   </div>
                   <div
                     style={{
@@ -393,6 +360,59 @@ export const RaceResults: React.FC<RaceResultsProps> = ({
                   >
                     {typeof stats?.avgKeys === 'number' ? stats.avgKeys : '--'}
                   </div>
+                  {hasAnyRanks && (
+                    <div
+                      style={{
+                        ...styles.statValue,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      {ranking.ranks &&
+                        (() => {
+                          const badges: Array<{
+                            label: string;
+                            rank: number;
+                          }> = [];
+                          if (ranking.ranks.weekly != null)
+                            badges.push({
+                              label: 'Week',
+                              rank: ranking.ranks.weekly,
+                            });
+                          if (ranking.ranks.monthly != null)
+                            badges.push({
+                              label: 'Month',
+                              rank: ranking.ranks.monthly,
+                            });
+                          if (ranking.ranks.allTime != null)
+                            badges.push({
+                              label: 'All Time',
+                              rank: ranking.ranks.allTime,
+                            });
+                          return badges.map((b) => (
+                            <span
+                              key={b.label}
+                              style={{
+                                fontSize: '10px',
+                                fontWeight: 700,
+                                padding: '2px 7px',
+                                borderRadius: '999px',
+                                background: `${colors.success}20`,
+                                border: `1px solid ${colors.success}66`,
+                                color: colors.successLight,
+                                fontFamily: '"JetBrains Mono", monospace',
+                                letterSpacing: '0.3px',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              #{b.rank} {b.label}
+                            </span>
+                          ));
+                        })()}
+                    </div>
+                  )}
                 </div>
               );
             })}

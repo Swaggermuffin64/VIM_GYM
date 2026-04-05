@@ -5,6 +5,17 @@
  * XSS, injection attacks, and malformed data.
  */
 
+import {
+  RegExpMatcher,
+  englishDataset,
+  englishRecommendedTransformers,
+} from 'obscenity';
+
+const profanityMatcher = new RegExpMatcher({
+  ...englishDataset.build(),
+  ...englishRecommendedTransformers,
+});
+
 export interface ValidationResult<T> {
   valid: boolean;
   value?: T;
@@ -57,6 +68,13 @@ export function validatePlayerName(input: unknown): ValidationResult<string> {
   // Ensure minimum length
   if (name.length < PLAYER_NAME_MIN_LENGTH) {
     name = 'Player';
+  }
+
+  if (profanityMatcher.hasMatch(name)) {
+    return {
+      valid: false,
+      error: 'Display name contains inappropriate language',
+    };
   }
 
   return { valid: true, value: name };

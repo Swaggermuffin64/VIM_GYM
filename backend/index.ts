@@ -52,6 +52,7 @@ import {
 // Create Fastify with its own server
 const fastify = Fastify({
   logger: true,
+  disableRequestLogging: true,
 });
 
 // Enable CORS for frontend

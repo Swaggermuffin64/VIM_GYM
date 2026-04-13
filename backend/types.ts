@@ -3,19 +3,19 @@
 export type TaskType = 'navigate' | 'delete' | 'insert' | 'change';
 
 // Delete strategies - maps to vim commands
-export type DeleteStrategy = 
-  | 'WORD'              // dw, d2w, d3w
-  | 'CURLY_BRACE'       // da{
+export type DeleteStrategy =
+  | 'WORD' // dw, d2w, d3w
+  | 'CURLY_BRACE' // da{
   | 'INNER_CURLY_BRACE' // di{
-  | 'PARENTHESIS'       // da(
+  | 'PARENTHESIS' // da(
   | 'INNER_PARENTHESIS' // di(
-  | 'BRACKET'           // da[
-  | 'INNER_BRACKET'     // di[
-  | 'RANDOM';           // arbitrary range
+  | 'BRACKET' // da[
+  | 'INNER_BRACKET' // di[
+  | 'RANDOM'; // arbitrary range
 
 export interface Position {
-  line: number;  // 1-indexed line number
-  col: number;   // 0-indexed column
+  line: number; // 1-indexed line number
+  col: number; // 0-indexed column
 }
 
 export interface PositionTask {
@@ -38,6 +38,12 @@ export interface DeleteTask {
   codeSnippet: string;
   targetRange: { from: number; to: number };
   expectedResult: string;
+  /** Text before the target range — precomputed at generation time. */
+  prefix: string;
+  /** Text after the target range — precomputed at generation time. */
+  suffix: string;
+  /** Original text within the target range — precomputed at generation time. */
+  originalMiddle: string;
   strategy: DeleteStrategy;
   recommendedSequence?: string[];
   recommendedWeight?: number;

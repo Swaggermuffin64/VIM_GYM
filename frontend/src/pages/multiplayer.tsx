@@ -7,15 +7,25 @@ import { Transaction } from '@codemirror/state';
 import { useGameSocket } from '../hooks/useGameSocket';
 import type { Task, TaskSummary } from '../types/task';
 import type { Ranking } from '../types/multiplayer';
-import type { KeystrokeEvent, TaskKeystrokeSubmission } from '../types/keystroke';
-import { formatKeyLabel, buildKeySequence, buildOptimalInfo } from '../utils/keyFormatting';
+import type {
+  KeystrokeEvent,
+  TaskKeystrokeSubmission,
+} from '../types/keystroke';
+import {
+  formatKeyLabel,
+  buildKeySequence,
+  buildOptimalInfo,
+} from '../utils/keyFormatting';
 import type { PlayerTaskAverages } from '../utils/taskSummaries';
 import { Lobby } from '../components/Lobby';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { RaceCountdown } from '../components/RaceCountdown';
 import { RaceResults } from '../components/RaceResults';
 import { TaskReviewOverlay } from '../components/TaskReviewOverlay';
-import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
+import {
+  setTargetPosition,
+  setTargetRange,
+} from '../extensions/targetHighlight';
 import {
   allowReset,
   EditBlockReason,
@@ -23,7 +33,11 @@ import {
   setDeleteMode,
   setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
-import { VimRaceEditor, VimRaceEditorHandle, editorColors as colors } from '../components/VimRaceEditor';
+import {
+  VimRaceEditor,
+  VimRaceEditorHandle,
+  editorColors as colors,
+} from '../components/VimRaceEditor';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const KEY_LOG_VISIBLE_KEYS = 5;
@@ -338,8 +352,8 @@ const MultiplayerGame: React.FC = () => {
     cancelQuickMatch,
     leaveRoom,
     readyToPlay,
-    sendCursorMove,
     sendEditorText,
+    sendTaskComplete,
     clearResetFlag,
     getMatchToken,
   } = useGameSocket();
@@ -352,8 +366,12 @@ const MultiplayerGame: React.FC = () => {
   const [showTaskReview, setShowTaskReview] = React.useState(false);
   const [taskSummaries, setTaskSummaries] = React.useState<TaskSummary[]>([]);
   const [raceFinishTime, setRaceFinishTime] = React.useState(0);
-  const [playerAveragesById, setPlayerAveragesById] = React.useState<Record<string, PlayerTaskAverages>>({});
-  const [blockedEditHint, setBlockedEditHint] = React.useState<string | null>(null);
+  const [playerAveragesById, setPlayerAveragesById] = React.useState<
+    Record<string, PlayerTaskAverages>
+  >({});
+  const [blockedEditHint, setBlockedEditHint] = React.useState<string | null>(
+    null
+  );
   const [relativeLineNumbers, setRelativeLineNumbers] = React.useState(true);
 
   const taskSummariesRef = useRef<TaskSummary[]>([]);
@@ -362,21 +380,37 @@ const MultiplayerGame: React.FC = () => {
   const blockedHintTimerRef = useRef<number | null>(null);
 
   // Stable refs for callbacks used in CodeMirror extensions
-  const sendCursorMoveRef = useRef(sendCursorMove);
   const sendEditorTextRef = useRef(sendEditorText);
-  useEffect(() => { sendCursorMoveRef.current = sendCursorMove; }, [sendCursorMove]);
-  useEffect(() => { sendEditorTextRef.current = sendEditorText; }, [sendEditorText]);
+  const sendTaskCompleteRef = useRef(sendTaskComplete);
+  const currentTaskRef = useRef(gameState.task);
+  useEffect(() => {
+    sendEditorTextRef.current = sendEditorText;
+  }, [sendEditorText]);
+  useEffect(() => {
+    sendTaskCompleteRef.current = sendTaskComplete;
+  }, [sendTaskComplete]);
+  useEffect(() => {
+    currentTaskRef.current = gameState.task;
+  }, [gameState.task]);
 
-  const me = gameState.players.find(p => p.id === gameState.myPlayerId);
+  const me = gameState.players.find((p) => p.id === gameState.myPlayerId);
 
-  // Handle cursor movement (uses ref to always get latest sendCursorMove)
+  // Navigate task: detect completion client-side and notify server for verification.
   const handleCursorChange = useCallback((offset: number) => {
-    sendCursorMoveRef.current(offset);
+    const task = currentTaskRef.current;
+    if (task.type === 'navigate' && offset === task.targetOffset) {
+      sendTaskCompleteRef.current({ offset });
+    }
   }, []);
 
-  // Handle document changes (send new text to server for validation)
+  // Delete task: always stream text to keep server buffer current, and signal
+  // completion separately when the text matches expectedResult.
   const handleDocChange = useCallback((text: string) => {
+    const task = currentTaskRef.current;
     sendEditorTextRef.current(text);
+    if (task.type === 'delete' && text === task.expectedResult) {
+      sendTaskCompleteRef.current({ text });
+    }
   }, []);
 
   const getBlockedEditHint = useCallback((reason: EditBlockReason): string => {
@@ -394,63 +428,79 @@ const MultiplayerGame: React.FC = () => {
     }
   }, []);
 
-  const handleBlockedEdit = useCallback((reason: EditBlockReason) => {
-    setBlockedEditHint(getBlockedEditHint(reason));
-    if (blockedHintTimerRef.current !== null) {
-      window.clearTimeout(blockedHintTimerRef.current);
-    }
-    blockedHintTimerRef.current = window.setTimeout(() => {
-      setBlockedEditHint(null);
-      blockedHintTimerRef.current = null;
-    }, 2400);
-  }, [getBlockedEditHint]);
+  const handleBlockedEdit = useCallback(
+    (reason: EditBlockReason) => {
+      setBlockedEditHint(getBlockedEditHint(reason));
+      if (blockedHintTimerRef.current !== null) {
+        window.clearTimeout(blockedHintTimerRef.current);
+      }
+      blockedHintTimerRef.current = window.setTimeout(() => {
+        setBlockedEditHint(null);
+        blockedHintTimerRef.current = null;
+      }, 2400);
+    },
+    [getBlockedEditHint]
+  );
 
   const keystrokeTaskIdRef = useRef<string | null>(null);
-  const keystrokeTaskTypeRef = useRef<TaskKeystrokeSubmission['taskType']>('navigate');
+  const keystrokeTaskTypeRef =
+    useRef<TaskKeystrokeSubmission['taskType']>('navigate');
   const keystrokeTaskStartedAtRef = useRef<number>(Date.now());
   const taskKeystrokesRef = useRef<KeystrokeEvent[]>([]);
   const submittedTaskIdsRef = useRef<Set<string>>(new Set());
 
-  const submitTaskKeystrokes = useCallback(async (taskId: string, taskType: TaskKeystrokeSubmission['taskType']) => {
-    if (submittedTaskIdsRef.current.has(taskId) || !gameState.myPlayerId) return;
+  const submitTaskKeystrokes = useCallback(
+    async (taskId: string, taskType: TaskKeystrokeSubmission['taskType']) => {
+      if (submittedTaskIdsRef.current.has(taskId) || !gameState.myPlayerId)
+        return;
 
-    const payload: TaskKeystrokeSubmission = {
-      source: 'multiplayer',
-      taskId,
-      taskType,
-      startedAt: keystrokeTaskStartedAtRef.current,
-      completedAt: Date.now(),
-      roomId: gameState.roomId || undefined,
-      playerId: gameState.myPlayerId,
-      events: taskKeystrokesRef.current,
-    };
+      const payload: TaskKeystrokeSubmission = {
+        source: 'multiplayer',
+        taskId,
+        taskType,
+        startedAt: keystrokeTaskStartedAtRef.current,
+        completedAt: Date.now(),
+        roomId: gameState.roomId || undefined,
+        playerId: gameState.myPlayerId,
+        events: taskKeystrokesRef.current,
+      };
 
-    submittedTaskIdsRef.current.add(taskId);
+      submittedTaskIdsRef.current.add(taskId);
 
-    try {
-      await fetch(`${API_BASE}/api/task/keystrokes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      try {
+        await fetch(`${API_BASE}/api/task/keystrokes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (error) {
+        console.error('Failed to submit multiplayer keystrokes:', error);
+      }
+    },
+    [gameState.myPlayerId, gameState.roomId]
+  );
+
+  const handleTaskKeyStroke = useCallback(
+    (event: KeystrokeEvent) => {
+      if (
+        gameState.roomState !== 'racing' ||
+        me?.isFinished ||
+        !keystrokeTaskIdRef.current
+      )
+        return;
+
+      const dtMs = Math.max(0, Date.now() - keystrokeTaskStartedAtRef.current);
+      taskKeystrokesRef.current.push({
+        ...event,
+        dtMs,
       });
-    } catch (error) {
-      console.error('Failed to submit multiplayer keystrokes:', error);
-    }
-  }, [gameState.myPlayerId, gameState.roomId]);
-
-  const handleTaskKeyStroke = useCallback((event: KeystrokeEvent) => {
-    if (gameState.roomState !== 'racing' || me?.isFinished || !keystrokeTaskIdRef.current) return;
-
-    const dtMs = Math.max(0, Date.now() - keystrokeTaskStartedAtRef.current);
-    taskKeystrokesRef.current.push({
-      ...event,
-      dtMs,
-    });
-    const keyLabel = formatKeyLabel(event.key);
-    if (keyLabel) {
-      setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
-    }
-  }, [gameState.roomState, me?.isFinished]);
+      const keyLabel = formatKeyLabel(event.key);
+      if (keyLabel) {
+        setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
+      }
+    },
+    [gameState.roomState, me?.isFinished]
+  );
 
   const resetCurrentTask = useCallback(() => {
     const view = editorRef.current?.view;
@@ -464,6 +514,7 @@ const MultiplayerGame: React.FC = () => {
         to: view.state.doc.length,
         insert: gameState.task.codeSnippet,
       },
+      selection: { anchor: 0 },
       effects: [allowReset.of(true), setUndoBarrier.of(true)],
       annotations: Transaction.addToHistory.of(false),
     });
@@ -497,7 +548,12 @@ const MultiplayerGame: React.FC = () => {
   useEffect(() => {
     const handleResetHotkey = (e: KeyboardEvent) => {
       if (e.key !== 'F6') return;
-      if (gameState.roomState !== 'racing' || me?.isFinished || !gameState.task.id) return;
+      if (
+        gameState.roomState !== 'racing' ||
+        me?.isFinished ||
+        !gameState.task.id
+      )
+        return;
 
       e.preventDefault();
       e.stopPropagation();
@@ -505,8 +561,16 @@ const MultiplayerGame: React.FC = () => {
     };
 
     window.addEventListener('keydown', handleResetHotkey, { capture: true });
-    return () => window.removeEventListener('keydown', handleResetHotkey, { capture: true });
-  }, [gameState.roomState, gameState.task.id, me?.isFinished, resetCurrentTask]);
+    return () =>
+      window.removeEventListener('keydown', handleResetHotkey, {
+        capture: true,
+      });
+  }, [
+    gameState.roomState,
+    gameState.task.id,
+    me?.isFinished,
+    resetCurrentTask,
+  ]);
 
   const handleEditorReady = useCallback(() => {
     currentTaskIdRef.current = null;
@@ -518,11 +582,14 @@ const MultiplayerGame: React.FC = () => {
     editorRef.current?.setRelativeLineNumbers(relativeLineNumbers);
   }, [editorReadyTick, relativeLineNumbers]);
 
-  useEffect(() => () => {
-    if (blockedHintTimerRef.current !== null) {
-      window.clearTimeout(blockedHintTimerRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (blockedHintTimerRef.current !== null) {
+        window.clearTimeout(blockedHintTimerRef.current);
+      }
+    },
+    []
+  );
 
   // Timer effect
   useEffect(() => {
@@ -587,13 +654,17 @@ const MultiplayerGame: React.FC = () => {
       if (completedTask && completedTask.id === activeTaskId) {
         const eventsSnapshot = [...taskKeystrokesRef.current];
         const completedAt = Date.now();
-        const { optimalSequence, ourSolutionKeyCount } = buildOptimalInfo(completedTask);
+        const { optimalSequence, ourSolutionKeyCount } =
+          buildOptimalInfo(completedTask);
         const summary: TaskSummary = {
           taskIndex: taskIndexCounterRef.current,
           taskId: completedTask.id,
           taskType: completedTask.type,
           task: completedTask,
-          durationMs: Math.max(0, completedAt - keystrokeTaskStartedAtRef.current),
+          durationMs: Math.max(
+            0,
+            completedAt - keystrokeTaskStartedAtRef.current
+          ),
           keyCount: eventsSnapshot.length,
           keySequence: buildKeySequence(eventsSnapshot),
           optimalSequence,
@@ -611,23 +682,35 @@ const MultiplayerGame: React.FC = () => {
       currentTaskObjRef.current = gameState.task;
       setRecentKeys([]);
     }
-  }, [gameState.roomState, gameState.task.id, gameState.task.type, gameState.task, submitTaskKeystrokes]);
+  }, [
+    gameState.roomState,
+    gameState.task.id,
+    gameState.task.type,
+    gameState.task,
+    submitTaskKeystrokes,
+  ]);
 
   // Capture any remaining last-task summary and flush the ref into state.
   const flushTaskSummaries = useCallback(() => {
     const completedTask = currentTaskObjRef.current;
     if (completedTask && completedTask.id) {
-      const alreadyCaptured = taskSummariesRef.current.some(s => s.taskId === completedTask.id);
+      const alreadyCaptured = taskSummariesRef.current.some(
+        (s) => s.taskId === completedTask.id
+      );
       if (!alreadyCaptured) {
         const eventsSnapshot = [...taskKeystrokesRef.current];
         const completedAt = Date.now();
-        const { optimalSequence, ourSolutionKeyCount } = buildOptimalInfo(completedTask);
+        const { optimalSequence, ourSolutionKeyCount } =
+          buildOptimalInfo(completedTask);
         const summary: TaskSummary = {
           taskIndex: taskIndexCounterRef.current,
           taskId: completedTask.id,
           taskType: completedTask.type,
           task: completedTask,
-          durationMs: Math.max(0, completedAt - keystrokeTaskStartedAtRef.current),
+          durationMs: Math.max(
+            0,
+            completedAt - keystrokeTaskStartedAtRef.current
+          ),
           keyCount: eventsSnapshot.length,
           keySequence: buildKeySequence(eventsSnapshot),
           optimalSequence,
@@ -675,23 +758,27 @@ const MultiplayerGame: React.FC = () => {
     if (!me?.isFinished) return null;
 
     const finished = gameState.players
-      .filter(p => p.isFinished && p.finishTime)
+      .filter((p) => p.isFinished && p.finishTime)
       .sort((a, b) => (a.finishTime || 0) - (b.finishTime || 0))
-      .map((p, i): Ranking => ({
-        playerId: p.id,
-        playerName: p.name,
-        time: p.finishTime || 0,
-        position: i + 1,
-      }));
+      .map(
+        (p, i): Ranking => ({
+          playerId: p.id,
+          playerName: p.name,
+          time: p.finishTime || 0,
+          position: i + 1,
+        })
+      );
 
     const unfinished = gameState.players
-      .filter(p => !p.isFinished)
-      .map((p, i): Ranking => ({
-        playerId: p.id,
-        playerName: p.name,
-        time: 0,
-        position: finished.length + i + 1,
-      }));
+      .filter((p) => !p.isFinished)
+      .map(
+        (p, i): Ranking => ({
+          playerId: p.id,
+          playerName: p.name,
+          time: 0,
+          position: finished.length + i + 1,
+        })
+      );
 
     return [...finished, ...unfinished];
   }, [gameState.rankings, gameState.players, me?.isFinished]);
@@ -710,10 +797,13 @@ const MultiplayerGame: React.FC = () => {
         if (matchToken) {
           headers.Authorization = `Bearer ${matchToken}`;
         }
-        const response = await fetch(`${API_BASE}/api/multiplayer/stats/${gameState.roomId}`, {
-          headers,
-        });
-        const payload = await response.json() as {
+        const response = await fetch(
+          `${API_BASE}/api/multiplayer/stats/${gameState.roomId}`,
+          {
+            headers,
+          }
+        );
+        const payload = (await response.json()) as {
           success: boolean;
           players?: Array<{
             playerId: string;
@@ -723,7 +813,8 @@ const MultiplayerGame: React.FC = () => {
             avgKeys: number;
           }>;
         };
-        if (!payload.success || !Array.isArray(payload.players) || cancelled) return;
+        if (!payload.success || !Array.isArray(payload.players) || cancelled)
+          return;
 
         const nextById: Record<string, PlayerTaskAverages> = {};
         for (const player of payload.players) {
@@ -748,7 +839,13 @@ const MultiplayerGame: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [gameState.roomId, gameState.roomState, gameState.players, me?.isFinished, getMatchToken]);
+  }, [
+    gameState.roomId,
+    gameState.roomState,
+    gameState.players,
+    me?.isFinished,
+    getMatchToken,
+  ]);
 
   const toggleRelativeLineNumbers = useCallback(() => {
     const newValue = !relativeLineNumbers;
@@ -759,16 +856,31 @@ const MultiplayerGame: React.FC = () => {
   useEffect(() => {
     const handleLineNumbersHotkey = (e: KeyboardEvent) => {
       if (e.key !== 'F7') return;
-      if (gameState.roomState !== 'racing' || me?.isFinished || !gameState.task.id) return;
+      if (
+        gameState.roomState !== 'racing' ||
+        me?.isFinished ||
+        !gameState.task.id
+      )
+        return;
 
       e.preventDefault();
       e.stopPropagation();
       toggleRelativeLineNumbers();
     };
 
-    window.addEventListener('keydown', handleLineNumbersHotkey, { capture: true });
-    return () => window.removeEventListener('keydown', handleLineNumbersHotkey, { capture: true });
-  }, [gameState.roomState, gameState.task.id, me?.isFinished, toggleRelativeLineNumbers]);
+    window.addEventListener('keydown', handleLineNumbersHotkey, {
+      capture: true,
+    });
+    return () =>
+      window.removeEventListener('keydown', handleLineNumbersHotkey, {
+        capture: true,
+      });
+  }, [
+    gameState.roomState,
+    gameState.task.id,
+    me?.isFinished,
+    toggleRelativeLineNumbers,
+  ]);
 
   const recentKeysDisplay = React.useMemo(() => {
     if (recentKeys.length === 0) return '';
@@ -790,6 +902,7 @@ const MultiplayerGame: React.FC = () => {
         to: view.state.doc.length,
         insert: gameState.task.codeSnippet,
       },
+      selection: { anchor: 0 },
       effects: [allowReset.of(true), setUndoBarrier.of(true)],
       annotations: Transaction.addToHistory.of(false),
     });
@@ -834,6 +947,7 @@ const MultiplayerGame: React.FC = () => {
         to: view.state.doc.length,
         insert: gameState.task.codeSnippet,
       },
+      selection: { anchor: 0 },
       effects: [allowReset.of(true), setUndoBarrier.of(true)],
       annotations: Transaction.addToHistory.of(false),
     });
@@ -928,7 +1042,9 @@ const MultiplayerGame: React.FC = () => {
           playerAveragesById={playerAveragesById}
           onPlayAgain={initialMode === 'quick' ? requeue : readyToPlay}
           onLeave={initialMode === 'quick' ? cancelQuickMatch : leaveRoom}
-          onReviewTasks={taskSummaries.length > 0 ? () => setShowTaskReview(true) : undefined}
+          onReviewTasks={
+            taskSummaries.length > 0 ? () => setShowTaskReview(true) : undefined
+          }
         />
       )}
 
@@ -938,7 +1054,7 @@ const MultiplayerGame: React.FC = () => {
           totalTime={raceFinishTime}
           onBack={() => setShowTaskReview(false)}
           onPracticeTasks={() => {
-            const practiceTasks = taskSummaries.map(s => s.task);
+            const practiceTasks = taskSummaries.map((s) => s.task);
             navigate('/practice', { state: { tasks: practiceTasks } });
           }}
           onPlayAgain={initialMode === 'quick' ? requeue : readyToPlay}
@@ -957,9 +1073,13 @@ const MultiplayerGame: React.FC = () => {
         {gameState.task.id && (
           <div style={styles.taskBanner}>
             <div style={styles.taskType}>
-              {gameState.task.type === 'navigate' ? 'Navigate to target' : 'Delete the highlighted text'}
+              {gameState.task.type === 'navigate'
+                ? 'Navigate to target'
+                : 'Delete the highlighted text'}
             </div>
-            <div style={styles.taskDescription}>{gameState.task.description}</div>
+            <div style={styles.taskDescription}>
+              {gameState.task.description}
+            </div>
             <div style={styles.taskProgressInlineRow}>
               <span>Tasks Completed</span>
               <span style={{ color: colors.primaryLight }}>
@@ -967,7 +1087,12 @@ const MultiplayerGame: React.FC = () => {
               </span>
             </div>
             <div style={styles.progressBar}>
-              <div style={{ ...styles.progressFill, width: `${taskProgressPercent}%` }} />
+              <div
+                style={{
+                  ...styles.progressFill,
+                  width: `${taskProgressPercent}%`,
+                }}
+              />
             </div>
           </div>
         )}
@@ -978,7 +1103,9 @@ const MultiplayerGame: React.FC = () => {
             {me?.isFinished ? (
               <div style={styles.waitingContainer}>
                 <div style={styles.waitingTitle}>Finished!</div>
-                <div style={styles.waitingTime}>{formatTime(me.finishTime || 0)}</div>
+                <div style={styles.waitingTime}>
+                  {formatTime(me.finishTime || 0)}
+                </div>
               </div>
             ) : (
               <div style={styles.editorWrapper}>
@@ -997,11 +1124,19 @@ const MultiplayerGame: React.FC = () => {
             )}
             {!me?.isFinished && gameState.task.id && (
               <div style={styles.editorButtonRow}>
-                <button style={styles.resetTaskButton} onClick={resetCurrentTask}>
+                <button
+                  style={styles.resetTaskButton}
+                  onClick={resetCurrentTask}
+                >
                   Reset (F6)
                 </button>
-                <button style={styles.lineNumbersButton} onClick={toggleRelativeLineNumbers}>
-                  {relativeLineNumbers ? 'Relative Lines (F7) ✓' : 'Relative Lines (F7)'}
+                <button
+                  style={styles.lineNumbersButton}
+                  onClick={toggleRelativeLineNumbers}
+                >
+                  {relativeLineNumbers
+                    ? 'Relative Lines (F7) ✓'
+                    : 'Relative Lines (F7)'}
                 </button>
               </div>
             )}
@@ -1011,23 +1146,30 @@ const MultiplayerGame: React.FC = () => {
             {/* Scoreboard */}
             <div style={styles.scoreboard}>
               <div style={styles.scoreboardTitle}>Scoreboard</div>
-              {gameState.players.map(player => (
+              {gameState.players.map((player) => (
                 <div
                   key={player.id}
                   style={{
                     ...styles.scoreboardPlayer,
-                    color: player.id === gameState.myPlayerId ? colors.primaryLight : colors.textSecondary,
+                    color:
+                      player.id === gameState.myPlayerId
+                        ? colors.primaryLight
+                        : colors.textSecondary,
                   }}
                 >
                   <span>
                     {player.name}
                     {player.leftRace && (
-                      <span style={{ color: colors.textMuted }}>
-                        {' '} (left)
-                      </span>
+                      <span style={{ color: colors.textMuted }}> (left)</span>
                     )}
                   </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
                     <span style={{ color: colors.textMuted }}>
                       {player.leftRace && !player.isFinished
                         ? 'DNF'
@@ -1051,9 +1193,11 @@ const MultiplayerGame: React.FC = () => {
                     : { ...styles.keyLogBox, ...styles.keyLogBoxEmpty }
                 }
               >
-                {recentKeys.length > 0
-                  ? recentKeysDisplay
-                  : <span style={styles.keyLogEmpty}>No keys yet...</span>}
+                {recentKeys.length > 0 ? (
+                  recentKeysDisplay
+                ) : (
+                  <span style={styles.keyLogEmpty}>No keys yet...</span>
+                )}
               </div>
               <div style={styles.blockedEditHint}>
                 {blockedEditHint ?? '\u00A0'}

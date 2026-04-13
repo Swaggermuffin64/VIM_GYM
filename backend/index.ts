@@ -1002,25 +1002,39 @@ io.on('connection', (socket) => {
     })
   );
 
-  // Handle cursor movement during race
+  // player:cursor reserved for future opponent cursor display
+
+  // Handle task completion (navigate: cursor offset; delete: editor text)
   socket.on(
-    'player:cursor',
-    rateLimitedHandler(socket, 'player:cursor', ({ offset }) => {
-      // Validate cursor offset
-      const offsetResult = validateCursorOffset(offset);
-      if (!offsetResult.valid) {
-        // Silently ignore invalid cursor data during gameplay
-        return;
+    'player:task_complete',
+    rateLimitedHandler(socket, 'player:task_complete', (data) => {
+      const payload: { offset?: number; text?: string } = {};
+      if (data.offset !== undefined) {
+        const offsetResult = validateCursorOffset(data.offset);
+        if (!offsetResult.valid) {
+          socket.emit('room:error', { message: 'Invalid completion data' });
+          return;
+        }
+        payload.offset = offsetResult.value!;
       }
-      roomManager.handleCursorMove(socket, offsetResult.value!);
+      if (data.text !== undefined) {
+        const textResult = validateEditorText(data.text);
+        if (!textResult.valid) {
+          socket.emit('room:error', {
+            message: textResult.error || 'Invalid completion data',
+          });
+          return;
+        }
+        payload.text = textResult.value!;
+      }
+      roomManager.handleTaskComplete(socket, payload);
     })
   );
 
-  // Handle editor text for delete task validation
+  // Handle editor text for delete task partial-edit guardrail
   socket.on(
     'player:editorText',
     rateLimitedHandler(socket, 'player:editorText', ({ text }) => {
-      // Validate editor text
       const textResult = validateEditorText(text);
       if (!textResult.valid) {
         socket.emit('room:error', {

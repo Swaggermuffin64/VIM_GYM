@@ -116,7 +116,6 @@ export class RoomManager {
     const player: Player = {
       id: playerId,
       name: playerName,
-      successIndicator: { cursorOffset: 0, editorText: '' },
       taskProgress: 0, // 0 to NUM_TASKS - 1
       isFinished: false,
       readyToPlay: false,
@@ -199,7 +198,6 @@ export class RoomManager {
     const player: Player = {
       id: playerId,
       name: playerName,
-      successIndicator: { cursorOffset: 0, editorText: '' },
       taskProgress: 0,
       isFinished: false,
       readyToPlay: false,
@@ -358,7 +356,10 @@ export class RoomManager {
     });
   }
 
-  handleCursorMove(socket: GameSocket, offset: number): void {
+  handleTaskComplete(
+    socket: GameSocket,
+    data: { offset?: number; text?: string }
+  ): void {
     const roomId = socket.data.roomId;
     const playerId = socket.data.playerId;
     if (!roomId || !playerId) return;
@@ -367,7 +368,7 @@ export class RoomManager {
     const player = room.players.get(playerId);
     if (!player || player.isFinished) return;
     const currentTask = room.tasks[player.taskProgress];
-    if (!currentTask || currentTask.type !== 'navigate') return;
+    if (!currentTask) return;
 
     if (
       player.taskStartedAt &&
@@ -376,9 +377,17 @@ export class RoomManager {
       return;
     }
 
-    player.successIndicator.cursorOffset = offset;
-    if (this.evaluateTaskCompletion(player, currentTask)) {
+    let valid = false;
+    if (currentTask.type === 'navigate' && data.offset !== undefined) {
+      valid = data.offset === currentTask.targetOffset;
+    } else if (currentTask.type === 'delete') {
+      valid = player.editorBuffer === currentTask.expectedResult;
+    }
+
+    if (valid) {
       this.advancePlayerTask(socket, room, player, roomId);
+    } else {
+      socket.emit('game:validation_failed', playerId);
     }
   }
 
@@ -402,48 +411,40 @@ export class RoomManager {
       return;
     }
 
-    player.successIndicator.editorText = text;
+    // Validate partial deletion: only characters within targetRange should be removed.
+    // prefix/suffix/originalMiddle are precomputed at task generation.
+    const { prefix, suffix, codeSnippet, originalMiddle } = currentTask;
+    const newMiddle = text.slice(prefix.length, text.length - suffix.length);
 
-    // Check if the task is completed
-    if (this.evaluateTaskCompletion(player, currentTask)) {
-      console.log('✅ [Backend] Task complete! Text matches expected result');
-      this.advancePlayerTask(socket, room, player, roomId);
-      return;
+    // newMiddle must be a deletion-only subsequence of originalMiddle —
+    // no insertions or substitutions permitted within the target range.
+    let isSubsequence = true;
+    let origIdx = 0;
+    for (let i = 0; i < newMiddle.length; i++) {
+      while (
+        origIdx < originalMiddle.length &&
+        originalMiddle[origIdx] !== newMiddle[i]
+      ) {
+        origIdx++;
+      }
+      if (origIdx >= originalMiddle.length) {
+        isSubsequence = false;
+        break;
+      }
+      origIdx++;
     }
 
-    // Validate partial deletion: prefix and suffix must remain intact
-    // Only the characters within targetRange should be deleted
-    const { codeSnippet, targetRange } = currentTask;
-    const prefix = codeSnippet.substring(0, targetRange.from);
-    const suffix = codeSnippet.substring(targetRange.to);
-
-    // Check if the text is a valid partial deletion
-    const startsWithPrefix = text.startsWith(prefix);
-    const endsWithSuffix = text.endsWith(suffix);
-    const validLength =
+    const isValidPartial =
       text.length >= prefix.length + suffix.length &&
-      text.length <= codeSnippet.length;
-
-    const isValidPartial = startsWithPrefix && endsWithSuffix && validLength;
-
-    console.log('🔍 [Backend] Validating partial deletion:', {
-      textLength: text.length,
-      originalLength: codeSnippet.length,
-      targetRange,
-      prefixLength: prefix.length,
-      suffixLength: suffix.length,
-      startsWithPrefix,
-      endsWithSuffix,
-      validLength,
-      isValidPartial,
-    });
+      text.length <= codeSnippet.length &&
+      text.startsWith(prefix) &&
+      text.endsWith(suffix) &&
+      isSubsequence;
 
     if (!isValidPartial) {
-      // Invalid edit - something outside the target range was modified
-      console.log('❌ [Backend] Invalid edit - resetting editor');
       socket.emit('game:validation_failed', playerId);
     } else {
-      console.log('✅ [Backend] Valid partial deletion, continuing...');
+      player.editorBuffer = text;
     }
   }
 
@@ -456,8 +457,7 @@ export class RoomManager {
     const playerId = player.id;
     player.taskProgress += 1;
     player.taskStartedAt = Date.now();
-
-    player.successIndicator.editorText = '';
+    delete player.editorBuffer;
 
     // Send task progress and new task to the user
     socket.emit('game:player_finished_task', {
@@ -493,27 +493,6 @@ export class RoomManager {
     // Check if all players finished
     if (this.allPlayersFinished(room)) {
       void this.endRace(roomId);
-    }
-  }
-
-  private evaluateTaskCompletion(player: Player, currentTask: Task): boolean {
-    switch (currentTask.type) {
-      case 'navigate': {
-        return (
-          player.successIndicator.cursorOffset === currentTask.targetOffset
-        );
-      }
-
-      case 'delete': {
-        return (
-          player.successIndicator.editorText === currentTask.expectedResult
-        );
-      }
-
-      default: {
-        console.log('Task type not defined', currentTask);
-        return false;
-      }
     }
   }
 
@@ -596,8 +575,6 @@ export class RoomManager {
 
     // For PRIVATE rooms: allow rematch, reset player states
     room.players.forEach((player) => {
-      player.successIndicator.cursorOffset = 0;
-      player.successIndicator.editorText = '';
       player.taskProgress = 0;
       player.isFinished = false;
       player.readyToPlay = false;
@@ -709,7 +686,6 @@ export class RoomManager {
 
     // Reset all player states
     room.players.forEach((player) => {
-      player.successIndicator = { cursorOffset: 0, editorText: '' };
       player.taskProgress = 0;
       player.isFinished = false;
       player.readyToPlay = false;

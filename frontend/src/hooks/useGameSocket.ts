@@ -24,7 +24,7 @@ interface UseGameSocketReturn {
   readyToPlay: () => void;
   sendCursorMove: (offset: number) => void;
   sendEditorText: (text: string) => void;
-  sendTaskComplete: () => void;
+  sendTaskComplete: (payload: { offset?: number; text?: string }) => void;
   clearResetFlag: () => void;
   getMatchToken: () => string | null;
 }
@@ -62,7 +62,6 @@ export function useGameSocket(): UseGameSocketReturn {
   const setupSocketListeners = useCallback((socket: Socket) => {
     socket.on('connect', () => {
       setIsConnected(true);
-      setIsConnecting(false);
       setGameState((prev) => ({
         ...prev,
         myPlayerId: socket.id || null,
@@ -80,6 +79,7 @@ export function useGameSocket(): UseGameSocketReturn {
 
     // Room events
     socket.on('room:created', ({ roomId, player }) => {
+      setIsConnecting(false);
       setGameState((prev) => ({
         ...prev,
         roomId,
@@ -89,6 +89,7 @@ export function useGameSocket(): UseGameSocketReturn {
     });
 
     socket.on('room:joined', ({ roomId, players }) => {
+      setIsConnecting(false);
       setGameState((prev) => ({
         ...prev,
         roomId,
@@ -466,11 +467,14 @@ export function useGameSocket(): UseGameSocketReturn {
     [gameState.roomState, gameState.task.type]
   );
 
-  const sendTaskComplete = useCallback(() => {
-    if (socketRef.current && gameState.roomState === 'racing') {
-      socketRef.current.emit('player:task_complete');
-    }
-  }, [gameState.roomState]);
+  const sendTaskComplete = useCallback(
+    (payload: { offset?: number; text?: string }) => {
+      if (socketRef.current && gameState.roomState === 'racing') {
+        socketRef.current.emit('player:task_complete', payload);
+      }
+    },
+    [gameState.roomState]
+  );
 
   const clearResetFlag = useCallback(() => {
     setGameState((prev) => ({ ...prev, shouldResetEditor: false }));

@@ -297,7 +297,9 @@ export function generateDeleteTask(): DeleteTask {
   const chosen = strategies[Math.floor(Math.random() * strategies.length)]!;
   const [from, to] = chosen.execute();
 
-  const expectedResult = snippet.slice(0, from) + snippet.slice(to);
+  const prefix = snippet.slice(0, from);
+  const suffix = snippet.slice(to);
+  const expectedResult = prefix + suffix;
   const deleteRecommendation = getRecommendedDeleteSequence(
     snippetData,
     chosen.name,
@@ -315,6 +317,8 @@ export function generateDeleteTask(): DeleteTask {
     codeSnippet: snippet,
     targetRange: { from, to },
     expectedResult,
+    prefix,
+    suffix,
     strategy: chosen.name,
     ...(deleteRecommendation
       ? {

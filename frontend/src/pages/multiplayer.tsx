@@ -352,8 +352,8 @@ const MultiplayerGame: React.FC = () => {
     cancelQuickMatch,
     leaveRoom,
     readyToPlay,
-    sendCursorMove,
     sendEditorText,
+    sendTaskComplete,
     clearResetFlag,
     getMatchToken,
   } = useGameSocket();
@@ -380,25 +380,37 @@ const MultiplayerGame: React.FC = () => {
   const blockedHintTimerRef = useRef<number | null>(null);
 
   // Stable refs for callbacks used in CodeMirror extensions
-  const sendCursorMoveRef = useRef(sendCursorMove);
   const sendEditorTextRef = useRef(sendEditorText);
-  useEffect(() => {
-    sendCursorMoveRef.current = sendCursorMove;
-  }, [sendCursorMove]);
+  const sendTaskCompleteRef = useRef(sendTaskComplete);
+  const currentTaskRef = useRef(gameState.task);
   useEffect(() => {
     sendEditorTextRef.current = sendEditorText;
   }, [sendEditorText]);
+  useEffect(() => {
+    sendTaskCompleteRef.current = sendTaskComplete;
+  }, [sendTaskComplete]);
+  useEffect(() => {
+    currentTaskRef.current = gameState.task;
+  }, [gameState.task]);
 
   const me = gameState.players.find((p) => p.id === gameState.myPlayerId);
 
-  // Handle cursor movement (uses ref to always get latest sendCursorMove)
+  // Navigate task: detect completion client-side and notify server for verification.
   const handleCursorChange = useCallback((offset: number) => {
-    sendCursorMoveRef.current(offset);
+    const task = currentTaskRef.current;
+    if (task.type === 'navigate' && offset === task.targetOffset) {
+      sendTaskCompleteRef.current({ offset });
+    }
   }, []);
 
-  // Handle document changes (send new text to server for validation)
+  // Delete task: if text matches expectedResult, signal completion; otherwise stream for guardrail.
   const handleDocChange = useCallback((text: string) => {
-    sendEditorTextRef.current(text);
+    const task = currentTaskRef.current;
+    if (task.type === 'delete' && text === task.expectedResult) {
+      sendTaskCompleteRef.current({ text });
+    } else {
+      sendEditorTextRef.current(text);
+    }
   }, []);
 
   const getBlockedEditHint = useCallback((reason: EditBlockReason): string => {

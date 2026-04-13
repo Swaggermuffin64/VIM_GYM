@@ -11,7 +11,6 @@ export interface Player {
   isFinished: boolean;
   /** True when player leaves after the race lifecycle has started */
   leftRace?: boolean;
-  successIndicator: { cursorOffset?: number; editorText?: string };
   readyToPlay: boolean;
   finishTime?: number;
   /** Server-side only: timestamp when the current task was presented */
@@ -43,6 +42,7 @@ export interface ClientToServerEvents {
   'player:ready_to_play': () => void;
   'player:cursor': (data: { offset: number }) => void;
   'player:editorText': (data: { text: string }) => void;
+  'player:task_complete': (data: { offset?: number; text?: string }) => void;
 }
 
 // Server → Client Events

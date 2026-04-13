@@ -299,6 +299,7 @@ export function generateDeleteTask(): DeleteTask {
 
   const prefix = snippet.slice(0, from);
   const suffix = snippet.slice(to);
+  const originalMiddle = snippet.slice(from, to);
   const expectedResult = prefix + suffix;
   const deleteRecommendation = getRecommendedDeleteSequence(
     snippetData,
@@ -319,6 +320,7 @@ export function generateDeleteTask(): DeleteTask {
     expectedResult,
     prefix,
     suffix,
+    originalMiddle,
     strategy: chosen.name,
     ...(deleteRecommendation
       ? {

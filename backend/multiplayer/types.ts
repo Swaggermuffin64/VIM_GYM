@@ -15,6 +15,8 @@ export interface Player {
   finishTime?: number;
   /** Server-side only: timestamp when the current task was presented */
   taskStartedAt?: number;
+  /** Server-side only: last validated editor buffer for the current delete task */
+  editorBuffer?: string;
 }
 
 export interface GameRoom {

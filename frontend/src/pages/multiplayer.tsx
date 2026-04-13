@@ -403,13 +403,13 @@ const MultiplayerGame: React.FC = () => {
     }
   }, []);
 
-  // Delete task: if text matches expectedResult, signal completion; otherwise stream for guardrail.
+  // Delete task: always stream text to keep server buffer current, and signal
+  // completion separately when the text matches expectedResult.
   const handleDocChange = useCallback((text: string) => {
     const task = currentTaskRef.current;
+    sendEditorTextRef.current(text);
     if (task.type === 'delete' && text === task.expectedResult) {
       sendTaskCompleteRef.current({ text });
-    } else {
-      sendEditorTextRef.current(text);
     }
   }, []);
 

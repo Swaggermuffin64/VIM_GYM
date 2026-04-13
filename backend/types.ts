@@ -42,6 +42,8 @@ export interface DeleteTask {
   prefix: string;
   /** Text after the target range — precomputed at generation time. */
   suffix: string;
+  /** Original text within the target range — precomputed at generation time. */
+  originalMiddle: string;
   strategy: DeleteStrategy;
   recommendedSequence?: string[];
   recommendedWeight?: number;

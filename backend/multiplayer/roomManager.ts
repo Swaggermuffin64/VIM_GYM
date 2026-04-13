@@ -380,8 +380,8 @@ export class RoomManager {
     let valid = false;
     if (currentTask.type === 'navigate' && data.offset !== undefined) {
       valid = data.offset === currentTask.targetOffset;
-    } else if (currentTask.type === 'delete' && data.text !== undefined) {
-      valid = data.text === currentTask.expectedResult;
+    } else if (currentTask.type === 'delete') {
+      valid = player.editorBuffer === currentTask.expectedResult;
     }
 
     if (valid) {
@@ -412,16 +412,39 @@ export class RoomManager {
     }
 
     // Validate partial deletion: only characters within targetRange should be removed.
-    // prefix/suffix are precomputed at task generation — no allocation needed here.
-    const { prefix, suffix, codeSnippet } = currentTask;
+    // prefix/suffix/originalMiddle are precomputed at task generation.
+    const { prefix, suffix, codeSnippet, originalMiddle } = currentTask;
+    const newMiddle = text.slice(prefix.length, text.length - suffix.length);
+
+    // newMiddle must be a deletion-only subsequence of originalMiddle —
+    // no insertions or substitutions permitted within the target range.
+    let isSubsequence = true;
+    let origIdx = 0;
+    for (let i = 0; i < newMiddle.length; i++) {
+      while (
+        origIdx < originalMiddle.length &&
+        originalMiddle[origIdx] !== newMiddle[i]
+      ) {
+        origIdx++;
+      }
+      if (origIdx >= originalMiddle.length) {
+        isSubsequence = false;
+        break;
+      }
+      origIdx++;
+    }
+
     const isValidPartial =
       text.length >= prefix.length + suffix.length &&
       text.length <= codeSnippet.length &&
       text.startsWith(prefix) &&
-      text.endsWith(suffix);
+      text.endsWith(suffix) &&
+      isSubsequence;
 
     if (!isValidPartial) {
       socket.emit('game:validation_failed', playerId);
+    } else {
+      player.editorBuffer = text;
     }
   }
 
@@ -434,6 +457,7 @@ export class RoomManager {
     const playerId = player.id;
     player.taskProgress += 1;
     player.taskStartedAt = Date.now();
+    delete player.editorBuffer;
 
     // Send task progress and new task to the user
     socket.emit('game:player_finished_task', {

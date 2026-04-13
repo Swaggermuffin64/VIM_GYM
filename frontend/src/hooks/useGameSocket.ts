@@ -156,6 +156,8 @@ export function useGameSocket(): UseGameSocketReturn {
       console.error('Room error:', message);
       setError(message);
       setTimeout(() => setError(null), 3000);
+      // If a join attempt fails, ensure the UI exits the connecting state.
+      setIsConnecting(false);
     });
 
     // Game events

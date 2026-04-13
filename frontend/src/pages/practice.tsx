@@ -1470,6 +1470,7 @@ const PracticeEditor: React.FC = () => {
         to: view.state.doc.length,
         insert: task.codeSnippet,
       },
+      selection: { anchor: 0 },
       effects: [allowReset.of(true), setUndoBarrier.of(true)],
       annotations: Transaction.addToHistory.of(false),
     });

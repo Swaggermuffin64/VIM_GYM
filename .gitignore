@@ -1,3 +1,5 @@
+.claude/
+
 # Environment files
 .env
 *.env

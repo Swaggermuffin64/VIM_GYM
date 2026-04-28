@@ -111,18 +111,15 @@ export class Matchmaker {
       }
     }
 
-    // don't include room with one player as a group
-    if (currentGroup.length === 1) {
-      return {
-        roomGroups,
-        groupedPlayers: playerArray.slice(0, -1),
-      };
+    // Only include leftover group if it has enough players
+    if (currentGroup.length >= this.playersPerMatch) {
+      roomGroups.push(currentGroup);
     }
 
-    roomGroups.push(currentGroup);
+    const groupedPlayers = roomGroups.flat();
     return {
       roomGroups,
-      groupedPlayers: playerArray,
+      groupedPlayers,
     };
   }
 

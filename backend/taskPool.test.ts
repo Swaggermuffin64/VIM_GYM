@@ -24,7 +24,7 @@ function measureEventLoopTicks(promise: Promise<unknown>): Promise<number> {
 
     setImmediate(tick);
 
-    promise.then(() => {
+    promise.finally(() => {
       done = true;
       // One more tick to let the count settle
       setImmediate(() => resolve(ticks));

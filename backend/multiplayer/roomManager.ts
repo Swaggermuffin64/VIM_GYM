@@ -322,8 +322,10 @@ export class RoomManager {
       return;
     }
 
-    // All players are ready - reset room, then start countdown
-    await this.resetRoom(socket);
+    // If this is a rematch (room finished a previous game), reset for a new game
+    if (room.state === 'finished') {
+      await this.resetRoom(socket);
+    }
     this.startCountdown(roomId);
   }
 

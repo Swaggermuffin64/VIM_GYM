@@ -170,17 +170,30 @@ export class RoomManager {
 
     // Generate tasks off the main thread — room is already visible to other players
     const tasksPerType = Math.floor(this.NUM_TASKS / 2);
-    const [positionTasks, deleteTasks] = await Promise.all([
-      generatePositionTasksAsync(tasksPerType),
-      generateDeleteTasksAsync(tasksPerType),
-    ]);
-    const allTasks = shuffle([...positionTasks, ...deleteTasks]);
-    console.log(
-      'Generated tasks:',
-      allTasks.map((t) => t.type)
-    );
+    try {
+      const [positionTasks, deleteTasks] = await Promise.all([
+        generatePositionTasksAsync(tasksPerType),
+        generateDeleteTasksAsync(tasksPerType),
+      ]);
+      const allTasks = shuffle([...positionTasks, ...deleteTasks]);
+      console.log(
+        'Generated tasks:',
+        allTasks.map((t) => t.type)
+      );
 
-    room.tasks = [...allTasks, finishedTask];
+      room.tasks = [...allTasks, finishedTask];
+    } catch (err) {
+      console.error(`❌ Task generation failed for room ${roomId}:`, err);
+      // Roll back: remove room from registry, clean up player/socket state
+      this.rooms.delete(roomId);
+      this.playerRooms.delete(playerId);
+      this.cancelWaitingRoomTimeout(roomId);
+      socket.leave(roomId);
+      socket.emit('room:error', {
+        message: 'Failed to create room: task generation error',
+      });
+      return null;
+    }
 
     return room;
   }
@@ -692,10 +705,6 @@ export class RoomManager {
 
     // Generate new tasks (half position + half delete)
     const tasksPerType = Math.floor(this.NUM_TASKS / 2);
-    const [positionTasks, deleteTasks] = await Promise.all([
-      generatePositionTasksAsync(tasksPerType),
-      generateDeleteTasksAsync(tasksPerType),
-    ]);
     const finishedTask: Task = {
       id: '',
       type: 'navigate',
@@ -704,7 +713,30 @@ export class RoomManager {
       targetPosition: { line: 1, col: 0 },
       targetOffset: 0,
     };
-    room.tasks = [...shuffle([...positionTasks, ...deleteTasks]), finishedTask];
+
+    try {
+      const [positionTasks, deleteTasks] = await Promise.all([
+        generatePositionTasksAsync(tasksPerType),
+        generateDeleteTasksAsync(tasksPerType),
+      ]);
+      room.tasks = [
+        ...shuffle([...positionTasks, ...deleteTasks]),
+        finishedTask,
+      ];
+    } catch (err) {
+      console.error(
+        `❌ Task generation failed during reset for room ${roomId}:`,
+        err
+      );
+      // Room is still in 'finished' state — re-schedule cleanup so it doesn't linger
+      this.scheduleRoomCleanup(roomId);
+      // Provide a safe fallback so the room isn't left with stale tasks
+      room.tasks = [finishedTask];
+      socket.emit('room:error', {
+        message: 'Failed to reset room: task generation error',
+      });
+      return;
+    }
 
     // Reset all player states
     room.players.forEach((player) => {

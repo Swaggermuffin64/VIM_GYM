@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.ts",
   "scripts": {
-    "dev": "tsx watch index.ts",
+    "dev": "tsc && tsx watch index.ts",
     "build": "tsc && cp codeSnippets.json dist/",
     "generate-snippets": "tsx ./scripts/generateSnippets.ts",
     "start": "node dist/index.js",
@@ -22,12 +22,13 @@
     "jsonwebtoken": "^9.0.3",
     "obscenity": "^0.4.6",
     "pg": "^8.13.1",
+    "piscina": "^5.1.4",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/pg": "^8.11.10",
     "@types/node": "^24.7.2",
+    "@types/pg": "^8.11.10",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^2.1.8"

@@ -2,12 +2,12 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { Server, Socket } from 'socket.io';
+import { checkPositionTask } from './tasks.js';
 import {
-  generatePositionTask,
-  generatePositionTasks,
-  generateDeleteTasks,
-  checkPositionTask,
-} from './tasks.js';
+  generatePositionTaskAsync,
+  generatePositionTasksAsync,
+  generateDeleteTasksAsync,
+} from './taskPool.js';
 import type {
   KeystrokeSource,
   PositionTask,
@@ -124,7 +124,7 @@ fastify.get('/api/task/position', async (): Promise<TaskResponse> => {
   if (activeTasks.size >= ACTIVE_TASKS_MAX) {
     throw new Error('Too many active tasks');
   }
-  const task = generatePositionTask();
+  const task = await generatePositionTaskAsync();
   activeTasks.set(task.id, { task, createdAt: Date.now() });
 
   return {
@@ -565,8 +565,10 @@ fastify.get('/api/task/practice', async () => {
   const NUM_TASKS = 10;
   const tasksPerType = Math.floor(NUM_TASKS / 2);
 
-  const positionTasks: Task[] = generatePositionTasks(tasksPerType);
-  const deleteTasks: Task[] = generateDeleteTasks(tasksPerType);
+  const [positionTasks, deleteTasks] = await Promise.all([
+    generatePositionTasksAsync(tasksPerType),
+    generateDeleteTasksAsync(tasksPerType),
+  ]);
   const allTasks = shuffle([...positionTasks, ...deleteTasks]);
   const navigateTasksWithRecommendation = positionTasks.reduce(
     (count, task) => {
@@ -723,7 +725,7 @@ type SocketType = Socket<
 function rateLimitedHandler<T>(
   socket: SocketType,
   eventName: string,
-  handler: (data: T) => void
+  handler: (data: T) => void | Promise<void>
 ): (data: T) => void {
   return (data: T) => {
     const result = socketRateLimiter.check(socket.id, eventName);
@@ -741,7 +743,16 @@ function rateLimitedHandler<T>(
       return;
     }
     try {
-      handler(data);
+      const maybePromise = handler(data);
+      if (maybePromise instanceof Promise) {
+        maybePromise.catch((err) => {
+          console.error(
+            `Async error in ${eventName}:`,
+            err instanceof Error ? err.message : err
+          );
+          socket.emit('room:error', { message: 'Internal error' });
+        });
+      }
     } catch (err) {
       console.error(
         `Uncaught error in ${eventName}:`,
@@ -756,7 +767,7 @@ function rateLimitedHandler<T>(
 function rateLimitedVoidHandler(
   socket: SocketType,
   eventName: string,
-  handler: () => void
+  handler: () => void | Promise<void>
 ): () => void {
   return () => {
     const result = socketRateLimiter.check(socket.id, eventName);
@@ -770,7 +781,16 @@ function rateLimitedVoidHandler(
       return;
     }
     try {
-      handler();
+      const maybePromise = handler();
+      if (maybePromise instanceof Promise) {
+        maybePromise.catch((err) => {
+          console.error(
+            `Async error in ${eventName}:`,
+            err instanceof Error ? err.message : err
+          );
+          socket.emit('room:error', { message: 'Internal error' });
+        });
+      }
     } catch (err) {
       console.error(
         `Uncaught error in ${eventName}:`,
@@ -797,7 +817,7 @@ io.on('connection', (socket) => {
     rateLimitedHandler(
       socket,
       'room:create',
-      ({ playerName, roomId: externalRoomId, isPublic }) => {
+      async ({ playerName, roomId: externalRoomId, isPublic }) => {
         // Validate inputs
         const nameResult = validatePlayerName(playerName);
         const roomIdResult = validateOptionalRoomId(externalRoomId);
@@ -824,18 +844,13 @@ io.on('connection', (socket) => {
         console.log(
           `📥 room:create received: playerName=${safeName}, roomId=${safeRoomId}, isPublic=${safeIsPublic}`
         );
-        const room = roomManager.createRoom(
+        const room = await roomManager.createRoom(
           socket,
           safeName,
           safeRoomId,
           safeIsPublic
         );
         if (!room) return;
-        const player = room.players.get(socket.id)!;
-        socket.emit('room:created', {
-          roomId: room.id,
-          player,
-        });
       }
     )
   );
@@ -881,7 +896,7 @@ io.on('connection', (socket) => {
     rateLimitedHandler(
       socket,
       'room:join_matched',
-      ({ roomId, playerName }) => {
+      async ({ roomId, playerName }) => {
         // Validate inputs
         const nameResult = validatePlayerName(playerName);
         const roomIdResult = validateRoomId(roomId);
@@ -932,18 +947,13 @@ io.on('connection', (socket) => {
           }
         } else {
           // First player to arrive - create the room with the matched roomId
-          const room = roomManager.createRoom(
+          const room = await roomManager.createRoom(
             socket,
             safeName,
             safeRoomId,
             true
           );
           if (!room) return;
-          const player = room.players.get(socket.id)!;
-          socket.emit('room:created', {
-            roomId: room.id,
-            player,
-          });
         }
       }
     )
@@ -952,7 +962,7 @@ io.on('connection', (socket) => {
   // Quick match - find or create a room automatically
   socket.on(
     'room:quick_match',
-    rateLimitedHandler(socket, 'room:quick_match', ({ playerName }) => {
+    rateLimitedHandler(socket, 'room:quick_match', async ({ playerName }) => {
       const startTime = performance.now();
       // Validate input
       const nameResult = validatePlayerName(playerName);
@@ -966,18 +976,18 @@ io.on('connection', (socket) => {
 
       const safeName = nameResult.value!;
 
-      const result = roomManager.findOrCreateQuickMatchRoom(socket, safeName);
+      const result = await roomManager.findOrCreateQuickMatchRoom(
+        socket,
+        safeName
+      );
       if (!result) return;
       const { room, isNewRoom } = result;
-      const player = room.players.get(socket.id)!;
 
       console.log(
         `⏱️ [quick_match] ${safeName} → ${isNewRoom ? 'created' : 'joined'} room ${room.id} (${(performance.now() - startTime).toFixed(0)}ms)`
       );
 
-      if (isNewRoom) {
-        socket.emit('room:created', { roomId: room.id, player });
-      } else {
+      if (!isNewRoom) {
         socket.emit('room:joined', {
           roomId: room.id,
           players: roomManager.getPlayersArray(room),
@@ -997,8 +1007,8 @@ io.on('connection', (socket) => {
   // Play again (reset room for new game)
   socket.on(
     'player:ready_to_play',
-    rateLimitedVoidHandler(socket, 'player:ready_to_play', () => {
-      roomManager.playerReadyToPlay(socket);
+    rateLimitedVoidHandler(socket, 'player:ready_to_play', async () => {
+      await roomManager.playerReadyToPlay(socket);
     })
   );
 

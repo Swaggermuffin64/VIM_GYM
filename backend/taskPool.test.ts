@@ -1,0 +1,84 @@
+import { describe, expect, it } from 'vitest';
+import {
+  generatePositionTaskAsync,
+  generatePositionTasksAsync,
+  generateDeleteTasksAsync,
+} from './taskPool.js';
+
+/**
+ * Measure event loop responsiveness during async work.
+ * Schedules setImmediate callbacks in a tight loop and records
+ * how many fire while the provided promise is pending.
+ * If the main thread were blocked, zero callbacks would fire.
+ */
+function measureEventLoopTicks(promise: Promise<unknown>): Promise<number> {
+  return new Promise((resolve) => {
+    let ticks = 0;
+    let done = false;
+
+    function tick() {
+      if (done) return;
+      ticks++;
+      setImmediate(tick);
+    }
+
+    setImmediate(tick);
+
+    promise.finally(() => {
+      done = true;
+      // One more tick to let the count settle
+      setImmediate(() => resolve(ticks));
+    });
+  });
+}
+
+describe('taskPool', () => {
+  it('generates a valid position task', async () => {
+    const task = await generatePositionTaskAsync();
+    expect(task.type).toBe('navigate');
+    expect(task.targetOffset).toBeGreaterThan(0);
+    expect(task.codeSnippet).toBeTruthy();
+  });
+
+  it('generates multiple position tasks', async () => {
+    const tasks = await generatePositionTasksAsync(3);
+    expect(tasks).toHaveLength(3);
+    tasks.forEach((t) => expect(t.type).toBe('navigate'));
+  });
+
+  it('generates multiple delete tasks', async () => {
+    const tasks = await generateDeleteTasksAsync(3);
+    expect(tasks).toHaveLength(3);
+    tasks.forEach((t) => expect(t.type).toBe('delete'));
+  });
+
+  it('does not block the main thread during task generation', async () => {
+    // Generate a batch large enough to take measurable time on the worker
+    const taskPromise = generatePositionTasksAsync(5);
+    const ticks = await measureEventLoopTicks(taskPromise);
+
+    // If generation ran on the main thread, ticks would be 0.
+    // Off the main thread, the event loop stays free and ticks accumulate.
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  it('runs multiple generations concurrently without blocking', async () => {
+    const start = performance.now();
+
+    // Fire two heavy generations in parallel
+    const [positionTasks, deleteTasks] = await Promise.all([
+      generatePositionTasksAsync(5),
+      generateDeleteTasksAsync(5),
+    ]);
+
+    const elapsed = performance.now() - start;
+
+    expect(positionTasks).toHaveLength(5);
+    expect(deleteTasks).toHaveLength(5);
+
+    // Both ran on separate workers concurrently, so total time should be
+    // closer to max(one batch) than sum(both batches).
+    // We just verify they completed — the real assertion is the event loop test above.
+    console.log(`Concurrent generation took ${elapsed.toFixed(0)}ms`);
+  });
+});

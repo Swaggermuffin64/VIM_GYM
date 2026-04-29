@@ -8,7 +8,10 @@ import type {
   InterServerEvents,
   SocketData,
 } from './types.js';
-import { generateDeleteTasks, generatePositionTasks } from '../tasks.js';
+import {
+  generatePositionTasksAsync,
+  generateDeleteTasksAsync,
+} from '../taskPool.js';
 import type { Task } from '../types.js';
 import { insertMultiplayerRaceLeaderboardRows } from '../db/leaderboard.js';
 type GameSocket = Socket<
@@ -95,12 +98,12 @@ export class RoomManager {
     return code;
   }
 
-  createRoom(
+  async createRoom(
     socket: GameSocket,
     playerName: string,
     externalRoomId?: string,
     isPublic: boolean = false
-  ): GameRoom | null {
+  ): Promise<GameRoom | null> {
     console.log(
       `📥 createRoom called: playerName=${playerName}, externalRoomId=${externalRoomId}, isPublic=${isPublic} (type: ${typeof isPublic})`
     );
@@ -120,16 +123,7 @@ export class RoomManager {
       isFinished: false,
       readyToPlay: false,
     };
-    const tasksPerType = Math.floor(this.NUM_TASKS / 2);
-    const positionTasks: Task[] = generatePositionTasks(tasksPerType);
-    const deleteTasks: Task[] = generateDeleteTasks(tasksPerType);
-    const allTasks = shuffle([...positionTasks, ...deleteTasks]);
-    console.log(
-      'Generated tasks:',
-      allTasks.map((t) => t.type)
-    );
 
-    //add a finished task to the end of the tasks array
     const finishedTask: Task = {
       id: '',
       type: 'navigate',
@@ -139,10 +133,13 @@ export class RoomManager {
       targetOffset: 0,
     };
 
+    // Register the room in the map BEFORE awaiting task generation.
+    // This prevents a race where a second player arrives during the await,
+    // sees no room, and also calls createRoom for the same roomId.
     const room: GameRoom = {
       id: roomId,
       players: new Map([[playerId, player]]),
-      tasks: [...allTasks, finishedTask],
+      tasks: [finishedTask],
       num_tasks: this.NUM_TASKS,
       state: 'waiting',
       isPublic,
@@ -151,7 +148,9 @@ export class RoomManager {
     this.rooms.set(roomId, room);
     this.playerRooms.set(playerId, roomId);
 
-    // Join the socket.io room
+    // Join the socket.io room and set socket data BEFORE the await,
+    // so if another player joins during task generation, this player
+    // is already in the Socket.IO room and can receive events.
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.playerId = playerId;
@@ -161,8 +160,40 @@ export class RoomManager {
       `🏠 Room ${roomId} created by ${playerName} (${isPublic ? 'public' : 'private'})`
     );
 
+    // Emit room:created immediately so the client transitions out of "searching"
+    // BEFORE we await task generation. This way the client is ready to receive
+    // room:player_joined events if other players join during task generation.
+    socket.emit('room:created', { roomId, player });
+
     // Schedule waiting room timeout - room will be destroyed if race doesn't start
     this.scheduleWaitingRoomTimeout(roomId, isPublic);
+
+    // Generate tasks off the main thread — room is already visible to other players
+    const tasksPerType = Math.floor(this.NUM_TASKS / 2);
+    try {
+      const [positionTasks, deleteTasks] = await Promise.all([
+        generatePositionTasksAsync(tasksPerType),
+        generateDeleteTasksAsync(tasksPerType),
+      ]);
+      const allTasks = shuffle([...positionTasks, ...deleteTasks]);
+      console.log(
+        'Generated tasks:',
+        allTasks.map((t) => t.type)
+      );
+
+      room.tasks = [...allTasks, finishedTask];
+    } catch (err) {
+      console.error(`❌ Task generation failed for room ${roomId}:`, err);
+      // Roll back: remove room from registry, clean up player/socket state
+      this.rooms.delete(roomId);
+      this.playerRooms.delete(playerId);
+      this.cancelWaitingRoomTimeout(roomId);
+      socket.leave(roomId);
+      socket.emit('room:error', {
+        message: 'Failed to create room: task generation error',
+      });
+      return null;
+    }
 
     return room;
   }
@@ -273,7 +304,7 @@ export class RoomManager {
     }
   }
 
-  playerReadyToPlay(socket: GameSocket): void {
+  async playerReadyToPlay(socket: GameSocket): Promise<void> {
     const roomId = socket.data.roomId;
     const playerId = socket.data.playerId;
     if (!roomId || !playerId) return;
@@ -304,8 +335,10 @@ export class RoomManager {
       return;
     }
 
-    // All players are ready - reset room, then start countdown
-    this.resetRoom(socket);
+    // If this is a rematch (room finished a previous game), reset for a new game
+    if (room.state === 'finished') {
+      await this.resetRoom(socket);
+    }
     this.startCountdown(roomId);
   }
 
@@ -652,7 +685,7 @@ export class RoomManager {
     );
   }
 
-  resetRoom(socket: GameSocket): void {
+  async resetRoom(socket: GameSocket): Promise<void> {
     const roomId = socket.data.roomId;
     const playerId = socket.data.playerId;
 
@@ -672,8 +705,6 @@ export class RoomManager {
 
     // Generate new tasks (half position + half delete)
     const tasksPerType = Math.floor(this.NUM_TASKS / 2);
-    const positionTasks = generatePositionTasks(tasksPerType);
-    const deleteTasks = generateDeleteTasks(tasksPerType);
     const finishedTask: Task = {
       id: '',
       type: 'navigate',
@@ -682,7 +713,30 @@ export class RoomManager {
       targetPosition: { line: 1, col: 0 },
       targetOffset: 0,
     };
-    room.tasks = [...shuffle([...positionTasks, ...deleteTasks]), finishedTask];
+
+    try {
+      const [positionTasks, deleteTasks] = await Promise.all([
+        generatePositionTasksAsync(tasksPerType),
+        generateDeleteTasksAsync(tasksPerType),
+      ]);
+      room.tasks = [
+        ...shuffle([...positionTasks, ...deleteTasks]),
+        finishedTask,
+      ];
+    } catch (err) {
+      console.error(
+        `❌ Task generation failed during reset for room ${roomId}:`,
+        err
+      );
+      // Room is still in 'finished' state — re-schedule cleanup so it doesn't linger
+      this.scheduleRoomCleanup(roomId);
+      // Provide a safe fallback so the room isn't left with stale tasks
+      room.tasks = [finishedTask];
+      socket.emit('room:error', {
+        message: 'Failed to reset room: task generation error',
+      });
+      return;
+    }
 
     // Reset all player states
     room.players.forEach((player) => {
@@ -706,10 +760,10 @@ export class RoomManager {
     });
   }
 
-  findOrCreateQuickMatchRoom(
+  async findOrCreateQuickMatchRoom(
     socket: GameSocket,
     playerName: string
-  ): { room: GameRoom; isNewRoom: boolean } | null {
+  ): Promise<{ room: GameRoom; isNewRoom: boolean } | null> {
     // Find a waiting PUBLIC room with space available (don't join private rooms)
     for (const [roomId, room] of this.rooms) {
       if (
@@ -729,7 +783,7 @@ export class RoomManager {
 
     // No available room found, create a new PUBLIC one
     console.log(`🏠 Quick match: Creating new public room for ${playerName}`);
-    const newRoom = this.createRoom(socket, playerName, undefined, true);
+    const newRoom = await this.createRoom(socket, playerName, undefined, true);
     if (!newRoom) return null;
     return { room: newRoom, isNewRoom: true };
   }

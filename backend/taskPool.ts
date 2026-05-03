@@ -40,3 +40,12 @@ export async function generatePositionTasksAsync(
 export async function generateDeleteTasksAsync(count: number): Promise<Task[]> {
   return pool.run(count, { name: 'generateDeleteTasks' }) as Promise<Task[]>;
 }
+
+/** One worker job: all navigate tasks, then all delete tasks (shuffle on main thread). */
+export async function generateRaceTaskBatchesAsync(
+  tasksPerType: number
+): Promise<{ positionTasks: Task[]; deleteTasks: Task[] }> {
+  return pool.run(tasksPerType, {
+    name: 'generateRaceTaskBatches',
+  }) as Promise<{ positionTasks: Task[]; deleteTasks: Task[] }>;
+}

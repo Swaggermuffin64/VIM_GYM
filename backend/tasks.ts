@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type {
   PositionTask,
   DeleteTask,
@@ -97,7 +98,6 @@ function findRandomDeleteRange(code: string): IntTuple {
 function generateDescription(): string {
   return `Move cursor to the highlighted character`;
 }
-let taskIdCounter = 0;
 
 /**
  * Generate a random position task
@@ -136,7 +136,7 @@ export function generatePositionTask(): PositionTask {
   );
 
   return {
-    id: `task-${++taskIdCounter}`,
+    id: randomUUID(),
     type: 'navigate',
     description: generateDescription(),
     codeSnippet: snippet,
@@ -312,7 +312,7 @@ export function generateDeleteTask(): DeleteTask {
     `[DELETE] Strategy: ${chosen.name} | latency: ${generationLatencyMs}ms`
   );
   return {
-    id: `task-${++taskIdCounter}`,
+    id: randomUUID(),
     type: 'delete',
     description: 'Delete the highlighted section exactly',
     codeSnippet: snippet,
@@ -337,6 +337,20 @@ export function generatePositionTasks(count: number): Task[] {
 
 export function generateDeleteTasks(count: number): Task[] {
   return Array.from({ length: count }, generateDeleteTask);
+}
+
+/**
+ * Build navigate + delete batches in one synchronous call.
+ * Intended for a single pool job: cheap navigates first, then deletes.
+ */
+export function generateRaceTaskBatches(tasksPerType: number): {
+  positionTasks: Task[];
+  deleteTasks: Task[];
+} {
+  return {
+    positionTasks: generatePositionTasks(tasksPerType),
+    deleteTasks: generateDeleteTasks(tasksPerType),
+  };
 }
 
 /**

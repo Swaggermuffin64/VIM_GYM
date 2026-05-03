@@ -5,8 +5,7 @@ import { Server, Socket } from 'socket.io';
 import { checkPositionTask } from './tasks.js';
 import {
   generatePositionTaskAsync,
-  generatePositionTasksAsync,
-  generateDeleteTasksAsync,
+  generateRaceTaskBatchesAsync,
 } from './taskPool.js';
 import type {
   KeystrokeSource,
@@ -565,10 +564,8 @@ fastify.get('/api/task/practice', async () => {
   const NUM_TASKS = 10;
   const tasksPerType = Math.floor(NUM_TASKS / 2);
 
-  const [positionTasks, deleteTasks] = await Promise.all([
-    generatePositionTasksAsync(tasksPerType),
-    generateDeleteTasksAsync(tasksPerType),
-  ]);
+  const { positionTasks, deleteTasks } =
+    await generateRaceTaskBatchesAsync(tasksPerType);
   const allTasks = shuffle([...positionTasks, ...deleteTasks]);
   const navigateTasksWithRecommendation = positionTasks.reduce(
     (count, task) => {

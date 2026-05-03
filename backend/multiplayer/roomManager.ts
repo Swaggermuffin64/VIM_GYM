@@ -8,10 +8,7 @@ import type {
   InterServerEvents,
   SocketData,
 } from './types.js';
-import {
-  generatePositionTasksAsync,
-  generateDeleteTasksAsync,
-} from '../taskPool.js';
+import { generateRaceTaskBatchesAsync } from '../taskPool.js';
 import type { Task } from '../types.js';
 import { insertMultiplayerRaceLeaderboardRows } from '../db/leaderboard.js';
 type GameSocket = Socket<
@@ -171,10 +168,8 @@ export class RoomManager {
     // Generate tasks off the main thread — room is already visible to other players
     const tasksPerType = Math.floor(this.NUM_TASKS / 2);
     try {
-      const [positionTasks, deleteTasks] = await Promise.all([
-        generatePositionTasksAsync(tasksPerType),
-        generateDeleteTasksAsync(tasksPerType),
-      ]);
+      const { positionTasks, deleteTasks } =
+        await generateRaceTaskBatchesAsync(tasksPerType);
       const allTasks = shuffle([...positionTasks, ...deleteTasks]);
       console.log(
         'Generated tasks:',
@@ -715,10 +710,8 @@ export class RoomManager {
     };
 
     try {
-      const [positionTasks, deleteTasks] = await Promise.all([
-        generatePositionTasksAsync(tasksPerType),
-        generateDeleteTasksAsync(tasksPerType),
-      ]);
+      const { positionTasks, deleteTasks } =
+        await generateRaceTaskBatchesAsync(tasksPerType);
       room.tasks = [
         ...shuffle([...positionTasks, ...deleteTasks]),
         finishedTask,

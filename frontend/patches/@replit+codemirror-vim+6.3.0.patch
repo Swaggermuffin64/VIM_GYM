@@ -1,0 +1,34 @@
+diff --git a/node_modules/@replit/codemirror-vim/dist/index.cjs b/node_modules/@replit/codemirror-vim/dist/index.cjs
+index 24368b8..479fd71 100644
+--- a/node_modules/@replit/codemirror-vim/dist/index.cjs
++++ b/node_modules/@replit/codemirror-vim/dist/index.cjs
+@@ -2636,7 +2636,11 @@ function initVim(CM) {
+         move = true;
+         tmp = selectCompanionObject(cm, head, character, inclusive);
+         if (!tmp) {
+-          var sc = cm.getSearchCursor(new RegExp("\\" + character, "g"), head);
++          // When the cursor sits before any delimiter, scanning for the first "}"
++          // grabs the innermost closing brace (e.g. while-block) instead of the
++          // enclosing block. Prefer the opening delimiter so we anchor the pair.
++          var fallbackChar = character === "}" ? "{" : character === ")" ? "(" : character === "]" ? "[" : character === ">" ? "<" : character;
++          var sc = cm.getSearchCursor(new RegExp("\\" + fallbackChar, "g"), head);
+           if (sc.find()) {
+             // @ts-ignore
+             tmp = selectCompanionObject(cm, sc.from(), character, inclusive);
+diff --git a/node_modules/@replit/codemirror-vim/dist/index.js b/node_modules/@replit/codemirror-vim/dist/index.js
+index 4d0faa1..911030c 100644
+--- a/node_modules/@replit/codemirror-vim/dist/index.js
++++ b/node_modules/@replit/codemirror-vim/dist/index.js
+@@ -2616,7 +2616,11 @@ function initVim(CM) {
+         move = true;
+         tmp = selectCompanionObject(cm, head, character, inclusive);
+         if (!tmp) {
+-          var sc = cm.getSearchCursor(new RegExp("\\" + character, "g"), head);
++          // When the cursor sits before any delimiter, scanning for the first "}"
++          // grabs the innermost closing brace (e.g. while-block) instead of the
++          // enclosing block. Prefer the opening delimiter so we anchor the pair.
++          var fallbackChar = character === "}" ? "{" : character === ")" ? "(" : character === "]" ? "[" : character === ">" ? "<" : character;
++          var sc = cm.getSearchCursor(new RegExp("\\" + fallbackChar, "g"), head);
+           if (sc.find()) {
+             // @ts-ignore
+             tmp = selectCompanionObject(cm, sc.from(), character, inclusive);

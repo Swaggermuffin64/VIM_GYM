@@ -3,6 +3,7 @@ import {
   generatePositionTaskAsync,
   generatePositionTasksAsync,
   generateDeleteTasksAsync,
+  generateRaceTaskBatchesAsync,
 } from './taskPool.js';
 
 /**
@@ -62,23 +63,21 @@ describe('taskPool', () => {
     expect(ticks).toBeGreaterThan(0);
   });
 
-  it('runs multiple generations concurrently without blocking', async () => {
+  it('generates navigate + delete batches in one worker job', async () => {
     const start = performance.now();
 
-    // Fire two heavy generations in parallel
-    const [positionTasks, deleteTasks] = await Promise.all([
-      generatePositionTasksAsync(5),
-      generateDeleteTasksAsync(5),
-    ]);
+    const { positionTasks, deleteTasks } =
+      await generateRaceTaskBatchesAsync(5);
 
     const elapsed = performance.now() - start;
 
     expect(positionTasks).toHaveLength(5);
     expect(deleteTasks).toHaveLength(5);
+    positionTasks.forEach((t) => expect(t.type).toBe('navigate'));
+    deleteTasks.forEach((t) => expect(t.type).toBe('delete'));
 
-    // Both ran on separate workers concurrently, so total time should be
-    // closer to max(one batch) than sum(both batches).
-    // We just verify they completed — the real assertion is the event loop test above.
-    console.log(`Concurrent generation took ${elapsed.toFixed(0)}ms`);
+    console.log(
+      `Single-job race batch generation took ${elapsed.toFixed(0)}ms`
+    );
   });
 });

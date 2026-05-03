@@ -2,6 +2,7 @@ import {
   generatePositionTask as _generatePositionTask,
   generatePositionTasks as _generatePositionTasks,
   generateDeleteTasks as _generateDeleteTasks,
+  generateRaceTaskBatches as _generateRaceTaskBatches,
 } from './tasks.js';
 
 // Piscina calls these by name via pool.run(data, { name: '...' })
@@ -21,4 +22,10 @@ export function generateDeleteTasks(
   count: number
 ): ReturnType<typeof _generateDeleteTasks> {
   return _generateDeleteTasks(count);
+}
+
+export function generateRaceTaskBatches(
+  tasksPerType: number
+): ReturnType<typeof _generateRaceTaskBatches> {
+  return _generateRaceTaskBatches(tasksPerType);
 }

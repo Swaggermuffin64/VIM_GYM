@@ -25,12 +25,18 @@ import { TaskReviewOverlay } from '../components/TaskReviewOverlay';
 import {
   setTargetPosition,
   setTargetRange,
+  setYankRange,
+  setPasteMarker,
+  setYankConfirmed,
 } from '../extensions/targetHighlight';
 import {
   allowReset,
   EditBlockReason,
   setAllowedDeleteRange,
   setDeleteMode,
+  setYankPasteMode,
+  setYankPasteConfirmed,
+  setAllowedPasteOffset,
   setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
 import {
@@ -378,6 +384,8 @@ const MultiplayerGame: React.FC = () => {
   const currentTaskObjRef = useRef<Task | null>(null);
   const taskIndexCounterRef = useRef(0);
   const blockedHintTimerRef = useRef<number | null>(null);
+  const yankConfirmedRef = useRef(false);
+  const lastRegisterValueRef = useRef('');
 
   // Stable refs for callbacks used in CodeMirror extensions
   const sendEditorTextRef = useRef(sendEditorText);
@@ -403,12 +411,16 @@ const MultiplayerGame: React.FC = () => {
     }
   }, []);
 
-  // Delete task: always stream text to keep server buffer current, and signal
+  // Buffer-mutation tasks: stream text to keep server buffer current, and signal
   // completion separately when the text matches expectedResult.
   const handleDocChange = useCallback((text: string) => {
     const task = currentTaskRef.current;
     sendEditorTextRef.current(text);
-    if (task.type === 'delete' && text === task.expectedResult) {
+    if (
+      (task.type === 'delete' || task.type === 'yank_paste') &&
+      ((task.type === 'yank_paste' && task.expectedResults.includes(text)) ||
+        (task.type === 'delete' && text === task.expectedResult))
+    ) {
       sendTaskCompleteRef.current({ text });
     }
   }, []);
@@ -423,6 +435,8 @@ const MultiplayerGame: React.FC = () => {
         return 'Deletion blocked: command went outside the highlighted range.';
       case 'undoBarrier':
         return 'Undo is temporarily blocked right after reset.';
+      case 'wrongPastePosition':
+        return 'Wrong position — paste on the highlighted marker.';
       default:
         return 'Edit blocked by task constraints.';
     }
@@ -498,6 +512,42 @@ const MultiplayerGame: React.FC = () => {
       if (keyLabel) {
         setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
       }
+
+      // Check vim register after each keystroke for yank_paste tasks
+      if (!yankConfirmedRef.current) {
+        requestAnimationFrame(() => {
+          const task = currentTaskObjRef.current;
+          if (!task || task.type !== 'yank_paste' || yankConfirmedRef.current)
+            return;
+          const regCtrl = Vim.getRegisterController();
+          const yanked = regCtrl.unnamedRegister.toString();
+          if (!yanked || yanked === lastRegisterValueRef.current) return;
+          lastRegisterValueRef.current = yanked;
+          if (yanked.replace(/\n$/, '') === task.yankedText) {
+            yankConfirmedRef.current = true;
+            const view = editorRef.current?.view;
+            if (view) {
+              view.dispatch({
+                effects: [
+                  setYankConfirmed.of(true),
+                  setYankPasteConfirmed.of(true),
+                  setAllowedPasteOffset.of(task.pasteOffset),
+                  setPasteMarker.of(task.pasteOffset),
+                ],
+              });
+            }
+          } else if (yanked.length > 0) {
+            setBlockedEditHint('Incorrect yank — yank the highlighted text.');
+            if (blockedHintTimerRef.current !== null) {
+              window.clearTimeout(blockedHintTimerRef.current);
+            }
+            blockedHintTimerRef.current = window.setTimeout(() => {
+              setBlockedEditHint(null);
+              blockedHintTimerRef.current = null;
+            }, 2400);
+          }
+        });
+      }
     },
     [gameState.roomState, me?.isFinished]
   );
@@ -507,6 +557,9 @@ const MultiplayerGame: React.FC = () => {
     if (!view || !gameState.task.id) return;
 
     editorRef.current?.resetUndoHistory();
+    Vim.getRegisterController().unnamedRegister.clear();
+    yankConfirmedRef.current = false;
+    lastRegisterValueRef.current = '';
 
     view.dispatch({
       changes: {
@@ -524,6 +577,7 @@ const MultiplayerGame: React.FC = () => {
         effects: [
           setTargetPosition.of(gameState.task.targetOffset),
           setDeleteMode.of(false),
+          setYankPasteMode.of(false),
           setAllowedDeleteRange.of(null),
         ],
       });
@@ -532,7 +586,18 @@ const MultiplayerGame: React.FC = () => {
         effects: [
           setTargetRange.of(gameState.task.targetRange),
           setDeleteMode.of(true),
+          setYankPasteMode.of(false),
           setAllowedDeleteRange.of(gameState.task.targetRange),
+        ],
+      });
+    } else if (gameState.task.type === 'yank_paste') {
+      view.dispatch({
+        effects: [
+          setYankRange.of(gameState.task.yankRange),
+          setPasteMarker.of(null),
+          setDeleteMode.of(false),
+          setYankPasteMode.of(true),
+          setAllowedDeleteRange.of(null),
         ],
       });
     }
@@ -893,6 +958,8 @@ const MultiplayerGame: React.FC = () => {
     if (!view || !gameState.task.id) return;
     if (currentTaskIdRef.current === gameState.task.id) return;
     setBlockedEditHint(null);
+    yankConfirmedRef.current = false;
+    lastRegisterValueRef.current = '';
 
     // Replace doc for every new task. allowReset bypasses readOnlyNavigation
     // so full-snippet swaps are always permitted.
@@ -920,6 +987,7 @@ const MultiplayerGame: React.FC = () => {
         effects: [
           setTargetPosition.of(gameState.task.targetOffset),
           setDeleteMode.of(false),
+          setYankPasteMode.of(false),
           setAllowedDeleteRange.of(null),
         ],
       });
@@ -928,7 +996,18 @@ const MultiplayerGame: React.FC = () => {
         effects: [
           setTargetRange.of(gameState.task.targetRange),
           setDeleteMode.of(true),
+          setYankPasteMode.of(false),
           setAllowedDeleteRange.of(gameState.task.targetRange),
+        ],
+      });
+    } else if (gameState.task.type === 'yank_paste') {
+      view.dispatch({
+        effects: [
+          setYankRange.of(gameState.task.yankRange),
+          setPasteMarker.of(null),
+          setDeleteMode.of(false),
+          setYankPasteMode.of(true),
+          setAllowedDeleteRange.of(null),
         ],
       });
     }
@@ -940,6 +1019,11 @@ const MultiplayerGame: React.FC = () => {
     if (!gameState.shouldResetEditor || !gameState.task.id) return;
     const view = editorRef.current?.view;
     if (!view) return;
+
+    // Reset yank state so re-yanking works after a validation failure
+    yankConfirmedRef.current = false;
+    lastRegisterValueRef.current = '';
+    Vim.getRegisterController().unnamedRegister.clear();
 
     view.dispatch({
       changes: {
@@ -959,6 +1043,15 @@ const MultiplayerGame: React.FC = () => {
     } else if (gameState.task.type === 'delete') {
       view.dispatch({
         effects: setTargetRange.of(gameState.task.targetRange),
+      });
+    } else if (gameState.task.type === 'yank_paste') {
+      view.dispatch({
+        effects: [
+          setYankRange.of(gameState.task.yankRange),
+          setPasteMarker.of(null),
+          setYankPasteConfirmed.of(false),
+          setAllowedPasteOffset.of(null),
+        ],
       });
     }
 

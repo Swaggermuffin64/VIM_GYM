@@ -1,6 +1,6 @@
 // Shared task types for vim racing
 
-export type TaskType = 'navigate' | 'delete' | 'insert' | 'change';
+export type TaskType = 'navigate' | 'delete' | 'yank_paste';
 
 // Delete strategies - maps to vim commands
 export type DeleteStrategy =
@@ -49,17 +49,26 @@ export interface DeleteTask {
   recommendedWeight?: number;
 }
 
-export interface ChangeTask {
+export type YankStrategy = 'WORD' | 'LINE' | 'BRACKET';
+
+export interface YankPasteTask {
   id: string;
-  type: 'change';
+  type: 'yank_paste';
   description: string;
   codeSnippet: string;
-  targetRange: { from: number; to: number };
-  newText: string;
-  expectedResult: string;
+  yankRange: { from: number; to: number };
+  pasteOffset: number;
+  /** All acceptable paste results (p/P, linewise/characterwise). */
+  expectedResults: string[];
+  yankedText: string;
+  strategy: YankStrategy;
+  /** For LINE strategy, true signals linewise paste behavior. */
+  linewise?: boolean;
+  recommendedSequence?: string[];
+  recommendedWeight?: number;
 }
 
-export type Task = PositionTask | DeleteTask | ChangeTask;
+export type Task = PositionTask | DeleteTask | YankPasteTask;
 
 export interface TaskResponse {
   task: Task;

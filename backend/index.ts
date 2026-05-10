@@ -204,7 +204,7 @@ fastify.post<{
   if (
     taskType !== 'navigate' &&
     taskType !== 'delete' &&
-    taskType !== 'change'
+    taskType !== 'yank_paste'
   ) {
     return { success: false, error: 'Invalid task type' };
   }
@@ -559,14 +559,18 @@ fastify.get<{
   };
 });
 
-// Get a practice session (10 tasks: 5 position + 5 delete, shuffled)
+// Get a practice session (10 tasks: 4 navigate + 4 delete + 2 yank_paste, shuffled)
 fastify.get('/api/task/practice', async () => {
   const NUM_TASKS = 10;
-  const tasksPerType = Math.floor(NUM_TASKS / 2);
+  const tasksPerType = 4;
 
-  const { positionTasks, deleteTasks } =
+  const { positionTasks, deleteTasks, yankPasteTasks } =
     await generateRaceTaskBatchesAsync(tasksPerType);
-  const allTasks = shuffle([...positionTasks, ...deleteTasks]);
+  const allTasks = shuffle([
+    ...positionTasks.slice(0, 4),
+    ...deleteTasks.slice(0, 4),
+    ...yankPasteTasks.slice(0, 2),
+  ]);
   const navigateTasksWithRecommendation = positionTasks.reduce(
     (count, task) => {
       if (task.type !== 'navigate') return count;
@@ -586,8 +590,8 @@ fastify.get('/api/task/practice', async () => {
   }, 0);
   const practiceSummary: PracticeSummary = {
     totalTasks: allTasks.length,
-    navigateTasks: positionTasks.length,
-    deleteTasks: deleteTasks.length,
+    navigateTasks: positionTasks.slice(0, 4).length,
+    deleteTasks: deleteTasks.slice(0, 4).length,
     navigateTasksWithRecommendation,
     deleteTasksWithRecommendation,
   };
@@ -1008,8 +1012,6 @@ io.on('connection', (socket) => {
       await roomManager.playerReadyToPlay(socket);
     })
   );
-
-  // player:cursor reserved for future opponent cursor display
 
   // Handle task completion (navigate: cursor offset; delete: editor text)
   socket.on(

@@ -5,8 +5,22 @@ import type { CodeMirrorV } from '@replit/codemirror-vim';
 
 import type { Task } from '../types/task';
 import { VimRaceEditor, type VimRaceEditorHandle } from './VimRaceEditor';
-import { setTargetPosition, setTargetRange } from '../extensions/targetHighlight';
-import { setDeleteMode, setAllowedDeleteRange, allowReset, setUndoBarrier } from '../extensions/readOnlyNavigation';
+import {
+  setTargetPosition,
+  setTargetRange,
+  setYankRange,
+  setPasteMarker,
+  setYankConfirmed,
+} from '../extensions/targetHighlight';
+import {
+  setDeleteMode,
+  setYankPasteMode,
+  setYankPasteConfirmed,
+  setAllowedPasteOffset,
+  setAllowedDeleteRange,
+  allowReset,
+  setUndoBarrier,
+} from '../extensions/readOnlyNavigation';
 
 interface SummaryTaskSandboxProps {
   task: Task;
@@ -25,6 +39,8 @@ export const SummaryTaskSandbox: React.FC<SummaryTaskSandboxProps> = ({
   const onCompletionChangeRef = useRef(onCompletionChange);
   const isCompleteRef = useRef(false);
   const hasSeenInitialCursorRef = useRef(false);
+  const yankConfirmedRef = useRef(false);
+  const lastRegisterValueRef = useRef('');
   const [editorReadyTick, setEditorReadyTick] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
 
@@ -36,23 +52,38 @@ export const SummaryTaskSandbox: React.FC<SummaryTaskSandboxProps> = ({
     const view = editorRef.current?.view;
     if (!view) return;
 
+    yankConfirmedRef.current = false;
+    lastRegisterValueRef.current = '';
+    Vim.getRegisterController().unnamedRegister.clear();
+
     const taskEffects =
       task.type === 'navigate'
         ? [
             setTargetPosition.of(task.targetOffset),
             setDeleteMode.of(false),
+            setYankPasteMode.of(false),
             setAllowedDeleteRange.of(null),
           ]
         : task.type === 'delete'
           ? [
               setTargetRange.of(task.targetRange),
               setDeleteMode.of(true),
+              setYankPasteMode.of(false),
               setAllowedDeleteRange.of(task.targetRange),
             ]
-          : [
-              setDeleteMode.of(false),
-              setAllowedDeleteRange.of(null),
-            ];
+          : task.type === 'yank_paste'
+            ? [
+                setYankRange.of(task.yankRange),
+                setPasteMarker.of(null),
+                setDeleteMode.of(false),
+                setYankPasteMode.of(true),
+                setAllowedDeleteRange.of(null),
+              ]
+            : [
+                setDeleteMode.of(false),
+                setYankPasteMode.of(false),
+                setAllowedDeleteRange.of(null),
+              ];
 
     view.dispatch({
       changes: {
@@ -92,39 +123,76 @@ export const SummaryTaskSandbox: React.FC<SummaryTaskSandboxProps> = ({
     applyTaskState();
   }, [applyTaskState, editorReadyTick, resetToken]);
 
-  const markTaskComplete = useCallback((consumeNavigateHighlight: boolean) => {
+  const markTaskComplete = useCallback(() => {
     if (isCompleteRef.current) return;
     isCompleteRef.current = true;
     setIsComplete(true);
 
     const view = editorRef.current?.view;
     if (view) {
-      if (consumeNavigateHighlight) {
-        view.dispatch({
-          effects: [setTargetPosition.of(null)],
-        });
-      }
+      view.dispatch({
+        effects: [
+          setTargetPosition.of(null),
+          setTargetRange.of(null),
+          setYankRange.of(null),
+          setPasteMarker.of(null),
+        ],
+      });
       view.contentDOM.blur();
     }
 
     onCompletionChangeRef.current?.(true);
   }, []);
 
-  const handleCursorChange = useCallback((offset: number) => {
-    if (!hasSeenInitialCursorRef.current) {
-      hasSeenInitialCursorRef.current = true;
-      return;
-    }
-    if (task.type === 'navigate' && offset === task.targetOffset) {
-      markTaskComplete(true);
-    }
-  }, [markTaskComplete, task]);
+  const handleCursorChange = useCallback(
+    (offset: number) => {
+      if (!hasSeenInitialCursorRef.current) {
+        hasSeenInitialCursorRef.current = true;
+        return;
+      }
+      if (task.type === 'navigate' && offset === task.targetOffset) {
+        markTaskComplete();
+      }
+    },
+    [markTaskComplete, task]
+  );
 
-  const handleDocChange = useCallback((text: string) => {
-    if (task.type === 'delete' && text === task.expectedResult) {
-      markTaskComplete(false);
-    }
-  }, [markTaskComplete, task]);
+  const handleDocChange = useCallback(
+    (text: string) => {
+      if (task.type === 'delete' && text === task.expectedResult) {
+        markTaskComplete();
+      }
+      if (task.type === 'yank_paste' && task.expectedResults.includes(text)) {
+        markTaskComplete();
+      }
+    },
+    [markTaskComplete, task]
+  );
+
+  const handleKeyStroke = useCallback(() => {
+    if (yankConfirmedRef.current || task.type !== 'yank_paste') return;
+    requestAnimationFrame(() => {
+      if (yankConfirmedRef.current || task.type !== 'yank_paste') return;
+      const regCtrl = Vim.getRegisterController();
+      const yanked = regCtrl.unnamedRegister.toString();
+      if (!yanked || yanked === lastRegisterValueRef.current) return;
+      lastRegisterValueRef.current = yanked;
+      if (yanked.replace(/\n$/, '') === task.yankedText) {
+        yankConfirmedRef.current = true;
+        const view = editorRef.current?.view;
+        if (view) {
+          view.dispatch({
+            effects: [
+              setYankConfirmed.of(true),
+              setYankPasteConfirmed.of(true),
+              setAllowedPasteOffset.of(task.pasteOffset),
+              setPasteMarker.of(task.pasteOffset),
+            ],
+          });
+        }
+      }
+    });
+  }, [task]);
 
   return (
     <div style={styles.container}>
@@ -135,9 +203,10 @@ export const SummaryTaskSandbox: React.FC<SummaryTaskSandboxProps> = ({
           onReady={() => setEditorReadyTick((tick) => tick + 1)}
           onCursorChange={handleCursorChange}
           onDocChange={handleDocChange}
+          onKeyStroke={handleKeyStroke}
           shouldAllowBlur={() => true}
-        allowMouseFocusOnly
-        autoFocusOnMount={autoFocusOnMount}
+          allowMouseFocusOnly
+          autoFocusOnMount={autoFocusOnMount}
         />
         {isComplete && <div style={styles.freezeOverlay} />}
       </div>

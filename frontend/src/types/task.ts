@@ -1,21 +1,21 @@
 // Task types matching backend
 
-export type TaskType = 'navigate' | 'delete' | 'insert' | 'change';
+export type TaskType = 'navigate' | 'delete' | 'yank_paste';
 
 // Delete strategies - maps to vim commands
-export type DeleteStrategy = 
-  | 'WORD'              // dw, d2w, d3w
-  | 'CURLY_BRACE'       // da{
+export type DeleteStrategy =
+  | 'WORD' // dw, d2w, d3w
+  | 'CURLY_BRACE' // da{
   | 'INNER_CURLY_BRACE' // di{
-  | 'PARENTHESIS'       // da(
+  | 'PARENTHESIS' // da(
   | 'INNER_PARENTHESIS' // di(
-  | 'BRACKET'           // da[
-  | 'INNER_BRACKET'     // di[
-  | 'RANDOM';           // arbitrary range
+  | 'BRACKET' // da[
+  | 'INNER_BRACKET' // di[
+  | 'RANDOM'; // arbitrary range
 
 export interface Position {
-  line: number;  // 1-indexed
-  col: number;   // 0-indexed
+  line: number; // 1-indexed
+  col: number; // 0-indexed
 }
 
 export interface PositionTask {
@@ -40,7 +40,25 @@ export interface DeleteTask {
   recommendedWeight?: number;
 }
 
-export type Task = PositionTask | DeleteTask;
+export type YankStrategy = 'WORD' | 'LINE' | 'BRACKET';
+
+export interface YankPasteTask {
+  id: string;
+  type: 'yank_paste';
+  description: string;
+  codeSnippet: string;
+  yankRange: { from: number; to: number };
+  pasteOffset: number;
+  /** All acceptable paste results (p/P, linewise/characterwise). */
+  expectedResults: string[];
+  yankedText: string;
+  strategy: YankStrategy;
+  linewise?: boolean;
+  recommendedSequence?: string[];
+  recommendedWeight?: number;
+}
+
+export type Task = PositionTask | DeleteTask | YankPasteTask;
 
 export interface TaskResponse {
   task: Task;
@@ -66,4 +84,3 @@ export interface PracticeSummary {
   navigateTasksWithRecommendation: number;
   deleteTasksWithRecommendation: number;
 }
-

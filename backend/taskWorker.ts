@@ -2,6 +2,7 @@ import {
   generatePositionTask as _generatePositionTask,
   generatePositionTasks as _generatePositionTasks,
   generateDeleteTasks as _generateDeleteTasks,
+  generateYankPasteTasks as _generateYankPasteTasks,
   generateRaceTaskBatches as _generateRaceTaskBatches,
 } from './tasks.js';
 
@@ -22,6 +23,12 @@ export function generateDeleteTasks(
   count: number
 ): ReturnType<typeof _generateDeleteTasks> {
   return _generateDeleteTasks(count);
+}
+
+export function generateYankPasteTasks(
+  count: number
+): ReturnType<typeof _generateYankPasteTasks> {
+  return _generateYankPasteTasks(count);
 }
 
 export function generateRaceTaskBatches(

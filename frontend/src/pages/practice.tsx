@@ -26,12 +26,18 @@ import {
 import {
   setTargetPosition,
   setTargetRange,
+  setYankRange,
+  setPasteMarker,
+  setYankConfirmed,
 } from '../extensions/targetHighlight';
 import {
   allowReset,
   EditBlockReason,
   setAllowedDeleteRange,
   setDeleteMode,
+  setYankPasteMode,
+  setYankPasteConfirmed,
+  setAllowedPasteOffset,
   setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
 import {
@@ -1231,6 +1237,8 @@ const PracticeEditor: React.FC = () => {
   const playerNameRef = useRef(playerName);
   const isFetchingPracticeSessionRef = useRef(false);
   const blockedHintTimerRef = useRef<number | null>(null);
+  const yankConfirmedRef = useRef(false);
+  const lastRegisterValueRef = useRef('');
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1363,6 +1371,8 @@ const PracticeEditor: React.FC = () => {
         return 'Deletion blocked: command went outside the highlighted range.';
       case 'undoBarrier':
         return 'Undo is temporarily blocked right after reset.';
+      case 'wrongPastePosition':
+        return 'Wrong position — paste on the highlighted marker.';
       default:
         return 'Edit blocked by task constraints.';
     }
@@ -1436,6 +1446,42 @@ const PracticeEditor: React.FC = () => {
       if (keyLabel) {
         setRecentKeys((prev) => [...prev, keyLabel].slice(-40));
       }
+
+      // Check vim register after each keystroke for yank_paste tasks
+      if (!yankConfirmedRef.current) {
+        requestAnimationFrame(() => {
+          const task = tasksRef.current[taskProgressRef.current];
+          if (!task || task.type !== 'yank_paste' || yankConfirmedRef.current)
+            return;
+          const regCtrl = Vim.getRegisterController();
+          const yanked = regCtrl.unnamedRegister.toString();
+          if (!yanked || yanked === lastRegisterValueRef.current) return;
+          lastRegisterValueRef.current = yanked;
+          if (yanked.replace(/\n$/, '') === task.yankedText) {
+            yankConfirmedRef.current = true;
+            const view = editorRef.current?.view;
+            if (view) {
+              view.dispatch({
+                effects: [
+                  setYankConfirmed.of(true),
+                  setYankPasteConfirmed.of(true),
+                  setAllowedPasteOffset.of(task.pasteOffset),
+                  setPasteMarker.of(task.pasteOffset),
+                ],
+              });
+            }
+          } else if (yanked.length > 0) {
+            setBlockedEditHint('Incorrect yank — yank the highlighted text.');
+            if (blockedHintTimerRef.current !== null) {
+              window.clearTimeout(blockedHintTimerRef.current);
+            }
+            blockedHintTimerRef.current = window.setTimeout(() => {
+              setBlockedEditHint(null);
+              blockedHintTimerRef.current = null;
+            }, 2400);
+          }
+        });
+      }
     },
     [formatKeyLabel, isSessionComplete]
   );
@@ -1463,6 +1509,9 @@ const PracticeEditor: React.FC = () => {
     const view = editorRef.current?.view;
     if (!view) return;
     setBlockedEditHint(null);
+    yankConfirmedRef.current = false;
+    lastRegisterValueRef.current = '';
+    Vim.getRegisterController().unnamedRegister.clear();
 
     view.dispatch({
       changes: {
@@ -1493,6 +1542,7 @@ const PracticeEditor: React.FC = () => {
         effects: [
           setTargetPosition.of(task.targetOffset),
           setDeleteMode.of(false),
+          setYankPasteMode.of(false),
           setAllowedDeleteRange.of(null),
         ],
       });
@@ -1501,7 +1551,18 @@ const PracticeEditor: React.FC = () => {
         effects: [
           setTargetRange.of(task.targetRange),
           setDeleteMode.of(true),
+          setYankPasteMode.of(false),
           setAllowedDeleteRange.of(task.targetRange),
+        ],
+      });
+    } else if (task.type === 'yank_paste') {
+      view.dispatch({
+        effects: [
+          setYankRange.of(task.yankRange),
+          setPasteMarker.of(null),
+          setDeleteMode.of(false),
+          setYankPasteMode.of(true),
+          setAllowedDeleteRange.of(null),
         ],
       });
     }
@@ -1760,6 +1821,7 @@ const PracticeEditor: React.FC = () => {
     isTaskCompleteRef.current = false;
     setIsTaskComplete(false);
     editorRef.current?.resetUndoHistory();
+    Vim.getRegisterController().unnamedRegister.clear();
     setupTaskInEditor(current);
     editorRef.current?.view?.focus();
   }, [setupTaskInEditor]);
@@ -1854,7 +1916,7 @@ const PracticeEditor: React.FC = () => {
     [handleTaskComplete]
   );
 
-  // Handle editor text changes (for delete tasks)
+  // Handle editor text changes (for delete and yank_paste tasks)
   const handleEditorChange = useCallback(
     (newText: string) => {
       const currentTasks = tasksRef.current;
@@ -1862,8 +1924,16 @@ const PracticeEditor: React.FC = () => {
       const completed = isTaskCompleteRef.current;
 
       const task = currentTasks[progress];
-      if (task && task.type === 'delete' && !completed) {
-        if (newText === task.expectedResult) {
+      if (
+        task &&
+        (task.type === 'delete' || task.type === 'yank_paste') &&
+        !completed
+      ) {
+        if (
+          (task.type === 'yank_paste' &&
+            task.expectedResults.includes(newText)) ||
+          (task.type === 'delete' && newText === task.expectedResult)
+        ) {
           handleTaskComplete();
         }
       }
@@ -1922,7 +1992,10 @@ const PracticeEditor: React.FC = () => {
   const getTaskTypeDisplay = (task: Task | null) => {
     if (!task) return { label: 'Loading...' };
     if (task.type === 'navigate') return { label: 'Navigate to target' };
-    return { label: 'Delete the highlighted text' };
+    if (task.type === 'delete') return { label: 'Delete the highlighted text' };
+    if (task.type === 'yank_paste')
+      return { label: 'Yank highlighted text and paste at marker' };
+    return { label: 'Complete the task' };
   };
 
   const taskDisplay = getTaskTypeDisplay(currentTask);

@@ -20,7 +20,7 @@ export function formatTaskTypeLabel(taskType: TaskType): string {
   if (taskType === 'navigate') return 'Navigate';
   if (taskType === 'delete') return 'Delete';
   if (taskType === 'yank_paste') return 'Yank + Paste';
-  return 'Replace';
+  return 'Unknown';
 }
 
 export function expandRecommendedSequence(

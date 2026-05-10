@@ -960,6 +960,7 @@ const MultiplayerGame: React.FC = () => {
     setBlockedEditHint(null);
     yankConfirmedRef.current = false;
     lastRegisterValueRef.current = '';
+    Vim.getRegisterController().unnamedRegister.clear();
 
     // Replace doc for every new task. allowReset bypasses readOnlyNavigation
     // so full-snippet swaps are always permitted.

@@ -400,10 +400,10 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
           }
           break;
 
-        case 'change':
-          if (currentTask.expectedResult !== undefined) {
+        case 'yank_paste':
+          if (currentTask.expectedResults?.[0] !== undefined) {
             gameSocket.emit('player:editorText', {
-              text: currentTask.expectedResult,
+              text: currentTask.expectedResults[0],
             });
           }
           break;

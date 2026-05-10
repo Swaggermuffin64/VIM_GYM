@@ -175,10 +175,6 @@ export const socketRateLimiter = new SocketRateLimiter();
 
 // Configure default limits for vim-racing events
 socketRateLimiter.setLimit(
-  'player:cursor',
-  SocketRateLimiter.DEFAULTS.highFrequency
-);
-socketRateLimiter.setLimit(
   'player:editorText',
   SocketRateLimiter.DEFAULTS.highFrequency
 );

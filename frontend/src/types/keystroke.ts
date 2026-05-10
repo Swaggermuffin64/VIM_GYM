@@ -13,7 +13,7 @@ export interface KeystrokeEvent {
 export interface TaskKeystrokeSubmission {
   source: KeystrokeSource;
   taskId: string;
-  taskType: 'navigate' | 'delete' | 'insert' | 'change';
+  taskType: 'navigate' | 'delete' | 'yank_paste';
   startedAt: number;
   completedAt: number;
   roomId?: string;

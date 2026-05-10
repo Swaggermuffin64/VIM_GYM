@@ -1,8 +1,19 @@
-import { Annotation, EditorState, Transaction, TransactionSpec, StateEffect, StateField, Extension } from '@codemirror/state';
+import {
+  Annotation,
+  EditorState,
+  Transaction,
+  TransactionSpec,
+  StateEffect,
+  StateField,
+  Extension,
+} from '@codemirror/state';
 
 function shouldDebugUndo(): boolean {
-  return typeof globalThis !== 'undefined'
-    && (globalThis as { __vimRacingDebugUndo?: boolean }).__vimRacingDebugUndo === true;
+  return (
+    typeof globalThis !== 'undefined' &&
+    (globalThis as { __vimRacingDebugUndo?: boolean }).__vimRacingDebugUndo ===
+      true
+  );
 }
 
 function logUndoDebug(message: string, data?: unknown): void {
@@ -22,7 +33,10 @@ export const setDeleteMode = StateEffect.define<boolean>();
 /**
  * State effect to set the allowed deletion range (for delete tasks)
  */
-export const setAllowedDeleteRange = StateEffect.define<{ from: number; to: number } | null>();
+export const setAllowedDeleteRange = StateEffect.define<{
+  from: number;
+  to: number;
+} | null>();
 
 /**
  * State effect to allow a reset (bypasses the read-only filter)
@@ -30,11 +44,29 @@ export const setAllowedDeleteRange = StateEffect.define<{ from: number; to: numb
 export const allowReset = StateEffect.define<boolean>();
 export const setUndoBarrier = StateEffect.define<boolean>();
 
+/**
+ * State effect to toggle yank+paste mode
+ */
+export const setYankPasteMode = StateEffect.define<boolean>();
+
+/**
+ * State effect to signal that the correct text has been yanked.
+ * Transitions from yank phase (no edits) to paste phase (insertions only).
+ */
+export const setYankPasteConfirmed = StateEffect.define<boolean>();
+
+/**
+ * State effect to set the allowed paste offset.
+ * Insertions must occur on the same line as this offset.
+ */
+export const setAllowedPasteOffset = StateEffect.define<number | null>();
+
 export type EditBlockReason =
   | 'undoBarrier'
   | 'readOnlyTask'
   | 'insertNotAllowed'
-  | 'outsideAllowedRange';
+  | 'outsideAllowedRange'
+  | 'wrongPastePosition';
 
 export const blockedEditReasonAnnotation = Annotation.define<EditBlockReason>();
 
@@ -48,6 +80,40 @@ const deleteModeState = StateField.define<boolean>({
       if (effect.is(setDeleteMode)) {
         return effect.value;
       }
+    }
+    return value;
+  },
+});
+
+const yankPasteModeState = StateField.define<boolean>({
+  create: () => false,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setYankPasteMode)) return effect.value;
+    }
+    return value;
+  },
+});
+
+const yankPasteConfirmedState = StateField.define<boolean>({
+  create: () => false,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setYankPasteConfirmed)) return effect.value;
+      // Reset when yankPasteMode is toggled
+      if (effect.is(setYankPasteMode)) return false;
+    }
+    return value;
+  },
+});
+
+const allowedPasteOffsetState = StateField.define<number | null>({
+  create: () => null,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setAllowedPasteOffset)) return effect.value;
+      // Reset when yankPasteMode is toggled
+      if (effect.is(setYankPasteMode)) return null;
     }
     return value;
   },
@@ -67,7 +133,9 @@ const undoBarrierState = StateField.define<boolean>({
     }
 
     if (tr.docChanged) {
-      const isResetSwap = tr.effects.some((effect) => effect.is(allowReset) && effect.value);
+      const isResetSwap = tr.effects.some(
+        (effect) => effect.is(allowReset) && effect.value
+      );
       if (!isResetSwap) {
         return false;
       }
@@ -81,7 +149,10 @@ const undoBarrierState = StateField.define<boolean>({
  * State field that tracks the allowed deletion range.
  * This range shrinks as characters are deleted.
  */
-const allowedDeleteRangeState = StateField.define<{ from: number; to: number } | null>({
+const allowedDeleteRangeState = StateField.define<{
+  from: number;
+  to: number;
+} | null>({
   create: () => null,
   update(value, tr) {
     // Check for explicit range set effect
@@ -90,21 +161,21 @@ const allowedDeleteRangeState = StateField.define<{ from: number; to: number } |
         return effect.value;
       }
     }
-    
+
     // Map the range through document changes to keep it in sync
     if (value && tr.docChanged) {
       // Keep boundary inserts inside the tracked range so undo at either edge
       // restores the full highlighted span.
       const newFrom = tr.changes.mapPos(value.from, -1);
       const newTo = tr.changes.mapPos(value.to, 1);
-      
+
       // If the range collapsed or became invalid, return null
       if (newFrom >= newTo) {
         return null;
       }
       return { from: newFrom, to: newTo };
     }
-    
+
     return value;
   },
 });
@@ -114,7 +185,9 @@ const allowedDeleteRangeState = StateField.define<{ from: number; to: number } |
  * When delete mode is enabled, deletions are only allowed within the target range.
  */
 const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
-  const buildBlockedTransaction = (reason: EditBlockReason): TransactionSpec => {
+  const buildBlockedTransaction = (
+    reason: EditBlockReason
+  ): TransactionSpec => {
     const blocked: TransactionSpec = {
       annotations: blockedEditReasonAnnotation.of(reason),
     };
@@ -170,23 +243,27 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
       });
 
       if (isInAllowedRange) {
-        logUndoDebug('allowing undo/redo inside allowed range', { allowedRange });
+        logUndoDebug('allowing undo/redo inside allowed range', {
+          allowedRange,
+        });
         return tr;
       }
-      logUndoDebug('blocking undo/redo outside allowed range', { allowedRange });
+      logUndoDebug('blocking undo/redo outside allowed range', {
+        allowedRange,
+      });
       return buildBlockedTransaction('outsideAllowedRange');
     }
 
     let isValidDeletion = true;
     let outsideAllowedRange = false;
-    
+
     tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
-      const isDelete = inserted.length === 0 || inserted.length < (toA - fromA);
+      const isDelete = inserted.length === 0 || inserted.length < toA - fromA;
       if (!isDelete) {
         isValidDeletion = false;
         return;
       }
-      
+
       if (allowedRange) {
         if (fromA < allowedRange.from || toA > allowedRange.to) {
           isValidDeletion = false;
@@ -202,7 +279,43 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
       return tr;
     }
 
-    return buildBlockedTransaction(outsideAllowedRange ? 'outsideAllowedRange' : 'insertNotAllowed');
+    return buildBlockedTransaction(
+      outsideAllowedRange ? 'outsideAllowedRange' : 'insertNotAllowed'
+    );
+  }
+
+  // Yank+paste mode: two phases
+  const yankPasteMode = tr.startState.field(yankPasteModeState);
+  if (yankPasteMode) {
+    const confirmed = tr.startState.field(yankPasteConfirmedState);
+    if (!confirmed) {
+      // Yank phase: block all doc changes (navigation only)
+      return buildBlockedTransaction('readOnlyTask');
+    }
+    // Paste phase: allow insertions only, no deletions
+    let hasDeletion = false;
+    tr.changes.iterChanges((fromA, toA) => {
+      if (toA > fromA) hasDeletion = true; // something was removed
+    });
+    if (hasDeletion) {
+      return buildBlockedTransaction('insertNotAllowed');
+    }
+    // Check insertion position matches the expected paste location
+    const pasteOffset = tr.startState.field(allowedPasteOffsetState);
+    if (pasteOffset !== null) {
+      const line = tr.startState.doc.lineAt(pasteOffset);
+      let wrongPosition = false;
+      tr.changes.iterChanges((fromA) => {
+        // Allow insertion anywhere on the paste marker's line or just past its newline (linewise paste)
+        if (fromA < line.from || fromA > line.to + 1) {
+          wrongPosition = true;
+        }
+      });
+      if (wrongPosition) {
+        return buildBlockedTransaction('wrongPastePosition');
+      }
+    }
+    return tr;
   }
 
   if (isUndoRedo) {
@@ -223,6 +336,9 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
  */
 export const readOnlyNavigation: Extension = [
   deleteModeState,
+  yankPasteModeState,
+  yankPasteConfirmedState,
+  allowedPasteOffsetState,
   undoBarrierState,
   allowedDeleteRangeState,
   readOnlyFilter,

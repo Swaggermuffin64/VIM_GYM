@@ -19,11 +19,13 @@ export function formatKeyLabel(key: string): string | null {
 export function formatTaskTypeLabel(taskType: TaskType): string {
   if (taskType === 'navigate') return 'Navigate';
   if (taskType === 'delete') return 'Delete';
-  if (taskType === 'insert') return 'Insert';
-  return 'Change';
+  if (taskType === 'yank_paste') return 'Yank + Paste';
+  return 'Unknown';
 }
 
-export function expandRecommendedSequence(recommendedSequence: string[]): string[] {
+export function expandRecommendedSequence(
+  recommendedSequence: string[]
+): string[] {
   return recommendedSequence.flatMap((token) => token.split(''));
 }
 
@@ -62,7 +64,10 @@ export function formatKeysForDisplay(keys: string[]): string {
   return compacted.join(' ');
 }
 
-export function buildKeySequence(events: KeystrokeEvent[], maxVisible = 30): string {
+export function buildKeySequence(
+  events: KeystrokeEvent[],
+  maxVisible = 30
+): string {
   const keyLabels = events
     .map((event) => formatKeyLabel(event.key))
     .filter((label): label is string => Boolean(label));
@@ -72,7 +77,10 @@ export function buildKeySequence(events: KeystrokeEvent[], maxVisible = 30): str
   return `${formatKeysForDisplay(keyLabels.slice(0, maxVisible))} ... (+${keyLabels.length - maxVisible})`;
 }
 
-export function buildOptimalInfo(task: Task): { optimalSequence?: string; ourSolutionKeyCount?: number } {
+export function buildOptimalInfo(task: Task): {
+  optimalSequence?: string;
+  ourSolutionKeyCount?: number;
+} {
   const hasOptimal =
     Array.isArray(task.recommendedSequence) &&
     typeof task.recommendedWeight === 'number';
@@ -80,7 +88,9 @@ export function buildOptimalInfo(task: Task): { optimalSequence?: string; ourSol
 
   const optimalKeys = task.recommendedSequence as string[];
   const expandedOptimalKeys = expandRecommendedSequence(optimalKeys);
-  const displayOptimalKeys = expandedOptimalKeys.map((key) => (key === ' ' ? 'Space' : key));
+  const displayOptimalKeys = expandedOptimalKeys.map((key) =>
+    key === ' ' ? 'Space' : key
+  );
   return {
     optimalSequence: formatKeysForDisplay(displayOptimalKeys),
     ourSolutionKeyCount: expandedOptimalKeys.length,

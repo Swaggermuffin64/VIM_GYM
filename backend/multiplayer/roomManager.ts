@@ -166,11 +166,15 @@ export class RoomManager {
     this.scheduleWaitingRoomTimeout(roomId, isPublic);
 
     // Generate tasks off the main thread — room is already visible to other players
-    const tasksPerType = Math.floor(this.NUM_TASKS / 2);
+    const tasksPerType = 4; // 4 navigate + 4 delete + 2 yank_paste = 10
     try {
-      const { positionTasks, deleteTasks } =
+      const { positionTasks, deleteTasks, yankPasteTasks } =
         await generateRaceTaskBatchesAsync(tasksPerType);
-      const allTasks = shuffle([...positionTasks, ...deleteTasks]);
+      const allTasks = shuffle([
+        ...positionTasks.slice(0, 4),
+        ...deleteTasks.slice(0, 4),
+        ...yankPasteTasks.slice(0, 2),
+      ]);
       console.log(
         'Generated tasks:',
         allTasks.map((t) => t.type)
@@ -404,12 +408,16 @@ export class RoomManager {
     ) {
       return;
     }
-
+    // say yank_paste was two parts, we first validate the yank, and then the paste in the same task
     let valid = false;
     if (currentTask.type === 'navigate' && data.offset !== undefined) {
       valid = data.offset === currentTask.targetOffset;
     } else if (currentTask.type === 'delete') {
       valid = player.editorBuffer === currentTask.expectedResult;
+    } else if (currentTask.type === 'yank_paste') {
+      valid =
+        !!player.editorBuffer &&
+        currentTask.expectedResults.includes(player.editorBuffer);
     }
 
     if (valid) {
@@ -430,7 +438,12 @@ export class RoomManager {
     if (!player || player.isFinished) return;
 
     const currentTask = room.tasks[player.taskProgress];
-    if (!currentTask || currentTask.type !== 'delete') return;
+    if (!currentTask) return;
+
+    // Only buffer-mutation tasks stream text
+    if (currentTask.type !== 'delete' && currentTask.type !== 'yank_paste') {
+      return;
+    }
 
     if (
       player.taskStartedAt &&
@@ -439,35 +452,44 @@ export class RoomManager {
       return;
     }
 
-    // Validate partial deletion: only characters within targetRange should be removed.
-    // prefix/suffix/originalMiddle are precomputed at task generation.
-    const { prefix, suffix, codeSnippet, originalMiddle } = currentTask;
-    const newMiddle = text.slice(prefix.length, text.length - suffix.length);
+    let isValidPartial = false;
 
-    // newMiddle must be a deletion-only subsequence of originalMiddle —
-    // no insertions or substitutions permitted within the target range.
-    let isSubsequence = true;
-    let origIdx = 0;
-    for (let i = 0; i < newMiddle.length; i++) {
-      while (
-        origIdx < originalMiddle.length &&
-        originalMiddle[origIdx] !== newMiddle[i]
-      ) {
+    if (currentTask.type === 'delete') {
+      // Validate partial deletion: only characters within targetRange should be removed.
+      const { prefix, suffix, codeSnippet, originalMiddle } = currentTask;
+      const newMiddle = text.slice(prefix.length, text.length - suffix.length);
+
+      let isSubsequence = true;
+      let origIdx = 0;
+      for (let i = 0; i < newMiddle.length; i++) {
+        while (
+          origIdx < originalMiddle.length &&
+          originalMiddle[origIdx] !== newMiddle[i]
+        ) {
+          origIdx++;
+        }
+        if (origIdx >= originalMiddle.length) {
+          isSubsequence = false;
+          break;
+        }
         origIdx++;
       }
-      if (origIdx >= originalMiddle.length) {
-        isSubsequence = false;
-        break;
-      }
-      origIdx++;
-    }
 
-    const isValidPartial =
-      text.length >= prefix.length + suffix.length &&
-      text.length <= codeSnippet.length &&
-      text.startsWith(prefix) &&
-      text.endsWith(suffix) &&
-      isSubsequence;
+      isValidPartial =
+        text.length >= prefix.length + suffix.length &&
+        text.length <= codeSnippet.length &&
+        text.startsWith(prefix) &&
+        text.endsWith(suffix) &&
+        isSubsequence;
+    } else if (currentTask.type === 'yank_paste') {
+      // Buffer can only grow (text inserted), never shrink
+      const maxExpectedLen = Math.max(
+        ...currentTask.expectedResults.map((r) => r.length)
+      );
+      isValidPartial =
+        text.length >= currentTask.codeSnippet.length &&
+        text.length <= maxExpectedLen;
+    }
 
     if (!isValidPartial) {
       socket.emit('game:validation_failed', playerId);
@@ -698,8 +720,8 @@ export class RoomManager {
     // Cancel any pending cleanup since players want to play again
     this.cancelRoomCleanup(roomId);
 
-    // Generate new tasks (half position + half delete)
-    const tasksPerType = Math.floor(this.NUM_TASKS / 2);
+    // Generate new tasks (4 navigate + 4 delete + 2 yank_paste = 10)
+    const tasksPerType = 4;
     const finishedTask: Task = {
       id: '',
       type: 'navigate',
@@ -710,10 +732,14 @@ export class RoomManager {
     };
 
     try {
-      const { positionTasks, deleteTasks } =
+      const { positionTasks, deleteTasks, yankPasteTasks } =
         await generateRaceTaskBatchesAsync(tasksPerType);
       room.tasks = [
-        ...shuffle([...positionTasks, ...deleteTasks]),
+        ...shuffle([
+          ...positionTasks.slice(0, 4),
+          ...deleteTasks.slice(0, 4),
+          ...yankPasteTasks.slice(0, 2),
+        ]),
         finishedTask,
       ];
     } catch (err) {

@@ -22,7 +22,6 @@ interface UseGameSocketReturn {
   cancelQuickMatch: () => void;
   leaveRoom: () => void;
   readyToPlay: () => void;
-  sendCursorMove: (offset: number) => void;
   sendEditorText: (text: string) => void;
   sendTaskComplete: (payload: { offset?: number; text?: string }) => void;
   clearResetFlag: () => void;
@@ -443,24 +442,12 @@ export function useGameSocket(): UseGameSocketReturn {
     }
   }, []);
 
-  const sendCursorMove = useCallback(
-    (offset: number) => {
-      if (
-        socketRef.current &&
-        gameState.task.type === 'navigate' &&
-        gameState.roomState === 'racing'
-      ) {
-        socketRef.current.emit('player:cursor', { offset });
-      }
-    },
-    [gameState.roomState, gameState.task.type]
-  );
-
   const sendEditorText = useCallback(
     (text: string) => {
       if (
         socketRef.current &&
-        gameState.task.type === 'delete' &&
+        (gameState.task.type === 'delete' ||
+          gameState.task.type === 'yank_paste') &&
         gameState.roomState === 'racing'
       ) {
         socketRef.current.emit('player:editorText', { text });
@@ -505,7 +492,6 @@ export function useGameSocket(): UseGameSocketReturn {
     cancelQuickMatch,
     leaveRoom,
     readyToPlay,
-    sendCursorMove,
     sendEditorText,
     sendTaskComplete,
     clearResetFlag,

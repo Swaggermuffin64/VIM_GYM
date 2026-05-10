@@ -42,7 +42,6 @@ export interface ClientToServerEvents {
   'room:quick_match': (data: { playerName: string }) => void;
   'room:leave': () => void;
   'player:ready_to_play': () => void;
-  'player:cursor': (data: { offset: number }) => void;
   'player:editorText': (data: { text: string }) => void;
   'player:task_complete': (data: { offset?: number; text?: string }) => void;
 }

@@ -63,18 +63,32 @@ describe('taskPool', () => {
     expect(ticks).toBeGreaterThan(0);
   });
 
-  it('generates navigate + delete batches in one worker job', async () => {
+  it('generates all task type batches in one worker job', async () => {
     const start = performance.now();
 
-    const { positionTasks, deleteTasks } =
-      await generateRaceTaskBatchesAsync(5);
+    const { positionTasks, deleteTasks, yankPasteTasks } =
+      await generateRaceTaskBatchesAsync(3);
 
     const elapsed = performance.now() - start;
 
-    expect(positionTasks).toHaveLength(5);
-    expect(deleteTasks).toHaveLength(5);
+    expect(positionTasks).toHaveLength(3);
+    expect(deleteTasks).toHaveLength(3);
+    expect(yankPasteTasks).toHaveLength(3);
     positionTasks.forEach((t) => expect(t.type).toBe('navigate'));
     deleteTasks.forEach((t) => expect(t.type).toBe('delete'));
+    yankPasteTasks.forEach((t) => {
+      expect(t.type).toBe('yank_paste');
+      if (t.type === 'yank_paste') {
+        expect(t.yankRange.from).toBeLessThan(t.yankRange.to);
+        expect(t.expectedResults.length).toBeGreaterThan(0);
+        t.expectedResults.forEach((r) =>
+          expect(r.length).toBeGreaterThan(t.codeSnippet.length)
+        );
+        expect(t.yankedText).toBe(
+          t.codeSnippet.slice(t.yankRange.from, t.yankRange.to)
+        );
+      }
+    });
 
     console.log(
       `Single-job race batch generation took ${elapsed.toFixed(0)}ms`

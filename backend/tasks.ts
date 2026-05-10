@@ -2,15 +2,18 @@ import { randomUUID } from 'node:crypto';
 import type {
   PositionTask,
   DeleteTask,
+  YankPasteTask,
   Position,
   Task,
   IntTuple,
   DeleteStrategy,
+  YankStrategy,
 } from './types.ts';
 import { CODE_SNIPPIT_OBJECTS } from './codeSnippets.js'; //will be a db call one day
 import {
   shortestVimSequenceLazy,
   getRecommendedDeleteSequence,
+  getRecommendedYankPasteSequence,
 } from './multiplayer/vimGraph.js';
 /**
  * Remove empty lines from a code snippet
@@ -331,6 +334,221 @@ export function generateDeleteTask(): DeleteTask {
   };
 }
 
+type YankStrategyExecutor = () => {
+  yankFrom: number;
+  yankTo: number;
+  pasteOffset: number;
+  expectedResults: string[];
+  linewise: boolean;
+};
+
+export function generateYankPasteTask(): YankPasteTask {
+  const generationStartedAt = Date.now();
+  const snippetIndex = Math.floor(Math.random() * CODE_SNIPPIT_OBJECTS.length);
+  const snippetData =
+    CODE_SNIPPIT_OBJECTS[snippetIndex] ?? CODE_SNIPPIT_OBJECTS[0];
+  if (!snippetData) {
+    throw new Error('No code snippets available to generate yank_paste task');
+  }
+  const snippet = removeEmptyLines(snippetData.code);
+  const words = snippetData.wordIndices;
+
+  // Build available strategies
+  const strategies: Array<{
+    name: YankStrategy;
+    execute: YankStrategyExecutor;
+  }> = [];
+
+  // WORD strategy (yiw) — pick a word, paste characterwise
+  if (words.length >= 2) {
+    strategies.push({
+      name: 'WORD',
+      execute: () => {
+        const wordIdx = Math.floor(Math.random() * words.length);
+        const [yankFrom, yankTo] = words[wordIdx]!;
+        const validPasteOffsets = words
+          .map(([start]) => start)
+          .filter((offset) => offset < yankFrom || offset >= yankTo);
+        if (validPasteOffsets.length === 0)
+          throw new Error('No valid paste offset');
+        const pasteOffset =
+          validPasteOffsets[
+            Math.floor(Math.random() * validPasteOffsets.length)
+          ]!;
+        const yankedText = snippet.slice(yankFrom, yankTo);
+        // p (after cursor) and P (before cursor)
+        const resultP =
+          snippet.slice(0, pasteOffset + 1) +
+          yankedText +
+          snippet.slice(pasteOffset + 1);
+        const resultShiftP =
+          snippet.slice(0, pasteOffset) +
+          yankedText +
+          snippet.slice(pasteOffset);
+        return {
+          yankFrom,
+          yankTo,
+          pasteOffset,
+          expectedResults: [resultP, resultShiftP],
+          linewise: false,
+        };
+      },
+    });
+  }
+
+  // LINE strategy (yy) — yank a full line, paste linewise below target line
+  // Filter out single-character lines to avoid confusion with yl
+  const lines = snippetData.lineOffsetRanges;
+  const multiCharLines = lines
+    .map(([from, to], i) => ({ from, to, idx: i }))
+    .filter(({ from, to }) => to - from > 1);
+  if (multiCharLines.length >= 1 && lines.length >= 2) {
+    strategies.push({
+      name: 'LINE',
+      execute: () => {
+        const chosen =
+          multiCharLines[Math.floor(Math.random() * multiCharLines.length)]!;
+        const [yankFrom, yankTo] = [chosen.from, chosen.to];
+        // Pick a different line to paste after
+        const validPasteLines = lines.filter((_, i) => i !== chosen.idx);
+        const pasteLine =
+          validPasteLines[Math.floor(Math.random() * validPasteLines.length)]!;
+        // pasteOffset = first char of the target line (user navigates here, presses p)
+        const pasteOffset = pasteLine[0];
+        const yankedText = snippet.slice(yankFrom, yankTo);
+        const pasteLineStart = pasteLine[0];
+        const pasteLineEnd = pasteLine[1]; // exclusive end = position of \n or doc end
+        const newlineAfterPasteLine = snippet[pasteLineEnd] === '\n';
+
+        // 4 accepted results: linewise p/P × characterwise p/P
+        // 1. Linewise p (yy + p): new line below target line
+        let linewiseP: string;
+        if (newlineAfterPasteLine) {
+          linewiseP =
+            snippet.slice(0, pasteLineEnd + 1) +
+            yankedText +
+            '\n' +
+            snippet.slice(pasteLineEnd + 1);
+        } else {
+          linewiseP = snippet + '\n' + yankedText;
+        }
+        // 2. Linewise P (yy + P): new line above target line
+        const linewiseShiftP =
+          snippet.slice(0, pasteLineStart) +
+          yankedText +
+          '\n' +
+          snippet.slice(pasteLineStart);
+        // 3. Characterwise p (after pasteOffset)
+        const charP =
+          snippet.slice(0, pasteOffset + 1) +
+          yankedText +
+          snippet.slice(pasteOffset + 1);
+        // 4. Characterwise P (before pasteOffset)
+        const charShiftP =
+          snippet.slice(0, pasteOffset) +
+          yankedText +
+          snippet.slice(pasteOffset);
+
+        return {
+          yankFrom,
+          yankTo,
+          pasteOffset,
+          expectedResults: [linewiseP, linewiseShiftP, charP, charShiftP],
+          linewise: true,
+        };
+      },
+    });
+  }
+
+  // BRACKET strategy (y%) — yank from opening bracket/paren to its match
+  const allBracketPairs = [
+    ...snippetData.parenthesisIndices,
+    ...snippetData.bracketIndices,
+    ...snippetData.curlyBraceIndices,
+  ];
+  if (allBracketPairs.length > 0 && words.length >= 1) {
+    strategies.push({
+      name: 'BRACKET',
+      execute: () => {
+        const pairIdx = Math.floor(Math.random() * allBracketPairs.length);
+        const [yankFrom, yankTo] = allBracketPairs[pairIdx]!;
+        const yankedText = snippet.slice(yankFrom, yankTo);
+        // Paste at a word boundary that doesn't overlap the yank range
+        const validPasteOffsets = words
+          .map(([start]) => start)
+          .filter((offset) => offset < yankFrom || offset >= yankTo);
+        if (validPasteOffsets.length === 0)
+          throw new Error('No valid paste offset');
+        const pasteOffset =
+          validPasteOffsets[
+            Math.floor(Math.random() * validPasteOffsets.length)
+          ]!;
+        // p (after cursor) and P (before cursor)
+        const resultP =
+          snippet.slice(0, pasteOffset + 1) +
+          yankedText +
+          snippet.slice(pasteOffset + 1);
+        const resultShiftP =
+          snippet.slice(0, pasteOffset) +
+          yankedText +
+          snippet.slice(pasteOffset);
+        return {
+          yankFrom,
+          yankTo,
+          pasteOffset,
+          expectedResults: [resultP, resultShiftP],
+          linewise: false,
+        };
+      },
+    });
+  }
+
+  if (strategies.length === 0) {
+    throw new Error('No yank strategies available for this snippet');
+  }
+
+  const chosen = strategies[Math.floor(Math.random() * strategies.length)]!;
+  const { yankFrom, yankTo, pasteOffset, expectedResults, linewise } =
+    chosen.execute();
+  const yankedText = snippet.slice(yankFrom, yankTo);
+
+  const yankPasteRecommendation = getRecommendedYankPasteSequence(
+    snippetData,
+    chosen.name,
+    yankFrom,
+    yankTo,
+    pasteOffset
+  );
+
+  const generationLatencyMs = Date.now() - generationStartedAt;
+  console.log(
+    `[YANK_PASTE] Strategy: ${chosen.name} | Yank: ${yankFrom}-${yankTo}, Paste: ${pasteOffset} | latency: ${generationLatencyMs}ms\n  yankedText: "${yankedText}"\n  expectedResults: ${expectedResults.length} variants`
+  );
+
+  return {
+    id: randomUUID(),
+    type: 'yank_paste',
+    description: 'Yank the highlighted text and paste it at the marker',
+    codeSnippet: snippet,
+    yankRange: { from: yankFrom, to: yankTo },
+    pasteOffset,
+    expectedResults,
+    yankedText,
+    strategy: chosen.name,
+    ...(linewise ? { linewise: true } : {}),
+    ...(yankPasteRecommendation
+      ? {
+          recommendedSequence: yankPasteRecommendation.recommendedSequence,
+          recommendedWeight: yankPasteRecommendation.recommendedWeight,
+        }
+      : {}),
+  };
+}
+
+export function generateYankPasteTasks(count: number): Task[] {
+  return Array.from({ length: count }, generateYankPasteTask);
+}
+
 export function generatePositionTasks(count: number): Task[] {
   return Array.from({ length: count }, generatePositionTask);
 }
@@ -340,16 +558,18 @@ export function generateDeleteTasks(count: number): Task[] {
 }
 
 /**
- * Build navigate + delete batches in one synchronous call.
- * Intended for a single pool job: cheap navigates first, then deletes.
+ * Build all task type batches in one synchronous call.
+ * Intended for a single pool job; shuffle on main thread.
  */
 export function generateRaceTaskBatches(tasksPerType: number): {
   positionTasks: Task[];
   deleteTasks: Task[];
+  yankPasteTasks: Task[];
 } {
   return {
     positionTasks: generatePositionTasks(tasksPerType),
     deleteTasks: generateDeleteTasks(tasksPerType),
+    yankPasteTasks: generateYankPasteTasks(tasksPerType),
   };
 }
 

@@ -12,10 +12,15 @@ import { io, Socket } from 'socket.io-client';
 const LOCAL_MATCHMAKING_URL = 'ws://localhost:3002';
 const PROD_MATCHMAKING_URL = 'wss://vim-racing-matchmaker.fly.dev';
 
-const MATCHMAKING_URL = process.env.MATCHMAKING_URL || (process.env.PROD ? PROD_MATCHMAKING_URL : LOCAL_MATCHMAKING_URL);
+const MATCHMAKING_URL =
+  process.env.MATCHMAKING_URL ||
+  (process.env.PROD ? PROD_MATCHMAKING_URL : LOCAL_MATCHMAKING_URL);
 
 if (!process.env.MATCHMAKING_URL && !process.env.PROD) {
-  console.log('ℹ️  No MATCHMAKING_URL set, defaulting to local:', LOCAL_MATCHMAKING_URL);
+  console.log(
+    'ℹ️  No MATCHMAKING_URL set, defaulting to local:',
+    LOCAL_MATCHMAKING_URL
+  );
 }
 
 const NUM_GAMES = parseInt(process.env.NUM_GAMES || '5', 10);
@@ -28,19 +33,19 @@ const LOAD_TEST_SECRET = process.env.LOAD_TEST_SECRET || '';
 // Viral mode: simulates traffic ramping up like a streamer raid
 // Waves get progressively faster to test rate limiting and requeue
 interface Wave {
-  players: number;    // Number of players in this wave
-  staggerMs: number;  // Delay between players
+  players: number; // Number of players in this wave
+  staggerMs: number; // Delay between players
   pauseAfterMs: number; // Pause before next wave
 }
 
 const VIRAL_WAVES: Wave[] = [
-  { players: 20, staggerMs: 500, pauseAfterMs: 2000 },   // Warm up: 20 players
-  { players: 40, staggerMs: 200, pauseAfterMs: 2000 },   // Picking up: 40 players  
-  { players: 80, staggerMs: 100, pauseAfterMs: 2000 },   // Getting busy: 80 players
-  { players: 160, staggerMs: 50, pauseAfterMs: 2000 },   // Viral spike: 160 players
-  { players: 400, staggerMs: 20, pauseAfterMs: 3000 },   // Peak load: 400 players
-  { players: 200, staggerMs: 50, pauseAfterMs: 2000 },   // Sustained: 200 players
-  { players: 100, staggerMs: 100, pauseAfterMs: 0 },     // Tapering off: 100 players
+  { players: 20, staggerMs: 500, pauseAfterMs: 2000 }, // Warm up: 20 players
+  { players: 40, staggerMs: 200, pauseAfterMs: 2000 }, // Picking up: 40 players
+  { players: 80, staggerMs: 100, pauseAfterMs: 2000 }, // Getting busy: 80 players
+  { players: 160, staggerMs: 50, pauseAfterMs: 2000 }, // Viral spike: 160 players
+  { players: 400, staggerMs: 20, pauseAfterMs: 3000 }, // Peak load: 400 players
+  { players: 200, staggerMs: 50, pauseAfterMs: 2000 }, // Sustained: 200 players
+  { players: 100, staggerMs: 100, pauseAfterMs: 0 }, // Tapering off: 100 players
 ];
 
 // Task types from backend
@@ -158,7 +163,9 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
             matchTime = Date.now() - matchmakingStartTime;
             stats.matchmakingMatched++;
             stats.matchTimes.push(matchTime);
-            console.log(`[${playerName}] ✅ Matched! Room: ${msg.roomId} (${matchTime}ms)`);
+            console.log(
+              `[${playerName}] ✅ Matched! Room: ${msg.roomId} (${matchTime}ms)`
+            );
             ws.close();
 
             // Step 2: Connect to game server
@@ -168,25 +175,36 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
 
           case 'error':
             // "re-queued" means room creation failed - stay connected and wait
-            if (msg.message.includes('re-queued') || msg.message.includes('Failed to create match')) {
+            if (
+              msg.message.includes('re-queued') ||
+              msg.message.includes('Failed to create match')
+            ) {
               stats.requeued++;
               console.log(`[${playerName}] 🔄 Re-queued, waiting...`);
               // Stay connected - matchmaker will retry
             } else {
               // Actual fatal error
-              console.error(`[${playerName}] ❌ Matchmaking error: ${msg.message}`);
+              console.error(
+                `[${playerName}] ❌ Matchmaking error: ${msg.message}`
+              );
               ws.close();
               clearAndCleanup(msg.message);
             }
             break;
         }
       } catch (err) {
-        console.error(`[${playerName}] Failed to parse matchmaking message:`, err);
+        console.error(
+          `[${playerName}] Failed to parse matchmaking message:`,
+          err
+        );
       }
     });
 
     ws.on('error', (err) => {
-      console.error(`[${playerName}] ❌ Matchmaking WebSocket error:`, err.message);
+      console.error(
+        `[${playerName}] ❌ Matchmaking WebSocket error:`,
+        err.message
+      );
       clearAndCleanup('Matchmaking connection error');
     });
 
@@ -196,12 +214,16 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
 
     // Step 2: Connect to game server
     function connectToGameServer(roomId: string, connectionUrl: string) {
-      console.log(`[${playerName}] 🎮 Connecting to game server: ${connectionUrl}`);
+      console.log(
+        `[${playerName}] 🎮 Connecting to game server: ${connectionUrl}`
+      );
 
       gameSocket = io(connectionUrl, {
         transports: ['websocket'],
         timeout: 30000,
-        auth: LOAD_TEST_SECRET ? { loadTestSecret: LOAD_TEST_SECRET } : undefined,
+        auth: LOAD_TEST_SECRET
+          ? { loadTestSecret: LOAD_TEST_SECRET }
+          : undefined,
       });
       activeConnections.push(gameSocket);
 
@@ -237,32 +259,44 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
         console.log(`[${playerName}] ⏱️ Countdown: ${data.seconds}`);
       });
 
-      gameSocket.on('game:start', (data: { startTime: number; initialTask: Task; num_tasks: number }) => {
-        stats.gamesStarted++;
-        gameStartTime = Date.now();
-        currentTask = data.initialTask;
-        console.log(`[${playerName}] 🏁 Race started! Tasks: ${data.num_tasks}`);
+      gameSocket.on(
+        'game:start',
+        (data: { startTime: number; initialTask: Task; num_tasks: number }) => {
+          stats.gamesStarted++;
+          gameStartTime = Date.now();
+          currentTask = data.initialTask;
+          console.log(
+            `[${playerName}] 🏁 Race started! Tasks: ${data.num_tasks}`
+          );
 
-        // Start solving tasks with a small delay to simulate "playing"
-        setTimeout(() => solveCurrentTask(), TASK_DELAY_MS);
-      });
-
-      gameSocket.on('game:player_finished_task', (data: { playerId: string; taskProgress: number; newTask: Task | undefined }) => {
-        if (taskSentAt) {
-          const latency = Date.now() - taskSentAt;
-          stats.taskLatencies.push(latency);
-          taskSentAt = 0;
-        }
-        tasksCompleted++;
-        stats.tasksCompleted++;
-        currentTask = data.newTask || null;
-        console.log(`[${playerName}] ✅ Task ${data.taskProgress} complete`);
-
-        if (currentTask) {
-          // Solve next task after delay
+          // Start solving tasks with a small delay to simulate "playing"
           setTimeout(() => solveCurrentTask(), TASK_DELAY_MS);
         }
-      });
+      );
+
+      gameSocket.on(
+        'game:player_finished_task',
+        (data: {
+          playerId: string;
+          taskProgress: number;
+          newTask: Task | undefined;
+        }) => {
+          if (taskSentAt) {
+            const latency = Date.now() - taskSentAt;
+            stats.taskLatencies.push(latency);
+            taskSentAt = 0;
+          }
+          tasksCompleted++;
+          stats.tasksCompleted++;
+          currentTask = data.newTask || null;
+          console.log(`[${playerName}] ✅ Task ${data.taskProgress} complete`);
+
+          if (currentTask) {
+            // Solve next task after delay
+            setTimeout(() => solveCurrentTask(), TASK_DELAY_MS);
+          }
+        }
+      );
 
       gameSocket.on('game:validation_failed', () => {
         console.log(`[${playerName}] ❌ Validation failed, retrying...`);
@@ -270,43 +304,70 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
         setTimeout(() => solveCurrentTask(), TASK_DELAY_MS);
       });
 
-      gameSocket.on('game:player_finished', (data: { playerId: string; time: number; position: number }) => {
-        // Check if it's us
-        if (gameSocket?.id === data.playerId) {
-          result.position = data.position;
-          console.log(`[${playerName}] 🎉 Finished! Position: ${data.position}, Time: ${data.time}ms`);
+      gameSocket.on(
+        'game:player_finished',
+        (data: { playerId: string; time: number; position: number }) => {
+          // Check if it's us
+          if (gameSocket?.id === data.playerId) {
+            result.position = data.position;
+            console.log(
+              `[${playerName}] 🎉 Finished! Position: ${data.position}, Time: ${data.time}ms`
+            );
+          }
         }
-      });
+      );
 
-      gameSocket.on('game:complete', (data: { rankings: Array<{ playerId: string; playerName: string; time: number; position: number }> }) => {
-        stats.gamesCompleted++;
-        const myRanking = data.rankings.find(r => r.playerName === playerName);
-        if (myRanking) {
-          result.position = myRanking.position;
-          result.gameTime = myRanking.time;
-          stats.gameTimes.push(myRanking.time);
+      gameSocket.on(
+        'game:complete',
+        (data: {
+          rankings: Array<{
+            playerId: string;
+            playerName: string;
+            time: number;
+            position: number;
+          }>;
+        }) => {
+          stats.gamesCompleted++;
+          const myRanking = data.rankings.find(
+            (r) => r.playerName === playerName
+          );
+          if (myRanking) {
+            result.position = myRanking.position;
+            result.gameTime = myRanking.time;
+            stats.gameTimes.push(myRanking.time);
+          }
+          console.log(
+            `[${playerName}] 🏆 Game complete! Rankings:`,
+            data.rankings
+              .map((r) => `${r.position}. ${r.playerName} (${r.time}ms)`)
+              .join(', ')
+          );
+
+          gameSocket?.disconnect();
+          clearAndCleanup();
         }
-        console.log(`[${playerName}] 🏆 Game complete! Rankings:`, data.rankings.map(r => `${r.position}. ${r.playerName} (${r.time}ms)`).join(', '));
-
-        gameSocket?.disconnect();
-        clearAndCleanup();
-      });
+      );
 
       gameSocket.on('room:error', (data: { message: string }) => {
         // "Cannot reset: game not finished" is a benign error from the backend
         // that happens on first game (resetRoom called before first race)
         if (data.message.includes('Cannot reset')) {
-          console.log(`[${playerName}] ⚠️ Ignoring benign error: ${data.message}`);
+          console.log(
+            `[${playerName}] ⚠️ Ignoring benign error: ${data.message}`
+          );
           return;
         }
-        
+
         console.error(`[${playerName}] ❌ Room error: ${data.message}`);
         gameSocket?.disconnect();
         clearAndCleanup(data.message);
       });
 
       gameSocket.on('connect_error', (err) => {
-        console.error(`[${playerName}] ❌ Game server connection error:`, err.message);
+        console.error(
+          `[${playerName}] ❌ Game server connection error:`,
+          err.message
+        );
         clearAndCleanup('Game server connection error');
       });
 
@@ -325,24 +386,32 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
       switch (currentTask.type) {
         case 'navigate':
           if (currentTask.targetOffset !== undefined) {
-            gameSocket.emit('player:cursor', { offset: currentTask.targetOffset });
+            gameSocket.emit('player:task_complete', {
+              offset: currentTask.targetOffset,
+            });
           }
           break;
 
         case 'delete':
           if (currentTask.expectedResult !== undefined) {
-            gameSocket.emit('player:editorText', { text: currentTask.expectedResult });
+            gameSocket.emit('player:editorText', {
+              text: currentTask.expectedResult,
+            });
           }
           break;
 
-        case 'change':
-          if (currentTask.expectedResult !== undefined) {
-            gameSocket.emit('player:editorText', { text: currentTask.expectedResult });
+        case 'yank_paste':
+          if (currentTask.expectedResults?.[0] !== undefined) {
+            gameSocket.emit('player:editorText', {
+              text: currentTask.expectedResults[0],
+            });
           }
           break;
 
         default:
-          console.log(`[${playerName}] ⚠️ Unknown task type: ${(currentTask as Task).type}`);
+          console.log(
+            `[${playerName}] ⚠️ Unknown task type: ${(currentTask as Task).type}`
+          );
       }
     }
   });
@@ -350,15 +419,19 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
 
 function printStats() {
   const duration = (Date.now() - stats.startTime) / 1000;
-  
+
   // Calculate expected totals based on mode
-  const totalPlayers = VIRAL_MODE 
+  const totalPlayers = VIRAL_MODE
     ? VIRAL_WAVES.reduce((sum, wave) => sum + wave.players, 0)
     : NUM_GAMES * 2;
   const totalGames = Math.floor(totalPlayers / 2);
 
   console.log('\n' + '='.repeat(60));
-  console.log(VIRAL_MODE ? '📊 VIRAL TRAFFIC TEST RESULTS' : '📊 FULL GAME LOAD TEST RESULTS');
+  console.log(
+    VIRAL_MODE
+      ? '📊 VIRAL TRAFFIC TEST RESULTS'
+      : '📊 FULL GAME LOAD TEST RESULTS'
+  );
   console.log('='.repeat(60));
   console.log(`   Target: ${MATCHMAKING_URL}`);
   console.log(`   Mode: ${VIRAL_MODE ? 'Viral (ramping waves)' : 'Standard'}`);
@@ -383,7 +456,8 @@ function printStats() {
   console.log(`   Errors: ${stats.errors}`);
 
   if (stats.matchTimes.length > 0) {
-    const avg = stats.matchTimes.reduce((a, b) => a + b, 0) / stats.matchTimes.length;
+    const avg =
+      stats.matchTimes.reduce((a, b) => a + b, 0) / stats.matchTimes.length;
     const sorted = [...stats.matchTimes].sort((a, b) => a - b);
     const min = sorted[0];
     const max = sorted[sorted.length - 1];
@@ -391,18 +465,23 @@ function printStats() {
 
     console.log('-'.repeat(60));
     console.log('   MATCH TIMES:');
-    console.log(`     Min: ${min}ms | Avg: ${avg.toFixed(0)}ms | P50: ${p50}ms | Max: ${max}ms`);
+    console.log(
+      `     Min: ${min}ms | Avg: ${avg.toFixed(0)}ms | P50: ${p50}ms | Max: ${max}ms`
+    );
   }
 
   if (stats.gameTimes.length > 0) {
-    const avg = stats.gameTimes.reduce((a, b) => a + b, 0) / stats.gameTimes.length;
+    const avg =
+      stats.gameTimes.reduce((a, b) => a + b, 0) / stats.gameTimes.length;
     const sorted = [...stats.gameTimes].sort((a, b) => a - b);
     const min = sorted[0];
     const max = sorted[sorted.length - 1];
 
     console.log('-'.repeat(60));
     console.log('   GAME TIMES (winner):');
-    console.log(`     Min: ${min}ms | Avg: ${avg.toFixed(0)}ms | Max: ${max}ms`);
+    console.log(
+      `     Min: ${min}ms | Avg: ${avg.toFixed(0)}ms | Max: ${max}ms`
+    );
   }
 
   if (stats.taskLatencies.length > 0) {
@@ -416,15 +495,17 @@ function printStats() {
 
     console.log('-'.repeat(60));
     console.log(`   TASK ROUND-TRIP LATENCY (${sorted.length} samples):`);
-    console.log(`     Min: ${min}ms | Avg: ${avg.toFixed(0)}ms | P50: ${p50}ms | P95: ${p95}ms | P99: ${p99}ms | Max: ${max}ms`);
+    console.log(
+      `     Min: ${min}ms | Avg: ${avg.toFixed(0)}ms | P50: ${p50}ms | P95: ${p95}ms | P99: ${p99}ms | Max: ${max}ms`
+    );
   }
 
   // Show errors if any
-  const errorResults = results.filter(r => r.error);
+  const errorResults = results.filter((r) => r.error);
   if (errorResults.length > 0) {
     console.log('-'.repeat(60));
     console.log('   ERRORS:');
-    errorResults.forEach(r => {
+    errorResults.forEach((r) => {
       console.log(`     ${r.playerName}: ${r.error}`);
     });
   }
@@ -435,18 +516,22 @@ function printStats() {
 async function runViralTest() {
   const totalPlayers = VIRAL_WAVES.reduce((sum, wave) => sum + wave.players, 0);
   const totalGames = Math.floor(totalPlayers / 2);
-  
+
   console.log('🚀 Starting VIRAL Traffic Simulation');
   console.log(`   Target: ${MATCHMAKING_URL}`);
   console.log(`   Mode: Viral (ramping waves)`);
-  console.log(`   Total Players: ${totalPlayers} across ${VIRAL_WAVES.length} waves`);
+  console.log(
+    `   Total Players: ${totalPlayers} across ${VIRAL_WAVES.length} waves`
+  );
   console.log(`   Task Delay: ${TASK_DELAY_MS}ms`);
   console.log(`   Timeout: ${TIMEOUT_MS}ms per player`);
   console.log('');
   console.log('   Waves:');
   VIRAL_WAVES.forEach((wave, i) => {
     const rate = (1000 / wave.staggerMs).toFixed(1);
-    console.log(`     ${i + 1}. ${wave.players} players @ ${wave.staggerMs}ms (${rate}/sec)`);
+    console.log(
+      `     ${i + 1}. ${wave.players} players @ ${wave.staggerMs}ms (${rate}/sec)`
+    );
   });
   console.log('');
 
@@ -456,7 +541,9 @@ async function runViralTest() {
   for (let waveIndex = 0; waveIndex < VIRAL_WAVES.length; waveIndex++) {
     const wave = VIRAL_WAVES[waveIndex];
     const rate = (1000 / wave.staggerMs).toFixed(1);
-    console.log(`\n📈 Wave ${waveIndex + 1}: Spawning ${wave.players} players at ${rate}/sec...`);
+    console.log(
+      `\n📈 Wave ${waveIndex + 1}: Spawning ${wave.players} players at ${rate}/sec...`
+    );
 
     for (let i = 0; i < wave.players; i++) {
       playerNum++;
@@ -471,7 +558,7 @@ async function runViralTest() {
   }
 
   console.log(`\n⏳ Waiting for all ${totalPlayers} players to complete...`);
-  
+
   // Wait for all players to complete
   await Promise.all(promises);
 
@@ -529,7 +616,9 @@ function cleanupAndExit(expectedGames: number) {
 
   // Exit with error code if not all games completed
   if (stats.gamesCompleted < expectedGames) {
-    console.log(`⚠️  Warning: Only ${stats.gamesCompleted}/${expectedGames} games completed`);
+    console.log(
+      `⚠️  Warning: Only ${stats.gamesCompleted}/${expectedGames} games completed`
+    );
     process.exit(1);
   }
 

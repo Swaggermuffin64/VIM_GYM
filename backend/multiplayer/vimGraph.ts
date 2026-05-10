@@ -1,4 +1,4 @@
-import type { codeSnippet, DeleteStrategy } from '../types.js';
+import type { codeSnippet, DeleteStrategy, YankStrategy } from '../types.js';
 import {
   getLineFromOffset,
   resolveKeyOffset,
@@ -864,6 +864,144 @@ export function getRecommendedDeleteSequence(
       from
     );
     if (bToA) candidates.push(bToA);
+  }
+
+  const best = getBestCandidate(candidates);
+  if (!best) return null;
+  return {
+    recommendedSequence: best.sequence,
+    recommendedWeight: best.weight,
+  };
+}
+
+export interface yankPasteRecommendation {
+  recommendedSequence: string[];
+  recommendedWeight: number;
+}
+
+/**
+ * Build a yank+paste plan: navigate to anchor → yank → navigate to paste → p.
+ * `cursorAfterYank` is where the cursor ends up after the yank action.
+ */
+function buildYankPastePlan(
+  codeSnippet: codeSnippet,
+  startingOffset: number,
+  startingPreferredX: number,
+  yankAnchor: number,
+  yankActionKeys: string[],
+  cursorAfterYank: number,
+  pasteOffset: number
+): deletePlanCandidate | null {
+  const [navToYankWeight, navToYankSeq] = getShortestVimSequenceLazyMemoized(
+    codeSnippet,
+    startingOffset,
+    yankAnchor,
+    startingPreferredX
+  );
+  if (navToYankWeight < 0) return null;
+
+  const yankActionWeight = expandSequenceToKeystrokeCount(yankActionKeys);
+
+  const afterYankPreferredX = getOffsetColumn(codeSnippet, cursorAfterYank);
+  const [navToPasteWeight, navToPasteSeq] = getShortestVimSequenceLazyMemoized(
+    codeSnippet,
+    cursorAfterYank,
+    pasteOffset,
+    afterYankPreferredX
+  );
+  if (navToPasteWeight < 0) return null;
+
+  return {
+    sequence: [...navToYankSeq, ...yankActionKeys, ...navToPasteSeq, 'p'],
+    weight: navToYankWeight + yankActionWeight + navToPasteWeight + 1,
+  };
+}
+
+/**
+ * Compute recommended vim sequence for a yank+paste task.
+ * Strategy-aware: WORD (ye), LINE (yy), BRACKET (y%).
+ */
+export function getRecommendedYankPasteSequence(
+  codeSnippet: codeSnippet,
+  strategy: YankStrategy,
+  yankFrom: number,
+  yankTo: number,
+  pasteOffset: number,
+  startingOffset = 0
+): yankPasteRecommendation | null {
+  const startingPreferredX = getOffsetColumn(codeSnippet, startingOffset);
+  const candidates: deletePlanCandidate[] = [];
+
+  if (strategy === 'WORD') {
+    // Navigate to yankFrom → ye → navigate to pasteOffset → p
+    // After ye, cursor stays at yankFrom
+    const plan = buildYankPastePlan(
+      codeSnippet,
+      startingOffset,
+      startingPreferredX,
+      yankFrom,
+      ['y', 'e'],
+      yankFrom,
+      pasteOffset
+    );
+    if (plan) candidates.push(plan);
+  }
+
+  if (strategy === 'LINE') {
+    // Navigate to any char on the yank line → yy → navigate to pasteOffset → p
+    // After yy, cursor stays at the anchor position
+    const lineIndex = getLineFromOffset(yankFrom, codeSnippet);
+    const lineRange =
+      lineIndex >= 0 ? codeSnippet.lineOffsetRanges[lineIndex] : undefined;
+    if (lineRange) {
+      const lineAnchors: number[] = [];
+      for (let i = lineRange[0]; i < lineRange[1]; i++) lineAnchors.push(i);
+      const bestNav = shortestVimSequenceLazyToAnyTarget(
+        codeSnippet,
+        startingOffset,
+        lineAnchors,
+        startingPreferredX
+      );
+      if (bestNav) {
+        const anchorOffset = bestNav.targetOffset;
+        const afterYankPreferredX = getOffsetColumn(codeSnippet, anchorOffset);
+        const [navToPasteWeight, navToPasteSeq] =
+          getShortestVimSequenceLazyMemoized(
+            codeSnippet,
+            anchorOffset,
+            pasteOffset,
+            afterYankPreferredX
+          );
+        if (navToPasteWeight >= 0) {
+          candidates.push({
+            sequence: [...bestNav.sequence, 'y', 'y', ...navToPasteSeq, 'p'],
+            weight: bestNav.weight + 2 + navToPasteWeight + 1,
+          });
+        }
+      }
+    }
+  }
+
+  if (strategy === 'BRACKET') {
+    // Navigate to either bracket endpoint → y% → navigate to pasteOffset → p
+    // After y%, cursor goes to the opening bracket (yankFrom)
+    const inclusiveEnd = Math.max(yankFrom, yankTo - 1);
+    const anchors = uniqueValidOffsets(
+      [yankFrom, inclusiveEnd],
+      codeSnippet.code.length
+    );
+    for (const anchor of anchors) {
+      const plan = buildYankPastePlan(
+        codeSnippet,
+        startingOffset,
+        startingPreferredX,
+        anchor,
+        ['y', '%'],
+        yankFrom,
+        pasteOffset
+      );
+      if (plan) candidates.push(plan);
+    }
   }
 
   const best = getBestCandidate(candidates);

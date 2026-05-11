@@ -5,7 +5,8 @@ import { Server, Socket } from 'socket.io';
 import { checkPositionTask } from './tasks.js';
 import {
   generatePositionTaskAsync,
-  generateRaceTaskBatchesAsync,
+  pickTasksFromCache,
+  waitForTaskCache,
 } from './taskPool.js';
 import type {
   KeystrokeSource,
@@ -100,18 +101,6 @@ setInterval(() => {
     }
   }
 }, 60_000);
-
-// Shuffle array helper
-function shuffle<T>(array: T[]): T[] {
-  const result = [...array];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = result[i];
-    result[i] = result[j] as T;
-    result[j] = temp as T;
-  }
-  return result;
-}
 
 // Basic root health check (used by allowList for rate limiting)
 fastify.get('/', async () => {
@@ -561,27 +550,16 @@ fastify.get<{
 
 // Get a practice session (10 tasks: 4 navigate + 4 delete + 2 yank_paste, shuffled)
 fastify.get('/api/task/practice', async () => {
-  const NUM_TASKS = 10;
-  const tasksPerType = 4;
+  const allTasks = pickTasksFromCache();
 
-  const { positionTasks, deleteTasks, yankPasteTasks } =
-    await generateRaceTaskBatchesAsync(tasksPerType);
-  const allTasks = shuffle([
-    ...positionTasks.slice(0, 4),
-    ...deleteTasks.slice(0, 4),
-    ...yankPasteTasks.slice(0, 2),
-  ]);
-  const navigateTasksWithRecommendation = positionTasks.reduce(
-    (count, task) => {
-      if (task.type !== 'navigate') return count;
-      return task.recommendedSequence &&
-        typeof task.recommendedWeight === 'number'
-        ? count + 1
-        : count;
-    },
-    0
-  );
-  const deleteTasksWithRecommendation = deleteTasks.reduce((count, task) => {
+  const navigateTasksWithRecommendation = allTasks.reduce((count, task) => {
+    if (task.type !== 'navigate') return count;
+    return task.recommendedSequence &&
+      typeof task.recommendedWeight === 'number'
+      ? count + 1
+      : count;
+  }, 0);
+  const deleteTasksWithRecommendation = allTasks.reduce((count, task) => {
     if (task.type !== 'delete') return count;
     return task.recommendedSequence &&
       typeof task.recommendedWeight === 'number'
@@ -590,15 +568,15 @@ fastify.get('/api/task/practice', async () => {
   }, 0);
   const practiceSummary: PracticeSummary = {
     totalTasks: allTasks.length,
-    navigateTasks: positionTasks.slice(0, 4).length,
-    deleteTasks: deleteTasks.slice(0, 4).length,
+    navigateTasks: allTasks.filter((t) => t.type === 'navigate').length,
+    deleteTasks: allTasks.filter((t) => t.type === 'delete').length,
     navigateTasksWithRecommendation,
     deleteTasksWithRecommendation,
   };
 
   return {
     tasks: allTasks,
-    numTasks: NUM_TASKS,
+    numTasks: allTasks.length,
     practiceSummary,
     startTime: Date.now(),
   };
@@ -619,6 +597,9 @@ fastify.get('/health', async (request, reply) => {
   const database = await dbHealthCheck();
   return { status: 'ok', memMB: Math.round(memMB), rooms, database };
 });
+
+// Wait for the pre-generated task cache before accepting connections
+await waitForTaskCache();
 
 // Start Fastify first, then attach Socket.IO
 await fastify.listen({ port: BACKEND_PORT, host: '0.0.0.0' });

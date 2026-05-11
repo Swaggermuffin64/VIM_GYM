@@ -8,7 +8,7 @@ import type {
   InterServerEvents,
   SocketData,
 } from './types.js';
-import { generateRaceTaskBatchesAsync } from '../taskPool.js';
+import { pickTasksFromCache } from '../taskPool.js';
 import type { Task } from '../types.js';
 import { insertMultiplayerRaceLeaderboardRows } from '../db/leaderboard.js';
 type GameSocket = Socket<
@@ -23,19 +23,6 @@ type GameServer = Server<
   InterServerEvents,
   SocketData
 >;
-
-function shuffle<T>(array: T[]): T[] {
-  const result = [...array];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = result[i];
-    if (temp !== undefined && result[j] !== undefined) {
-      result[i] = result[j];
-      result[j] = temp;
-    }
-  }
-  return result;
-}
 
 export class RoomManager {
   private rooms: Map<string, GameRoom> = new Map();
@@ -130,9 +117,7 @@ export class RoomManager {
       targetOffset: 0,
     };
 
-    // Register the room in the map BEFORE awaiting task generation.
-    // This prevents a race where a second player arrives during the await,
-    // sees no room, and also calls createRoom for the same roomId.
+    // Register the room in the map before emitting events.
     const room: GameRoom = {
       id: roomId,
       players: new Map([[playerId, player]]),
@@ -145,9 +130,7 @@ export class RoomManager {
     this.rooms.set(roomId, room);
     this.playerRooms.set(playerId, roomId);
 
-    // Join the socket.io room and set socket data BEFORE the await,
-    // so if another player joins during task generation, this player
-    // is already in the Socket.IO room and can receive events.
+    // Join the socket.io room and set socket data.
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.playerId = playerId;
@@ -157,42 +140,19 @@ export class RoomManager {
       `🏠 Room ${roomId} created by ${playerName} (${isPublic ? 'public' : 'private'})`
     );
 
-    // Emit room:created immediately so the client transitions out of "searching"
-    // BEFORE we await task generation. This way the client is ready to receive
-    // room:player_joined events if other players join during task generation.
+    // Emit room:created so the client transitions out of "searching".
     socket.emit('room:created', { roomId, player });
 
     // Schedule waiting room timeout - room will be destroyed if race doesn't start
     this.scheduleWaitingRoomTimeout(roomId, isPublic);
 
-    // Generate tasks off the main thread — room is already visible to other players
-    const tasksPerType = 4; // 4 navigate + 4 delete + 2 yank_paste = 10
-    try {
-      const { positionTasks, deleteTasks, yankPasteTasks } =
-        await generateRaceTaskBatchesAsync(tasksPerType);
-      const allTasks = shuffle([
-        ...positionTasks.slice(0, 4),
-        ...deleteTasks.slice(0, 4),
-        ...yankPasteTasks.slice(0, 2),
-      ]);
-      console.log(
-        'Generated tasks:',
-        allTasks.map((t) => t.type)
-      );
-
-      room.tasks = [...allTasks, finishedTask];
-    } catch (err) {
-      console.error(`❌ Task generation failed for room ${roomId}:`, err);
-      // Roll back: remove room from registry, clean up player/socket state
-      this.rooms.delete(roomId);
-      this.playerRooms.delete(playerId);
-      this.cancelWaitingRoomTimeout(roomId);
-      socket.leave(roomId);
-      socket.emit('room:error', {
-        message: 'Failed to create room: task generation error',
-      });
-      return null;
-    }
+    // Pick tasks from pre-generated cache (synchronous, no worker threads)
+    const allTasks = pickTasksFromCache();
+    console.log(
+      'Picked tasks:',
+      allTasks.map((t) => t.type)
+    );
+    room.tasks = [...allTasks, finishedTask];
 
     return room;
   }
@@ -720,8 +680,7 @@ export class RoomManager {
     // Cancel any pending cleanup since players want to play again
     this.cancelRoomCleanup(roomId);
 
-    // Generate new tasks (4 navigate + 4 delete + 2 yank_paste = 10)
-    const tasksPerType = 4;
+    // Pick new tasks from pre-generated cache (synchronous)
     const finishedTask: Task = {
       id: '',
       type: 'navigate',
@@ -730,32 +689,7 @@ export class RoomManager {
       targetPosition: { line: 1, col: 0 },
       targetOffset: 0,
     };
-
-    try {
-      const { positionTasks, deleteTasks, yankPasteTasks } =
-        await generateRaceTaskBatchesAsync(tasksPerType);
-      room.tasks = [
-        ...shuffle([
-          ...positionTasks.slice(0, 4),
-          ...deleteTasks.slice(0, 4),
-          ...yankPasteTasks.slice(0, 2),
-        ]),
-        finishedTask,
-      ];
-    } catch (err) {
-      console.error(
-        `❌ Task generation failed during reset for room ${roomId}:`,
-        err
-      );
-      // Room is still in 'finished' state — re-schedule cleanup so it doesn't linger
-      this.scheduleRoomCleanup(roomId);
-      // Provide a safe fallback so the room isn't left with stale tasks
-      room.tasks = [finishedTask];
-      socket.emit('room:error', {
-        message: 'Failed to reset room: task generation error',
-      });
-      return;
-    }
+    room.tasks = [...pickTasksFromCache(), finishedTask];
 
     // Reset all player states
     room.players.forEach((player) => {

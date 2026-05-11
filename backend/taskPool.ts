@@ -25,6 +25,128 @@ const pool = new Piscina({
 
 console.log(`[TaskPool] Started ${poolSize} worker threads via piscina`);
 
+// ---------------------------------------------------------------------------
+// Pre-generated task cache
+// ---------------------------------------------------------------------------
+// Three flat arrays of tasks generated at startup. Room creation and practice
+// sessions randomly pick from these instead of generating on-the-fly, avoiding
+// Piscina queue pressure under load.
+//
+// 200 navigate + 200 delete + 100 yank_paste ≈ 250-500 KB in memory.
+// With random selection the number of unique 10-task games is ~2×10^19.
+// ---------------------------------------------------------------------------
+
+const CACHE_NAVIGATE_COUNT = 200;
+const CACHE_DELETE_COUNT = 200;
+const CACHE_YANK_PASTE_COUNT = 100;
+
+const cachedNavigateTasks: Task[] = [];
+const cachedDeleteTasks: Task[] = [];
+const cachedYankPasteTasks: Task[] = [];
+
+let cacheReady = false;
+let cacheReadyPromise: Promise<void> | null = null;
+
+function pickRandom<T>(array: T[], count: number): T[] {
+  const result: T[] = [];
+  const len = array.length;
+  for (let i = 0; i < count; i++) {
+    result.push(array[Math.floor(Math.random() * len)]!);
+  }
+  return result;
+}
+
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const temp = result[i];
+    result[i] = result[j] as T;
+    result[j] = temp as T;
+  }
+  return result;
+}
+
+/**
+ * Pick a random set of tasks from the pre-generated cache.
+ * Returns 4 navigate + 4 delete + 2 yank_paste, shuffled.
+ * Synchronous — no worker threads, no async, no queue pressure.
+ */
+export function pickTasksFromCache(): Task[] {
+  const nav = pickRandom(cachedNavigateTasks, 4);
+  const del = pickRandom(cachedDeleteTasks, 4);
+  const yank = pickRandom(cachedYankPasteTasks, 2);
+  return shuffle([...nav, ...del, ...yank]);
+}
+
+/** Returns true once the cache has been fully populated. */
+export function isTaskCacheReady(): boolean {
+  return cacheReady;
+}
+
+/** Resolves once the task cache is fully populated. */
+export function waitForTaskCache(): Promise<void> {
+  if (cacheReady) return Promise.resolve();
+  if (cacheReadyPromise) return cacheReadyPromise;
+  // Should not happen — fillTaskCache is called at module load
+  return Promise.resolve();
+}
+
+/**
+ * Fill the cache by dispatching generation jobs to the worker pool.
+ * Called once at startup before the server accepts connections.
+ */
+export async function fillTaskCache(): Promise<void> {
+  const start = Date.now();
+  console.log(
+    `[TaskCache] Generating ${CACHE_NAVIGATE_COUNT} navigate + ${CACHE_DELETE_COUNT} delete + ${CACHE_YANK_PASTE_COUNT} yank_paste tasks...`
+  );
+
+  // Generate in parallel batches to keep worker threads busy
+  const batchSize = 20;
+
+  // Navigate tasks
+  for (let i = 0; i < CACHE_NAVIGATE_COUNT; i += batchSize) {
+    const count = Math.min(batchSize, CACHE_NAVIGATE_COUNT - i);
+    const tasks = (await pool.run(count, {
+      name: 'generatePositionTasks',
+    })) as Task[];
+    cachedNavigateTasks.push(...tasks);
+  }
+
+  // Delete tasks
+  for (let i = 0; i < CACHE_DELETE_COUNT; i += batchSize) {
+    const count = Math.min(batchSize, CACHE_DELETE_COUNT - i);
+    const tasks = (await pool.run(count, {
+      name: 'generateDeleteTasks',
+    })) as Task[];
+    cachedDeleteTasks.push(...tasks);
+  }
+
+  // Yank/paste tasks
+  for (let i = 0; i < CACHE_YANK_PASTE_COUNT; i += batchSize) {
+    const count = Math.min(batchSize, CACHE_YANK_PASTE_COUNT - i);
+    const tasks = (await pool.run(count, {
+      name: 'generateYankPasteTasks',
+    })) as Task[];
+    cachedYankPasteTasks.push(...tasks);
+  }
+
+  cacheReady = true;
+  const elapsed = Date.now() - start;
+  console.log(
+    `[TaskCache] Ready in ${elapsed}ms — ${cachedNavigateTasks.length} navigate, ${cachedDeleteTasks.length} delete, ${cachedYankPasteTasks.length} yank_paste`
+  );
+}
+
+// Start filling the cache immediately on import
+cacheReadyPromise = fillTaskCache();
+
+// ---------------------------------------------------------------------------
+// Legacy async generators — kept for the single-task practice endpoint
+// and tests. These still go through the Piscina worker pool.
+// ---------------------------------------------------------------------------
+
 export async function generatePositionTaskAsync(): Promise<PositionTask> {
   return pool.run(null, {
     name: 'generatePositionTask',

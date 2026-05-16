@@ -2015,7 +2015,7 @@ const PracticeEditor: React.FC = () => {
           <div style={styles.readyContainer}>
             <h1 style={styles.readyTitle}>Practice Mode</h1>
             <p style={styles.readySubtitle}>
-              Hone your Vim skills with navigation and deletion challenges.
+              Learn and Hone your Vim skills solo.
             </p>
 
             <div style={styles.readyCard}>

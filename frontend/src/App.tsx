@@ -273,6 +273,18 @@ function PlayHome() {
         <div style={playStyles.bgGlow2} />
 
         <div style={playStyles.content}>
+          <h1
+            style={{
+              position: 'absolute',
+              width: '1px',
+              height: '1px',
+              overflow: 'hidden',
+              clip: 'rect(0,0,0,0)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Practice Vim Motions Online — VIMGYM
+          </h1>
           <div style={playStyles.header}>
             <div
               style={{
@@ -316,8 +328,8 @@ function PlayHome() {
                 <div className="card-glow" style={playStyles.cardGlow} />
                 <div style={playStyles.cardTitle}>Quick Play</div>
                 <div style={playStyles.cardDescription}>
-                  Jump into a match instantly. Get paired with another player
-                  automatically.
+                  Match and compete with other players online. VIM-mog your
+                  opponent.
                 </div>
                 <div
                   style={{
@@ -360,8 +372,7 @@ function PlayHome() {
                 <div className="card-glow" style={playStyles.cardGlow} />
                 <div style={playStyles.cardTitle}>Private Match</div>
                 <div style={playStyles.cardDescription}>
-                  Create a private room or join with a code. Challenge your
-                  friends!
+                  Create a private room or join with a code.
                 </div>
                 <div
                   style={{
@@ -404,8 +415,8 @@ function PlayHome() {
                 <div className="card-glow" style={playStyles.cardGlow} />
                 <div style={playStyles.cardTitle}>Practice</div>
                 <div style={playStyles.cardDescription}>
-                  Hone your Vim skills. Complete navigation and deletion
-                  challenges.
+                  Hone your Vim skills solo. Evaluate your speed and keystroke
+                  efficiency.
                 </div>
                 <div
                   style={{

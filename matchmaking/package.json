@@ -15,7 +15,9 @@
     "viral-test": "VIRAL=1 tsx scripts/full-game-test.ts",
     "viral-test:prod": "PROD=1 VIRAL=1 tsx scripts/full-game-test.ts",
     "smoke-test": "tsx scripts/smoke-test.ts",
-    "smoke-test:prod": "PROD=1 tsx scripts/smoke-test.ts"
+    "smoke-test:prod": "PROD=1 tsx scripts/smoke-test.ts",
+    "bench-taskgen": "tsx scripts/task-gen-benchmark.ts",
+    "bench-taskgen:prod": "PROD=1 tsx scripts/task-gen-benchmark.ts"
   },
   "dependencies": {
     "async-mutex": "^0.5.0",

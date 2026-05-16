@@ -39,6 +39,7 @@ import {
 } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
+import { getHeapStatistics } from 'v8';
 import {
   validatePlayerName,
   validateRoomId,
@@ -48,6 +49,15 @@ import {
   validateBoolean,
   validateKeystrokeEvents,
 } from './validation/inputValidation.js';
+
+// Event loop lag tracker — measures how late setImmediate fires vs expected
+let eventLoopLagMs = 0;
+setInterval(() => {
+  const start = Date.now();
+  setImmediate(() => {
+    eventLoopLagMs = Date.now() - start;
+  });
+}, 500).unref();
 
 // Create Fastify with its own server
 const fastify = Fastify({
@@ -587,15 +597,42 @@ const MEMORY_LIMIT_MB = 200;
 let roomManager: RoomManager | null = null;
 
 fastify.get('/health', async (request, reply) => {
-  const memMB = process.memoryUsage().rss / 1024 / 1024;
-  const rooms = roomManager?.roomCount ?? 0;
-  if (memMB > MEMORY_LIMIT_MB) {
-    return reply
-      .status(503)
-      .send({ status: 'unhealthy', memMB: Math.round(memMB), rooms });
+  const mem = process.memoryUsage();
+  const heap = getHeapStatistics();
+  const rssMB = mem.rss / 1024 / 1024;
+
+  if (rssMB > MEMORY_LIMIT_MB) {
+    return reply.status(503).send({
+      status: 'unhealthy',
+      memMB: Math.round(rssMB),
+      rooms: roomManager?.roomCount ?? 0,
+    });
   }
+
   const database = await dbHealthCheck();
-  return { status: 'ok', memMB: Math.round(memMB), rooms, database };
+
+  return {
+    status: 'ok',
+    // Memory
+    memMB: Math.round(rssMB),
+    heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
+    heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
+    externalMB: Math.round(mem.external / 1024 / 1024),
+    // GC / heap internals
+    heapSizeLimit: Math.round(heap.heap_size_limit / 1024 / 1024),
+    mallocedMB: Math.round(heap.malloced_memory / 1024 / 1024),
+    peakMallocedMB: Math.round(heap.peak_malloced_memory / 1024 / 1024),
+    // Event loop
+    eventLoopLagMs,
+    // Rooms
+    rooms: roomManager?.roomCount ?? 0,
+    roomsByState: roomManager?.roomsByState ?? {},
+    // Connections
+    socketConnections: io.engine.clientsCount,
+    // Process
+    uptimeS: Math.round(process.uptime()),
+    database,
+  };
 });
 
 // Wait for the pre-generated task cache before accepting connections

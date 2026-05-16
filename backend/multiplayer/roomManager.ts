@@ -753,6 +753,19 @@ export class RoomManager {
     return this.rooms.size;
   }
 
+  get roomsByState(): Record<string, number> {
+    const counts: Record<string, number> = {
+      waiting: 0,
+      countdown: 0,
+      racing: 0,
+      finished: 0,
+    };
+    for (const room of this.rooms.values()) {
+      counts[room.state] = (counts[room.state] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   getRoom(roomId: string): GameRoom | undefined {
     return this.rooms.get(roomId);
   }

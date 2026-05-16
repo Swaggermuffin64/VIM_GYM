@@ -30,6 +30,87 @@ const TASK_DELAY_MS = parseInt(process.env.TASK_DELAY_MS || '200', 10);
 const VIRAL_MODE = !!process.env.VIRAL;
 const LOAD_TEST_SECRET = process.env.LOAD_TEST_SECRET || '';
 
+// ---------------------------------------------------------------------------
+// Fly.io system metrics (prod only)
+// ---------------------------------------------------------------------------
+
+interface AppMetrics {
+  memMb: number | null;
+  heapUsedMb: number | null;
+  heapTotalMb: number | null;
+  eventLoopLagMs: number | null;
+  rooms: number | null;
+  roomsByState: Record<string, number> | null;
+  socketConnections: number | null;
+  uptimeS: number | null;
+  queueSize: number | null;
+}
+
+interface MetricsSnapshot {
+  gameServer: AppMetrics;
+  matchmaker: AppMetrics;
+}
+
+const GAME_SERVER_HTTP_URL = 'https://vim-racing-server.fly.dev';
+const MATCHMAKER_HTTP_URL = 'https://vim-racing-matchmaker.fly.dev';
+
+async function fetchHealth(
+  url: string
+): Promise<Record<string, unknown> | null> {
+  for (const path of ['/health', '/']) {
+    try {
+      const res = await fetch(`${url}${path}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) return (await res.json()) as Record<string, unknown>;
+    } catch {
+      // try next path
+    }
+  }
+  return null;
+}
+
+async function snapshotMetrics(): Promise<MetricsSnapshot | null> {
+  if (!process.env.PROD) return null;
+
+  const [game, mm] = await Promise.all([
+    fetchHealth(GAME_SERVER_HTTP_URL),
+    fetchHealth(MATCHMAKER_HTTP_URL),
+  ]);
+
+  const num = (v: unknown) => (typeof v === 'number' ? v : null);
+  const obj = (v: unknown) =>
+    v !== null && typeof v === 'object' ? (v as Record<string, number>) : null;
+
+  return {
+    gameServer: {
+      memMb: num(game?.memMB),
+      heapUsedMb: num(game?.heapUsedMB),
+      heapTotalMb: num(game?.heapTotalMB),
+      eventLoopLagMs: num(game?.eventLoopLagMs),
+      rooms: num(game?.rooms),
+      roomsByState: obj(game?.roomsByState),
+      socketConnections: num(game?.socketConnections),
+      uptimeS: num(game?.uptimeS),
+      queueSize: null,
+    },
+    matchmaker: {
+      memMb: num(mm?.memMB),
+      heapUsedMb: null,
+      heapTotalMb: null,
+      eventLoopLagMs: null,
+      rooms: null,
+      roomsByState: null,
+      socketConnections: null,
+      uptimeS: null,
+      queueSize: num(mm?.queueSize),
+    },
+  };
+}
+
+let metricsBaseline: MetricsSnapshot | null = null;
+let metricsPeak: MetricsSnapshot | null = null;
+
 // Viral mode: simulates traffic ramping up like a streamer raid
 // Waves get progressively faster to test rate limiting and requeue
 interface Wave {
@@ -516,12 +597,58 @@ function printStats() {
     });
   }
 
+  // System health metrics
+  if (metricsPeak) {
+    const d = (
+      peak: number | null,
+      base: number | null | undefined,
+      unit = ' MB'
+    ) => {
+      if (peak === null || base == null) return '';
+      const diff = peak - base;
+      return diff >= 0 ? ` (+${diff}${unit})` : ` (${diff}${unit})`;
+    };
+    const v = (val: number | null, unit = '') =>
+      val !== null ? `${val}${unit}` : 'n/a';
+
+    const g = metricsPeak.gameServer;
+    const m = metricsPeak.matchmaker;
+    const gb = metricsBaseline?.gameServer;
+    const mb2 = metricsBaseline?.matchmaker;
+    const states = g.roomsByState
+      ? Object.entries(g.roomsByState)
+          .map(([k, n]) => `${k}:${n}`)
+          .join(' ')
+      : 'n/a';
+
+    console.log('-'.repeat(60));
+    console.log('   SYSTEM HEALTH (end of test):');
+    console.log('   Game Server:');
+    console.log(
+      `     RSS:         ${v(g.memMb, ' MB')}${d(g.memMb, gb?.memMb)}  (baseline: ${v(gb?.memMb ?? null, ' MB')})`
+    );
+    console.log(
+      `     Heap:        ${v(g.heapUsedMb, ' MB')} used / ${v(g.heapTotalMb, ' MB')} total`
+    );
+    console.log(`     Event loop:  ${v(g.eventLoopLagMs, 'ms')} lag`);
+    console.log(`     Sockets:     ${v(g.socketConnections)}`);
+    console.log(`     Rooms:       ${v(g.rooms)} (${states})`);
+    console.log(`     Uptime:      ${v(g.uptimeS, 's')}`);
+    console.log('   Matchmaker:');
+    console.log(
+      `     RSS:         ${v(m.memMb, ' MB')}${d(m.memMb, mb2?.memMb)}  (baseline: ${v(mb2?.memMb ?? null, ' MB')})`
+    );
+    console.log(`     Queue size:  ${v(m.queueSize)}`);
+  }
+
   console.log('='.repeat(60) + '\n');
 }
 
 async function runViralTest() {
   const totalPlayers = VIRAL_WAVES.reduce((sum, wave) => sum + wave.players, 0);
   const totalGames = Math.floor(totalPlayers / 2);
+
+  metricsBaseline = await snapshotMetrics();
 
   console.log('🚀 Starting VIRAL Traffic Simulation');
   console.log(`   Target: ${MATCHMAKING_URL}`);
@@ -568,6 +695,8 @@ async function runViralTest() {
   // Wait for all players to complete
   await Promise.all(promises);
 
+  metricsPeak = await snapshotMetrics();
+
   // Print final stats
   printStats();
 
@@ -580,6 +709,8 @@ async function runFullGameTest() {
   if (VIRAL_MODE) {
     return runViralTest();
   }
+
+  metricsBaseline = await snapshotMetrics();
 
   console.log('🚀 Starting Full Game Load Test');
   console.log(`   Target: ${MATCHMAKING_URL}`);
@@ -600,6 +731,8 @@ async function runFullGameTest() {
 
   // Wait for all players to complete
   await Promise.all(promises);
+
+  metricsPeak = await snapshotMetrics();
 
   // Print final stats
   printStats();
@@ -634,15 +767,18 @@ function cleanupAndExit(expectedGames: number) {
 // Handle Ctrl+C gracefully
 process.on('SIGINT', () => {
   console.log('\n\n⚠️  Interrupted by user');
-  printStats();
-  activeConnections.forEach((conn) => {
-    if (conn instanceof WebSocket) {
-      conn.close();
-    } else {
-      conn.disconnect();
-    }
+  snapshotMetrics().then((m) => {
+    metricsPeak = m;
+    printStats();
+    activeConnections.forEach((conn) => {
+      if (conn instanceof WebSocket) {
+        conn.close();
+      } else {
+        conn.disconnect();
+      }
+    });
+    process.exit(1);
   });
-  process.exit(1);
 });
 
 // Run the test

@@ -115,6 +115,7 @@ export async function insertSessionLeaderboardRow(params: {
   playerId?: string;
   displayName?: string;
   roomId?: string;
+  userId?: string;
 }): Promise<InsertSessionResult> {
   const pool = getPool();
   if (!pool) {
@@ -150,8 +151,9 @@ export async function insertSessionLeaderboardRow(params: {
         task_schema_version,
         player_id,
         display_name,
-        room_id
-      ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)`,
+        room_id,
+        user_id
+      ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)`,
       [
         params.playMode,
         durationMs,
@@ -160,6 +162,7 @@ export async function insertSessionLeaderboardRow(params: {
         params.playerId ?? null,
         params.displayName ?? null,
         params.roomId ?? null,
+        params.userId ?? null,
       ]
     );
     console.log('[leaderboard] insertSessionLeaderboardRow ok', {

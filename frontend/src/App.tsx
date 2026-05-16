@@ -5,6 +5,11 @@ import MultiplayerGame from './pages/multiplayer';
 import About from './pages/about';
 import { LeaderboardTable } from './components/LeaderboardTable';
 import { colors } from './theme';
+import Login from './pages/login';
+import ProfilePage from './pages/profile';
+import Onboarding from './pages/onboarding';
+import { AuthGuard } from './components/AuthGuard';
+import { supabase } from './lib/supabase';
 import './App.css';
 
 function GitHubIcon({ style }: { style?: React.CSSProperties }) {
@@ -265,6 +270,21 @@ function PlayHome() {
           >
             SUPPORT
           </a>
+          <Link to="/profile" style={bannerStyles.navLink}>
+            PROFILE
+          </Link>
+          <button
+            style={{
+              ...bannerStyles.navLink,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+            onClick={() => supabase.auth.signOut()}
+          >
+            SIGN OUT
+          </button>
         </div>
       </div>
 
@@ -449,12 +469,64 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<PlayHome />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/practice" element={<PracticeEditor />} />
-        <Route path="/multiplayer" element={<MultiplayerGame />} />
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <AuthGuard>
+              <PlayHome />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/about"
+          element={
+            <AuthGuard>
+              <About />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/practice"
+          element={
+            <AuthGuard>
+              <PracticeEditor />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/multiplayer"
+          element={
+            <AuthGuard>
+              <MultiplayerGame />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <AuthGuard>
+              <ProfilePage />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/onboarding"
+          element={
+            <AuthGuard>
+              <Onboarding />
+            </AuthGuard>
+          }
+        />
         {/* Keep old route for backwards compatibility */}
-        <Route path="/vim-editor" element={<PracticeEditor />} />
+        <Route
+          path="/vim-editor"
+          element={
+            <AuthGuard>
+              <PracticeEditor />
+            </AuthGuard>
+          }
+        />
       </Routes>
     </Router>
   );

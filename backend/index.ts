@@ -39,6 +39,9 @@ import {
 } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
+import { verifySupabaseToken, isSupabaseToken } from './auth/supabaseAuth.js';
+import type { SupabaseUser } from './auth/supabaseAuth.js';
+import { getProfile, upsertProfile } from './db/profiles.js';
 import { getHeapStatistics } from 'v8';
 import {
   validatePlayerName,
@@ -78,6 +81,31 @@ await fastify.register(fastifyRateLimit, {
   allowList: (req: { url?: string }) => req.url === '/',
 });
 
+/**
+ * Extract and verify a Supabase JWT from the Authorization header.
+ * Returns the user on success, or sends a 401 and returns null.
+ */
+async function requireSupabaseAuth(
+  request: { headers: { authorization?: string | string[] | undefined } },
+  reply: { status: (code: number) => { send: (body: unknown) => unknown } }
+): Promise<SupabaseUser | null> {
+  const token = extractTokenFromAuthHeader(request.headers);
+  if (!token || !isSupabaseToken(token)) {
+    reply
+      .status(401)
+      .send({ success: false, error: 'Authentication required' });
+    return null;
+  }
+  const result = verifySupabaseToken(token);
+  if (!result.success || !result.user) {
+    reply
+      .status(401)
+      .send({ success: false, error: result.error || 'Authentication failed' });
+    return null;
+  }
+  return result.user;
+}
+
 // Store active tasks with TTL to prevent unbounded memory growth
 const ACTIVE_TASKS_MAX = 10_000;
 const ACTIVE_TASKS_TTL_MS = 5 * 60 * 1000;
@@ -115,6 +143,69 @@ setInterval(() => {
 // Basic root health check (used by allowList for rate limiting)
 fastify.get('/', async () => {
   return { status: 'ok', service: 'vim-racing' };
+});
+
+fastify.get('/api/user/me', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const profile = await getProfile(user.id);
+  if (!profile) {
+    return reply
+      .status(404)
+      .send({ success: false, error: 'Profile not found' });
+  }
+
+  return {
+    success: true,
+    profile: {
+      id: profile.id,
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+      is_premium: profile.is_premium,
+      has_completed_onboarding: profile.has_completed_onboarding,
+    },
+  };
+});
+
+fastify.post<{
+  Body: { display_name?: string; avatar_url?: string };
+}>('/api/user/profile', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const { display_name, avatar_url } = request.body;
+
+  if (display_name !== undefined) {
+    const nameResult = validatePlayerName(display_name);
+    if (!nameResult.valid) {
+      return reply
+        .status(400)
+        .send({ success: false, error: nameResult.error });
+    }
+  }
+
+  const profile = await upsertProfile(user.id, {
+    display_name: display_name ?? 'player',
+    avatar_url,
+  });
+
+  if (!profile) {
+    return reply
+      .status(500)
+      .send({ success: false, error: 'Failed to update profile' });
+  }
+
+  return {
+    success: true,
+    profile: {
+      id: profile.id,
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+      is_premium: profile.is_premium,
+      has_completed_onboarding: profile.has_completed_onboarding,
+    },
+  };
 });
 
 // Get a new position task (single player)
@@ -287,18 +378,22 @@ fastify.post<{
     duration_ms: number;
     tasks: unknown;
     task_schema_version?: number;
-    player_id?: string;
-    display_name?: string;
   };
 }>('/api/leaderboard/session', async (request, reply) => {
-  const {
-    play_mode,
-    duration_ms,
-    tasks,
-    task_schema_version,
-    player_id,
-    display_name,
-  } = request.body;
+  const { play_mode, duration_ms, tasks, task_schema_version } = request.body;
+
+  const authUser = await requireSupabaseAuth(request, reply);
+  if (!authUser) return;
+
+  const profile = await getProfile(authUser.id);
+  if (!profile) {
+    return reply
+      .status(404)
+      .send({ success: false, error: 'Profile not found' });
+  }
+
+  const player_id = authUser.id;
+  const display_name = profile.display_name;
 
   request.log.info(
     {
@@ -373,42 +468,13 @@ fastify.post<{
     return reply.status(400).send({ success: false, error: 'Invalid tasks' });
   }
 
-  if (
-    typeof player_id !== 'undefined' &&
-    (typeof player_id !== 'string' || player_id.length > 64)
-  ) {
-    request.log.warn(
-      { err: 'Invalid player_id' },
-      'leaderboard session rejected'
-    );
-    return reply
-      .status(400)
-      .send({ success: false, error: 'Invalid player_id' });
-  }
-
-  const displayNameResult =
-    display_name !== undefined ? validatePlayerName(display_name) : undefined;
-
-  if (displayNameResult && !displayNameResult.valid) {
-    request.log.warn(
-      { err: displayNameResult.error },
-      'leaderboard session rejected'
-    );
-    return reply
-      .status(400)
-      .send({ success: false, error: displayNameResult.error });
-  }
-
-  const sanitizedDisplayName = displayNameResult?.value;
-
   const result = await insertSessionLeaderboardRow({
     playMode: play_mode,
     durationMs: duration_ms,
     tasks,
-    ...(player_id !== undefined ? { playerId: player_id } : {}),
-    ...(sanitizedDisplayName !== undefined
-      ? { displayName: sanitizedDisplayName }
-      : {}),
+    playerId: player_id,
+    displayName: display_name,
+    userId: authUser.id,
   });
 
   if (result.status === 'inserted') {
@@ -727,6 +793,18 @@ io.use((socket, next) => {
   next();
 });
 
+// Extract Supabase user identity from handshake
+io.use((socket, next) => {
+  const userToken = socket.handshake.auth?.userToken as string | undefined;
+  if (userToken && isSupabaseToken(userToken)) {
+    const result = verifySupabaseToken(userToken);
+    if (result.success && result.user) {
+      socket.data.userId = result.user.id;
+    }
+  }
+  next();
+});
+
 // Authentication middleware for Socket.IO
 // Verifies match tokens for quick-match connections; allows direct connections for private rooms
 io.use((socket, next) => {
@@ -741,7 +819,10 @@ io.use((socket, next) => {
     return next(new Error(authResult.error || 'Authentication failed'));
   }
 
-  socket.data.userId = authResult.userId!;
+  // Prefer Supabase-verified user ID over ephemeral match token player ID
+  if (!socket.data.userId) {
+    socket.data.userId = authResult.userId!;
+  }
   if (authResult.matchedRoomId) {
     socket.data.matchedRoomId = authResult.matchedRoomId;
   }

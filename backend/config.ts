@@ -20,3 +20,10 @@ export const MATCH_TOKEN_SECRET = process.env.MATCH_TOKEN_SECRET;
 
 /** Supabase / Postgres connection string; optional until leaderboard persistence is used. */
 export const DATABASE_URL = process.env.DATABASE_URL?.trim() || undefined;
+
+/** Supabase project URL, e.g. https://xxx.supabase.co */
+export const SUPABASE_URL = process.env.SUPABASE_URL?.trim() || undefined;
+
+/** JWT secret from Supabase → Project Settings → API → JWT Secret */
+export const SUPABASE_JWT_SECRET =
+  process.env.SUPABASE_JWT_SECRET?.trim() || undefined;

@@ -95,7 +95,7 @@ export interface SocketData {
   playerId: string;
   playerName: string;
   roomId?: string;
-  /** Authenticated user ID from match token or local ID */
+  /** Authenticated user ID from Supabase JWT or ephemeral match token ID */
   userId?: string;
   /** The roomId from the match token — used to enforce token/room binding */
   matchedRoomId?: string;

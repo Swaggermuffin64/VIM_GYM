@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { GameState } from '../types/multiplayer';
 import { EMPTY_TASK } from '../types/multiplayer';
+import { supabase } from '../lib/supabase';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const MATCHMAKING_URL =
@@ -238,15 +239,22 @@ export function useGameSocket(): UseGameSocketReturn {
 
   // Connect to game server, optionally with a match token for auth
   const connectSocket = useCallback(
-    (url: string, token?: string) => {
+    async (url: string, token?: string) => {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
       matchTokenRef.current = token || null;
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const socket = io(url, {
         transports: ['websocket', 'polling'],
-        auth: token ? { token } : undefined,
+        auth: {
+          ...(token ? { token } : {}),
+          userToken: session?.access_token,
+        },
       });
 
       socketRef.current = socket;

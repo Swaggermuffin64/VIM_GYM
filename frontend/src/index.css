@@ -118,6 +118,7 @@ code {
     color: #f1f5f9;
     letter-spacing: -2px;
     margin: 0;
+    padding: 0;
   }
 
   #mobile-overlay-msg {

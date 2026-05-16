@@ -599,7 +599,24 @@ fastify.get('/health', async (request, reply) => {
 });
 
 // Wait for the pre-generated task cache before accepting connections
-await waitForTaskCache();
+const TASK_CACHE_TIMEOUT_MS = 60_000;
+await Promise.race([
+  waitForTaskCache(),
+  new Promise<never>((_, reject) =>
+    setTimeout(
+      () =>
+        reject(
+          new Error(
+            `Task cache generation timed out after ${TASK_CACHE_TIMEOUT_MS}ms`
+          )
+        ),
+      TASK_CACHE_TIMEOUT_MS
+    )
+  ),
+]).catch((err) => {
+  console.error('[Startup] Fatal:', err.message);
+  process.exit(1);
+});
 
 // Start Fastify first, then attach Socket.IO
 await fastify.listen({ port: BACKEND_PORT, host: '0.0.0.0' });

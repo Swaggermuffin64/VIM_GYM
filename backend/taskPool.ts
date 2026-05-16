@@ -33,7 +33,7 @@ console.log(`[TaskPool] Started ${poolSize} worker threads via piscina`);
 // Piscina queue pressure under load.
 //
 // 200 navigate + 200 delete + 100 yank_paste ≈ 250-500 KB in memory.
-// With random selection the number of unique 10-task games is ~2×10^19.
+// With random selection (with replacement) the number of unique 10-task games is ≈2.56×10^22.
 // ---------------------------------------------------------------------------
 
 const CACHE_NAVIGATE_COUNT = 200;
@@ -73,6 +73,15 @@ function shuffle<T>(array: T[]): T[] {
  * Synchronous — no worker threads, no async, no queue pressure.
  */
 export function pickTasksFromCache(): Task[] {
+  if (
+    cachedNavigateTasks.length < 4 ||
+    cachedDeleteTasks.length < 4 ||
+    cachedYankPasteTasks.length < 2
+  ) {
+    throw new Error(
+      `pickTasksFromCache: cache not initialized (navigate=${cachedNavigateTasks.length}, delete=${cachedDeleteTasks.length}, yank_paste=${cachedYankPasteTasks.length})`
+    );
+  }
   const nav = pickRandom(cachedNavigateTasks, 4);
   const del = pickRandom(cachedDeleteTasks, 4);
   const yank = pickRandom(cachedYankPasteTasks, 2);

@@ -343,7 +343,6 @@ type YankStrategyExecutor = () => {
 };
 
 export function generateYankPasteTask(): YankPasteTask {
-  //const generationStartedAt = Date.now();
   const snippetIndex = Math.floor(Math.random() * CODE_SNIPPIT_OBJECTS.length);
   const snippetData =
     CODE_SNIPPIT_OBJECTS[snippetIndex] ?? CODE_SNIPPIT_OBJECTS[0];
@@ -519,8 +518,6 @@ export function generateYankPasteTask(): YankPasteTask {
     yankTo,
     pasteOffset
   );
-
-  //const generationLatencyMs = Date.now() - generationStartedAt;
 
   return {
     id: randomUUID(),

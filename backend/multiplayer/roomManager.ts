@@ -125,6 +125,7 @@ export class RoomManager {
       num_tasks: this.NUM_TASKS,
       state: 'waiting',
       isPublic,
+      isLoadTest: !!socket.data.isLoadTest,
     };
 
     this.rooms.set(roomId, room);
@@ -195,6 +196,11 @@ export class RoomManager {
 
     room.players.set(playerId, player);
     this.playerRooms.set(playerId, roomId);
+
+    // If any player in the room is a load test bot, mark the whole room
+    if (socket.data.isLoadTest) {
+      room.isLoadTest = true;
+    }
 
     // Join the socket.io room
     socket.join(roomId);
@@ -544,13 +550,15 @@ export class RoomManager {
       rankings
     );
 
-    const ranksMap = await insertMultiplayerRaceLeaderboardRows({
-      roomId,
-      isPublic: room.isPublic,
-      tasks: room.tasks,
-      numTasks: room.num_tasks,
-      rankings,
-    });
+    const ranksMap = room.isLoadTest
+      ? new Map()
+      : await insertMultiplayerRaceLeaderboardRows({
+          roomId,
+          isPublic: room.isPublic,
+          tasks: room.tasks,
+          numTasks: room.num_tasks,
+          rankings,
+        });
 
     const enrichedRankings = rankings.map((r) => ({
       ...r,

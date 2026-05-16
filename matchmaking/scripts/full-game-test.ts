@@ -26,7 +26,7 @@ if (!process.env.MATCHMAKING_URL && !process.env.PROD) {
 const NUM_GAMES = parseInt(process.env.NUM_GAMES || '5', 10);
 const STAGGER_MS = parseInt(process.env.STAGGER_MS || '200', 10);
 const TIMEOUT_MS = parseInt(process.env.TIMEOUT_MS || '120000', 10);
-const TASK_DELAY_MS = parseInt(process.env.TASK_DELAY_MS || '100', 10);
+const TASK_DELAY_MS = parseInt(process.env.TASK_DELAY_MS || '200', 10);
 const VIRAL_MODE = !!process.env.VIRAL;
 const LOAD_TEST_SECRET = process.env.LOAD_TEST_SECRET || '';
 
@@ -51,11 +51,12 @@ const VIRAL_WAVES: Wave[] = [
 // Task types from backend
 interface Task {
   id: string;
-  type: 'navigate' | 'delete' | 'change';
+  type: 'navigate' | 'delete' | 'yank_paste';
   description: string;
   codeSnippet: string;
   targetOffset?: number;
   expectedResult?: string;
+  expectedResults?: string[];
   targetRange?: { from: number; to: number };
 }
 
@@ -97,6 +98,7 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
     let tasksCompleted = 0;
     let resolved = false;
     let currentTask: Task | null = null;
+    let taskQueue: Task[] = [];
     let gameSocket: Socket | null = null;
     let taskSentAt = 0;
 
@@ -261,10 +263,16 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
 
       gameSocket.on(
         'game:start',
-        (data: { startTime: number; initialTask: Task; num_tasks: number }) => {
+        (data: {
+          startTime: number;
+          initialTask: Task;
+          tasks: Task[];
+          num_tasks: number;
+        }) => {
           stats.gamesStarted++;
           gameStartTime = Date.now();
-          currentTask = data.initialTask;
+          taskQueue = data.tasks || [];
+          currentTask = data.initialTask || taskQueue[0] || null;
           console.log(
             `[${playerName}] 🏁 Race started! Tasks: ${data.num_tasks}`
           );
@@ -276,11 +284,7 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
 
       gameSocket.on(
         'game:player_finished_task',
-        (data: {
-          playerId: string;
-          taskProgress: number;
-          newTask: Task | undefined;
-        }) => {
+        (data: { playerId: string; taskProgress: number }) => {
           if (taskSentAt) {
             const latency = Date.now() - taskSentAt;
             stats.taskLatencies.push(latency);
@@ -288,7 +292,7 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
           }
           tasksCompleted++;
           stats.tasksCompleted++;
-          currentTask = data.newTask || null;
+          currentTask = taskQueue[data.taskProgress] || null;
           console.log(`[${playerName}] ✅ Task ${data.taskProgress} complete`);
 
           if (currentTask) {
@@ -397,6 +401,7 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
             gameSocket.emit('player:editorText', {
               text: currentTask.expectedResult,
             });
+            gameSocket.emit('player:task_complete', {});
           }
           break;
 
@@ -405,6 +410,7 @@ function simulatePlayer(playerNum: number): Promise<GameResult> {
             gameSocket.emit('player:editorText', {
               text: currentTask.expectedResults[0],
             });
+            gameSocket.emit('player:task_complete', {});
           }
           break;
 

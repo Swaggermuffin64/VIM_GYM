@@ -672,6 +672,8 @@ io.use((socket, next) => {
     LOAD_TEST_SECRET &&
     socket.handshake.auth?.loadTestSecret === LOAD_TEST_SECRET;
 
+  socket.data.isLoadTest = !!isLoadTest;
+
   // Check and register connection (bypass for load tests)
   if (!isLoadTest && !connectionLimiter.addConnection(ip, socket.id)) {
     console.log(

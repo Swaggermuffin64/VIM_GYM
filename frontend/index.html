@@ -13,12 +13,24 @@
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="VIMGYM" />
     <meta name="twitter:description" content="Practice VIM motions online by racing! Improve your VIM speed and accuracy by competing against others or yourself." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=optional" />
     <link rel="apple-touch-icon" href="/favicon/favicon.ico" />
     <link rel="manifest" href="/manifest.json" />
     <title>VIMGYM</title>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="mobile-overlay">
+      <div id="mobile-overlay-content">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+        </svg>
+        <p id="mobile-overlay-title">VIM_GYM</p>
+        <p id="mobile-overlay-msg">Vim Racing is best experienced on desktop — open on a computer to play.</p>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

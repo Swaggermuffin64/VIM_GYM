@@ -1,10 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
-
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -13,14 +15,14 @@ html, body, #root {
 }
 
 body {
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: #f1f5f9;
 }
 
 code {
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 /* Custom scrollbar */
@@ -46,4 +48,84 @@ code {
 ::selection {
   background: rgba(6, 182, 212, 0.3);
   color: #f1f5f9;
+}
+
+/* Mobile overlay */
+#mobile-overlay {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  #mobile-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: linear-gradient(180deg, #0a0a0f 0%, #0f0f1a 100%);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  #mobile-overlay::before,
+  #mobile-overlay::after {
+    content: '';
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+  }
+
+  #mobile-overlay::before {
+    top: -10%;
+    left: -20%;
+    background: radial-gradient(
+      circle,
+      rgba(6, 182, 212, 0.3) 0%,
+      transparent 70%
+    );
+  }
+
+  #mobile-overlay::after {
+    bottom: -10%;
+    right: -20%;
+    background: radial-gradient(
+      circle,
+      rgba(236, 72, 153, 0.3) 0%,
+      transparent 70%
+    );
+  }
+
+  #mobile-overlay-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  #mobile-overlay-title {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 42px;
+    font-weight: 800;
+    color: #f1f5f9;
+    letter-spacing: -2px;
+    margin: 0;
+  }
+
+  #mobile-overlay-msg {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin: 0;
+    line-height: 1.6;
+    max-width: 280px;
+  }
 }

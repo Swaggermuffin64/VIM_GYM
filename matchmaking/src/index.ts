@@ -115,13 +115,19 @@ const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     }
 
     // Health check endpoint (exempt from rate limiting)
-    if (req.url === '/' && req.method === 'GET') {
+    if ((req.url === '/' || req.url === '/health') && req.method === 'GET') {
       res.writeHead(200, {
         ...corsHeaders,
         'Content-Type': 'application/json',
       });
+      const memMB = Math.round(process.memoryUsage().rss / 1024 / 1024);
       res.end(
-        JSON.stringify({ status: 'ok', service: 'vim-racing-matchmaking' })
+        JSON.stringify({
+          status: 'ok',
+          service: 'vim-racing-matchmaking',
+          memMB,
+          queueSize: matchmaker.getQueueSize(),
+        })
       );
       return;
     }

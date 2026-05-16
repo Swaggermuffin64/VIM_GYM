@@ -26,6 +26,7 @@ export interface GameRoom {
   num_tasks: number;
   state: 'waiting' | 'countdown' | 'racing' | 'finished';
   isPublic: boolean; // True for quick match rooms, false for private rooms
+  isLoadTest?: boolean; // True if any player is a load test bot — skips leaderboard writes
   startTime?: number;
   countdownStart?: number;
 }
@@ -100,4 +101,6 @@ export interface SocketData {
   matchedRoomId?: string;
   /** Client IP address for connection limiting */
   clientIp?: string;
+  /** True if this connection is from a load test — skips leaderboard writes */
+  isLoadTest?: boolean;
 }

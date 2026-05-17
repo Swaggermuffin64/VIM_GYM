@@ -1,4 +1,6 @@
 .claude/
+docs/
+.superpowers/
 
 # Environment files
 .env

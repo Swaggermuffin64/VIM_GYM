@@ -36,7 +36,10 @@ export function verifySupabaseToken(token: string): SupabaseAuthResult {
 
     return {
       success: true,
-      user: { id: payload.sub, email: payload.email },
+      user: {
+        id: payload.sub,
+        ...(payload.email !== undefined && { email: payload.email }),
+      },
     };
   } catch {
     return { success: false, error: 'Invalid or expired token' };

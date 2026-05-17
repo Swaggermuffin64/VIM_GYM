@@ -1,3 +1,4 @@
+//Memory is your ceiling at ~3,400 concurrent games on the current 256 MB machine.
 import 'dotenv/config';
 import WebSocket from 'ws';
 import { io, Socket } from 'socket.io-client';
@@ -110,6 +111,29 @@ async function snapshotMetrics(): Promise<MetricsSnapshot | null> {
 
 let metricsBaseline: MetricsSnapshot | null = null;
 let metricsPeak: MetricsSnapshot | null = null;
+let metricsPeakRooms = 0;
+
+let metricsPoller: ReturnType<typeof setInterval> | null = null;
+
+function startMetricsPoller() {
+  if (!process.env.PROD) return;
+  metricsPoller = setInterval(async () => {
+    const snap = await snapshotMetrics();
+    if (!snap) return;
+    const rooms = snap.gameServer.rooms ?? 0;
+    if (rooms > metricsPeakRooms || metricsPeak === null) {
+      metricsPeakRooms = rooms;
+      metricsPeak = snap;
+    }
+  }, 2000);
+}
+
+function stopMetricsPoller() {
+  if (metricsPoller) {
+    clearInterval(metricsPoller);
+    metricsPoller = null;
+  }
+}
 
 // Viral mode: simulates traffic ramping up like a streamer raid
 // Waves get progressively faster to test rate limiting and requeue
@@ -119,14 +143,18 @@ interface Wave {
   pauseAfterMs: number; // Pause before next wave
 }
 
+// VIRAL_SCALE multiplies every wave's player count.
+// Default is 1 (1000 total players). Use VIRAL_SCALE=2 for 2000, etc.
+const VIRAL_SCALE = parseFloat(process.env.VIRAL_SCALE || '1');
+
 const VIRAL_WAVES: Wave[] = [
-  { players: 20, staggerMs: 500, pauseAfterMs: 2000 }, // Warm up: 20 players
-  { players: 40, staggerMs: 200, pauseAfterMs: 2000 }, // Picking up: 40 players
-  { players: 80, staggerMs: 100, pauseAfterMs: 2000 }, // Getting busy: 80 players
-  { players: 160, staggerMs: 50, pauseAfterMs: 2000 }, // Viral spike: 160 players
-  { players: 400, staggerMs: 20, pauseAfterMs: 3000 }, // Peak load: 400 players
-  { players: 200, staggerMs: 50, pauseAfterMs: 2000 }, // Sustained: 200 players
-  { players: 100, staggerMs: 100, pauseAfterMs: 0 }, // Tapering off: 100 players
+  { players: Math.ceil(20 * VIRAL_SCALE), staggerMs: 500, pauseAfterMs: 2000 }, // Warm up
+  { players: Math.ceil(40 * VIRAL_SCALE), staggerMs: 200, pauseAfterMs: 2000 }, // Picking up
+  { players: Math.ceil(80 * VIRAL_SCALE), staggerMs: 100, pauseAfterMs: 2000 }, // Getting busy
+  { players: Math.ceil(160 * VIRAL_SCALE), staggerMs: 50, pauseAfterMs: 2000 }, // Viral spike
+  { players: Math.ceil(400 * VIRAL_SCALE), staggerMs: 20, pauseAfterMs: 3000 }, // Peak load
+  { players: Math.ceil(200 * VIRAL_SCALE), staggerMs: 50, pauseAfterMs: 2000 }, // Sustained
+  { players: Math.ceil(100 * VIRAL_SCALE), staggerMs: 100, pauseAfterMs: 0 }, // Tapering off
 ];
 
 // Task types from backend
@@ -622,7 +650,9 @@ function printStats() {
       : 'n/a';
 
     console.log('-'.repeat(60));
-    console.log('   SYSTEM HEALTH (end of test):');
+    console.log(
+      `   SYSTEM HEALTH (peak: ${metricsPeakRooms} concurrent rooms):`
+    );
     console.log('   Game Server:');
     console.log(
       `     RSS:         ${v(g.memMb, ' MB')}${d(g.memMb, gb?.memMb)}  (baseline: ${v(gb?.memMb ?? null, ' MB')})`
@@ -649,6 +679,7 @@ async function runViralTest() {
   const totalGames = Math.floor(totalPlayers / 2);
 
   metricsBaseline = await snapshotMetrics();
+  startMetricsPoller();
 
   console.log('🚀 Starting VIRAL Traffic Simulation');
   console.log(`   Target: ${MATCHMAKING_URL}`);
@@ -695,7 +726,7 @@ async function runViralTest() {
   // Wait for all players to complete
   await Promise.all(promises);
 
-  metricsPeak = await snapshotMetrics();
+  stopMetricsPoller();
 
   // Print final stats
   printStats();
@@ -711,6 +742,7 @@ async function runFullGameTest() {
   }
 
   metricsBaseline = await snapshotMetrics();
+  startMetricsPoller();
 
   console.log('🚀 Starting Full Game Load Test');
   console.log(`   Target: ${MATCHMAKING_URL}`);
@@ -732,7 +764,7 @@ async function runFullGameTest() {
   // Wait for all players to complete
   await Promise.all(promises);
 
-  metricsPeak = await snapshotMetrics();
+  stopMetricsPoller();
 
   // Print final stats
   printStats();
@@ -767,8 +799,9 @@ function cleanupAndExit(expectedGames: number) {
 // Handle Ctrl+C gracefully
 process.on('SIGINT', () => {
   console.log('\n\n⚠️  Interrupted by user');
+  stopMetricsPoller();
   snapshotMetrics().then((m) => {
-    metricsPeak = m;
+    if (m && (m.gameServer.rooms ?? 0) > metricsPeakRooms) metricsPeak = m;
     printStats();
     activeConnections.forEach((conn) => {
       if (conn instanceof WebSocket) {

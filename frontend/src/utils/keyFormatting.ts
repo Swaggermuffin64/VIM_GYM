@@ -13,6 +13,8 @@ export function formatKeyLabel(key: string): string | null {
   if (key === 'Meta') return null;
   if (key === 'Alt') return 'Alt';
   if (key === 'Shift') return 'Shift';
+  // Intl / AltGr placeholders — real character is captured separately (see VimRaceEditor).
+  if (key === 'AltGraph' || key === 'Process' || key === 'Dead') return null;
   return key;
 }
 

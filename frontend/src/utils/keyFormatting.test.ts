@@ -12,6 +12,9 @@ describe('formatKeyLabel', () => {
     expect(formatKeyLabel('Backspace')).toBe('←');
     expect(formatKeyLabel('Escape')).toBe('Esc');
     expect(formatKeyLabel('Meta')).toBeNull();
+    expect(formatKeyLabel('AltGraph')).toBeNull();
+    expect(formatKeyLabel('Process')).toBeNull();
+    expect(formatKeyLabel('Dead')).toBeNull();
   });
 
   it('passes through ordinary keys', () => {

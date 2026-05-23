@@ -1,12 +1,16 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { EditorState, Compartment } from "@codemirror/state";
-import { cpp } from "@codemirror/lang-cpp";
+import { EditorState, Compartment } from '@codemirror/state';
+import { cpp } from '@codemirror/lang-cpp';
 import {
-  EditorView, keymap, drawSelection,
-  highlightActiveLine, lineNumbers, highlightActiveLineGutter
-} from "@codemirror/view";
-import { defaultKeymap, history } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
+  EditorView,
+  keymap,
+  drawSelection,
+  highlightActiveLine,
+  lineNumbers,
+  highlightActiveLineGutter,
+} from '@codemirror/view';
+import { defaultKeymap, history } from '@codemirror/commands';
+import { searchKeymap } from '@codemirror/search';
 import { vim, Vim, getCM } from '@replit/codemirror-vim';
 import { oneDark } from '@codemirror/theme-one-dark';
 
@@ -83,10 +87,26 @@ const focusOnlyMouseInteraction = EditorView.domEventHandlers({
 });
 
 function shouldDebugUndo(): boolean {
-  return typeof globalThis !== 'undefined'
-    && (globalThis as { __vimRacingDebugUndo?: boolean }).__vimRacingDebugUndo === true;
+  return (
+    typeof globalThis !== 'undefined' &&
+    (globalThis as { __vimRacingDebugUndo?: boolean }).__vimRacingDebugUndo ===
+      true
+  );
 }
 
+/** Keys that never represent a single Vim/typing step on their own (modifiers / OS placeholders). */
+function isModifierOnlyTelemetryKey(key: string): boolean {
+  return key === 'Shift' || key === 'AltGraph';
+}
+
+/**
+ * Windows/Linux often report VK_PROCESSKEY / dead-key state as "Process" or "Dead"
+ * instead of the actual character (common with Nordic AltGr layouts). The real glyph
+ * arrives via `beforeinput` or the following keydown — see handler below.
+ */
+function isIntlPlaceholderTelemetryKey(key: string): boolean {
+  return key === 'Process' || key === 'Dead';
+}
 
 function createLineNumbersExtension(relative: boolean) {
   return lineNumbers({
@@ -151,19 +171,25 @@ interface VimRaceEditorProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>(
-  ({
-    initialDoc,
-    onReady,
-    onCursorChange,
-    onDocChange,
-    onBlockedEdit,
-    onKeyStroke,
-    shouldAllowBlur,
-    allowMouseNavigation = false,
-    allowMouseFocusOnly = false,
-    autoFocusOnMount = true,
-  }, ref) => {
+export const VimRaceEditor = forwardRef<
+  VimRaceEditorHandle,
+  VimRaceEditorProps
+>(
+  (
+    {
+      initialDoc,
+      onReady,
+      onCursorChange,
+      onDocChange,
+      onBlockedEdit,
+      onKeyStroke,
+      shouldAllowBlur,
+      allowMouseNavigation = false,
+      allowMouseFocusOnly = false,
+      autoFocusOnMount = true,
+    },
+    ref
+  ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
@@ -174,18 +200,46 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
     const onKeyStrokeRef = useRef(onKeyStroke);
     const shouldAllowBlurRef = useRef(shouldAllowBlur);
 
-    useEffect(() => { onCursorChangeRef.current = onCursorChange; }, [onCursorChange]);
-    useEffect(() => { onDocChangeRef.current = onDocChange; }, [onDocChange]);
-    useEffect(() => { onBlockedEditRef.current = onBlockedEdit; }, [onBlockedEdit]);
-    useEffect(() => { onKeyStrokeRef.current = onKeyStroke; }, [onKeyStroke]);
-    useEffect(() => { shouldAllowBlurRef.current = shouldAllowBlur; }, [shouldAllowBlur]);
+    /** Suppress duplicate keydown after we already recorded text from `beforeinput` (AltGr / Process). */
+    const telemetrySuppressNextKeyRef = useRef<string | null>(null);
+    /** OS reported Process/Dead — real glyph may arrive via `beforeinput` or the next keydown. */
+    const telemetryPendingIntlRef = useRef(false);
+    const telemetryIntlFallbackTimerRef = useRef<ReturnType<
+      typeof setTimeout
+    > | null>(null);
+    const telemetryLastModsRef = useRef({
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      repeat: false,
+      timeStamp: 0,
+    });
+
+    useEffect(() => {
+      onCursorChangeRef.current = onCursorChange;
+    }, [onCursorChange]);
+    useEffect(() => {
+      onDocChangeRef.current = onDocChange;
+    }, [onDocChange]);
+    useEffect(() => {
+      onBlockedEditRef.current = onBlockedEdit;
+    }, [onBlockedEdit]);
+    useEffect(() => {
+      onKeyStrokeRef.current = onKeyStroke;
+    }, [onKeyStroke]);
+    useEffect(() => {
+      shouldAllowBlurRef.current = shouldAllowBlur;
+    }, [shouldAllowBlur]);
 
     useImperativeHandle(ref, () => ({
-      get view() { return viewRef.current; },
+      get view() {
+        return viewRef.current;
+      },
       setRelativeLineNumbers(relative: boolean) {
         viewRef.current?.dispatch({
           effects: lineNumbersCompartment.reconfigure(
-            createLineNumbersExtension(relative),
+            createLineNumbersExtension(relative)
           ),
         });
       },
@@ -206,8 +260,13 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       if (!containerRef.current) return;
 
       // Use Vim-style regexes in search to avoid PCRE helper prompts/no-match hints.
-      if (typeof (Vim as { setOption?: (name: string, value: unknown) => void }).setOption === 'function') {
-        (Vim as { setOption?: (name: string, value: unknown) => void }).setOption?.('pcre', false);
+      if (
+        typeof (Vim as { setOption?: (name: string, value: unknown) => void })
+          .setOption === 'function'
+      ) {
+        (
+          Vim as { setOption?: (name: string, value: unknown) => void }
+        ).setOption?.('pcre', false);
       }
 
       const docChangeListener = EditorView.updateListener.of((update) => {
@@ -215,7 +274,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           onDocChangeRef.current?.(update.state.doc.toString());
         }
         for (const transaction of update.transactions) {
-          const blockReason = transaction.annotation(blockedEditReasonAnnotation);
+          const blockReason = transaction.annotation(
+            blockedEditReasonAnnotation
+          );
           if (blockReason) {
             onBlockedEditRef.current?.(blockReason);
           }
@@ -238,7 +299,13 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           drawSelection(),
           highlightActiveLine(),
           highlightActiveLineGutter(),
-          ...(allowMouseNavigation ? [] : [allowMouseFocusOnly ? focusOnlyMouseInteraction : disableMouseInteraction]),
+          ...(allowMouseNavigation
+            ? []
+            : [
+                allowMouseFocusOnly
+                  ? focusOnlyMouseInteraction
+                  : disableMouseInteraction,
+              ]),
           keymap.of([...defaultKeymap, ...searchKeymap]),
           EditorView.theme({
             '&': {
@@ -313,11 +380,85 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       // gets to blur the contenteditable element.  Route the key
       // through the Vim API so insert→normal transitions always work.
       // ---------------------------------------------------------------
+      const clearTelemetryIntlTimer = () => {
+        if (telemetryIntlFallbackTimerRef.current !== null) {
+          clearTimeout(telemetryIntlFallbackTimerRef.current);
+          telemetryIntlFallbackTimerRef.current = null;
+        }
+      };
+
+      const scheduleTelemetryIntlFallback = () => {
+        clearTelemetryIntlTimer();
+        telemetryIntlFallbackTimerRef.current = setTimeout(() => {
+          telemetryPendingIntlRef.current = false;
+          telemetryIntlFallbackTimerRef.current = null;
+        }, 220);
+      };
+
+      const handleBeforeInput = (e: InputEvent) => {
+        if (!telemetryPendingIntlRef.current) return;
+        if (
+          e.inputType !== 'insertText' &&
+          e.inputType !== 'insertCompositionText'
+        ) {
+          return;
+        }
+        const data = e.data;
+        if (!data) return;
+
+        telemetryPendingIntlRef.current = false;
+        clearTelemetryIntlTimer();
+        telemetrySuppressNextKeyRef.current = data;
+
+        onKeyStrokeRef.current?.({
+          key: data,
+          altKey: telemetryLastModsRef.current.altKey,
+          ctrlKey: telemetryLastModsRef.current.ctrlKey,
+          metaKey: telemetryLastModsRef.current.metaKey,
+          shiftKey: telemetryLastModsRef.current.shiftKey,
+          repeat: false,
+          dtMs: Math.max(0, Math.floor(performance.now())),
+        });
+      };
+
       const handleEscapeKey = (e: KeyboardEvent) => {
+        telemetryLastModsRef.current = {
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          shiftKey: e.shiftKey,
+          repeat: e.repeat,
+          timeStamp: e.timeStamp,
+        };
+
         // Shift is only a modifier for other keys in this telemetry model.
         // Skip standalone Shift presses so they don't inflate keystroke counts.
         if (e.key === 'Shift') {
           return;
+        }
+
+        // AltGr keydown (common on Nordic layouts) — skip; the bracket symbol is reported separately.
+        if (isModifierOnlyTelemetryKey(e.key)) {
+          return;
+        }
+
+        if (
+          telemetrySuppressNextKeyRef.current !== null &&
+          e.key === telemetrySuppressNextKeyRef.current
+        ) {
+          telemetrySuppressNextKeyRef.current = null;
+          return;
+        }
+
+        if (isIntlPlaceholderTelemetryKey(e.key)) {
+          telemetryPendingIntlRef.current = true;
+          scheduleTelemetryIntlFallback();
+          return;
+        }
+
+        if (telemetryPendingIntlRef.current) {
+          clearTelemetryIntlTimer();
+          telemetryPendingIntlRef.current = false;
         }
 
         onKeyStrokeRef.current?.({
@@ -330,7 +471,10 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           dtMs: Math.max(0, Math.floor(e.timeStamp)),
         });
 
-        if (shouldDebugUndo() && (e.key === 'u' || (e.key.toLowerCase() === 'r' && e.ctrlKey))) {
+        if (
+          shouldDebugUndo() &&
+          (e.key === 'u' || (e.key.toLowerCase() === 'r' && e.ctrlKey))
+        ) {
           const cm = getCM(view);
           console.log('[vim-undo-debug] keydown in editor', {
             key: e.key,
@@ -355,10 +499,12 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       // Capture phase ensures we record the key before downstream handlers
       // can trigger task-complete state transitions in parent components.
       view.contentDOM.addEventListener('keydown', handleEscapeKey, true);
+      view.contentDOM.addEventListener('beforeinput', handleBeforeInput, true);
 
       const handleWindowKeyCapture = (e: KeyboardEvent) => {
         if (!shouldDebugUndo()) return;
-        if (e.key !== 'u' && !(e.key.toLowerCase() === 'r' && e.ctrlKey)) return;
+        if (e.key !== 'u' && !(e.key.toLowerCase() === 'r' && e.ctrlKey))
+          return;
         if (!view.dom.contains(e.target as Node)) return;
 
         console.log('[vim-undo-debug] window capture keydown', {
@@ -368,7 +514,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           activeInsideEditor: view.dom.contains(document.activeElement),
         });
       };
-      window.addEventListener('keydown', handleWindowKeyCapture, { capture: true });
+      window.addEventListener('keydown', handleWindowKeyCapture, {
+        capture: true,
+      });
 
       // Refocus the editor whenever it loses focus unintentionally.
       // Parents opt into allowing blur via the shouldAllowBlur callback.
@@ -376,7 +524,10 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       const handleBlur = (e: FocusEvent) => {
         // Allow focus to move to vim dialogs (e.g. '/' search prompt)
         // that live inside the editor DOM but outside contentDOM.
-        if (e.relatedTarget instanceof Node && view.dom.contains(e.relatedTarget)) {
+        if (
+          e.relatedTarget instanceof Node &&
+          view.dom.contains(e.relatedTarget)
+        ) {
           return;
         }
 
@@ -404,9 +555,17 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       }
 
       return () => {
+        clearTelemetryIntlTimer();
         view.contentDOM.removeEventListener('keydown', handleEscapeKey, true);
+        view.contentDOM.removeEventListener(
+          'beforeinput',
+          handleBeforeInput,
+          true
+        );
         view.contentDOM.removeEventListener('blur', handleBlur);
-        window.removeEventListener('keydown', handleWindowKeyCapture, { capture: true });
+        window.removeEventListener('keydown', handleWindowKeyCapture, {
+          capture: true,
+        });
         view.destroy();
         viewRef.current = null;
       };
@@ -415,7 +574,7 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
     }, []);
 
     return <div ref={containerRef} />;
-  },
+  }
 );
 
 VimRaceEditor.displayName = 'VimRaceEditor';

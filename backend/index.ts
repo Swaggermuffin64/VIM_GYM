@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -96,7 +97,7 @@ async function requireSupabaseAuth(
       .send({ success: false, error: 'Authentication required' });
     return null;
   }
-  const result = verifySupabaseToken(token);
+  const result = await verifySupabaseToken(token);
   if (!result.success || !result.user) {
     reply
       .status(401)
@@ -176,17 +177,19 @@ fastify.post<{
 
   const { display_name, avatar_url } = request.body;
 
-  if (display_name !== undefined) {
-    const nameResult = validatePlayerName(display_name);
-    if (!nameResult.valid) {
-      return reply
-        .status(400)
-        .send({ success: false, error: nameResult.error });
-    }
+  if (display_name === undefined) {
+    return reply
+      .status(400)
+      .send({ success: false, error: 'display_name is required' });
+  }
+
+  const nameResult = validatePlayerName(display_name);
+  if (!nameResult.valid) {
+    return reply.status(400).send({ success: false, error: nameResult.error });
   }
 
   const profile = await upsertProfile(user.id, {
-    display_name: display_name ?? 'player',
+    display_name,
     avatar_url,
   });
 
@@ -796,13 +799,19 @@ io.use((socket, next) => {
 // Extract Supabase user identity from handshake
 io.use((socket, next) => {
   const userToken = socket.handshake.auth?.userToken as string | undefined;
-  if (userToken && isSupabaseToken(userToken)) {
-    const result = verifySupabaseToken(userToken);
-    if (result.success && result.user) {
-      socket.data.userId = result.user.id;
-    }
+  if (!userToken || !isSupabaseToken(userToken)) {
+    next();
+    return;
   }
-  next();
+  // Identity is optional here — an unverifiable token just means an anonymous
+  // socket, so connection proceeds either way.
+  verifySupabaseToken(userToken)
+    .then((result) => {
+      if (result.success && result.user) {
+        socket.data.userId = result.user.id;
+      }
+    })
+    .finally(() => next());
 });
 
 // Authentication middleware for Socket.IO

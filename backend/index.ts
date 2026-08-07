@@ -817,6 +817,8 @@ io.use((socket, next) => {
       next();
     })
     .catch((err) => {
+      const ip = socket.data.clientIp || 'unknown';
+      connectionLimiter.removeConnection(ip, socket.id);
       console.error('🔒 Socket identity resolution failed', err);
       next(new Error('Authentication failed'));
     });

@@ -42,6 +42,7 @@ import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
 import { verifySupabaseToken, isSupabaseToken } from './auth/supabaseAuth.js';
 import type { SupabaseUser } from './auth/supabaseAuth.js';
+import { resolveSocketIdentity } from './auth/socketIdentity.js';
 import { getProfile, upsertProfile } from './db/profiles.js';
 import { getHeapStatistics } from 'v8';
 import {
@@ -796,22 +797,29 @@ io.use((socket, next) => {
   next();
 });
 
-// Extract Supabase user identity from handshake
+// Resolve Supabase identity + profile — every multiplayer connection must
+// be authenticated; there is no anonymous/guest path.
 io.use((socket, next) => {
   const userToken = socket.handshake.auth?.userToken as string | undefined;
-  if (!userToken || !isSupabaseToken(userToken)) {
-    next();
-    return;
-  }
-  // Identity is optional here — an unverifiable token just means an anonymous
-  // socket, so connection proceeds either way.
-  verifySupabaseToken(userToken)
+  resolveSocketIdentity(userToken)
     .then((result) => {
-      if (result.success && result.user) {
-        socket.data.userId = result.user.id;
+      if (!result.ok) {
+        const ip = socket.data.clientIp || 'unknown';
+        connectionLimiter.removeConnection(ip, socket.id);
+        console.log(
+          `🔒 Socket identity rejected for ${socket.id}: ${result.error}`
+        );
+        next(new Error(result.error));
+        return;
       }
+      socket.data.userId = result.userId;
+      socket.data.displayName = result.displayName;
+      next();
     })
-    .finally(() => next());
+    .catch((err) => {
+      console.error('🔒 Socket identity resolution failed', err);
+      next(new Error('Authentication failed'));
+    });
 });
 
 // Authentication middleware for Socket.IO
@@ -945,18 +953,9 @@ io.on('connection', (socket) => {
     rateLimitedHandler(
       socket,
       'room:create',
-      async ({ playerName, roomId: externalRoomId, isPublic }) => {
-        // Validate inputs
-        const nameResult = validatePlayerName(playerName);
+      async ({ roomId: externalRoomId, isPublic }) => {
         const roomIdResult = validateOptionalRoomId(externalRoomId);
         const isPublicResult = validateBoolean(isPublic);
-
-        if (!nameResult.valid) {
-          socket.emit('room:error', {
-            message: nameResult.error || 'Invalid player name',
-          });
-          return;
-        }
 
         if (!roomIdResult.valid) {
           socket.emit('room:error', {
@@ -965,7 +964,7 @@ io.on('connection', (socket) => {
           return;
         }
 
-        const safeName = nameResult.value!;
+        const safeName = socket.data.displayName!;
         const safeRoomId = roomIdResult.value;
         const safeIsPublic = isPublicResult.value!;
 
@@ -986,17 +985,8 @@ io.on('connection', (socket) => {
   // Join an existing room
   socket.on(
     'room:join',
-    rateLimitedHandler(socket, 'room:join', ({ roomId, playerName }) => {
-      // Validate inputs
-      const nameResult = validatePlayerName(playerName);
+    rateLimitedHandler(socket, 'room:join', ({ roomId }) => {
       const roomIdResult = validateRoomId(roomId);
-
-      if (!nameResult.valid) {
-        socket.emit('room:error', {
-          message: nameResult.error || 'Invalid player name',
-        });
-        return;
-      }
 
       if (!roomIdResult.valid) {
         socket.emit('room:error', {
@@ -1005,7 +995,7 @@ io.on('connection', (socket) => {
         return;
       }
 
-      const safeName = nameResult.value!;
+      const safeName = socket.data.displayName!;
       const safeRoomId = roomIdResult.value!;
 
       const room = roomManager.joinRoom(socket, safeRoomId, safeName);
@@ -1021,88 +1011,65 @@ io.on('connection', (socket) => {
   // Join a matched room (from matchmaking) - creates room if first player, joins if second
   socket.on(
     'room:join_matched',
-    rateLimitedHandler(
-      socket,
-      'room:join_matched',
-      async ({ roomId, playerName }) => {
-        // Validate inputs
-        const nameResult = validatePlayerName(playerName);
-        const roomIdResult = validateRoomId(roomId);
+    rateLimitedHandler(socket, 'room:join_matched', async ({ roomId }) => {
+      const roomIdResult = validateRoomId(roomId);
 
-        if (!nameResult.valid) {
-          socket.emit('room:error', {
-            message: nameResult.error || 'Invalid player name',
-          });
-          return;
-        }
-
-        if (!roomIdResult.valid) {
-          socket.emit('room:error', {
-            message: roomIdResult.error || 'Invalid room ID',
-          });
-          return;
-        }
-
-        const safeName = nameResult.value!;
-        const safeRoomId = roomIdResult.value!;
-
-        // Enforce that the token's roomId matches the requested room
-        if (
-          socket.data.matchedRoomId &&
-          socket.data.matchedRoomId !== safeRoomId
-        ) {
-          socket.emit('room:error', {
-            message: 'Room ID does not match your match token',
-          });
-          return;
-        }
-
-        console.log(
-          `📥 room:join_matched: roomId=${safeRoomId}, playerName=${safeName}`
-        );
-
-        // Check if room already exists (another matched player got here first)
-        const existingRoom = roomManager.getRoom(safeRoomId);
-
-        if (existingRoom) {
-          // Room exists, join it
-          const room = roomManager.joinRoom(socket, safeRoomId, safeName);
-          if (room) {
-            socket.emit('room:joined', {
-              roomId: room.id,
-              players: roomManager.getPlayersArray(room),
-            });
-          }
-        } else {
-          // First player to arrive - create the room with the matched roomId
-          const room = await roomManager.createRoom(
-            socket,
-            safeName,
-            safeRoomId,
-            true
-          );
-          if (!room) return;
-        }
+      if (!roomIdResult.valid) {
+        socket.emit('room:error', {
+          message: roomIdResult.error || 'Invalid room ID',
+        });
+        return;
       }
-    )
+
+      const safeName = socket.data.displayName!;
+      const safeRoomId = roomIdResult.value!;
+
+      // Enforce that the token's roomId matches the requested room
+      if (
+        socket.data.matchedRoomId &&
+        socket.data.matchedRoomId !== safeRoomId
+      ) {
+        socket.emit('room:error', {
+          message: 'Room ID does not match your match token',
+        });
+        return;
+      }
+
+      console.log(
+        `📥 room:join_matched: roomId=${safeRoomId}, playerName=${safeName}`
+      );
+
+      // Check if room already exists (another matched player got here first)
+      const existingRoom = roomManager.getRoom(safeRoomId);
+
+      if (existingRoom) {
+        // Room exists, join it
+        const room = roomManager.joinRoom(socket, safeRoomId, safeName);
+        if (room) {
+          socket.emit('room:joined', {
+            roomId: room.id,
+            players: roomManager.getPlayersArray(room),
+          });
+        }
+      } else {
+        // First player to arrive - create the room with the matched roomId
+        const room = await roomManager.createRoom(
+          socket,
+          safeName,
+          safeRoomId,
+          true
+        );
+        if (!room) return;
+      }
+    })
   );
 
   // Quick match - find or create a room automatically
   socket.on(
     'room:quick_match',
-    rateLimitedHandler(socket, 'room:quick_match', async ({ playerName }) => {
+    rateLimitedHandler(socket, 'room:quick_match', async () => {
       const startTime = performance.now();
-      // Validate input
-      const nameResult = validatePlayerName(playerName);
-
-      if (!nameResult.valid) {
-        socket.emit('room:error', {
-          message: nameResult.error || 'Invalid player name',
-        });
-        return;
-      }
-
-      const safeName = nameResult.value!;
+      const safeName = socket.data.displayName!;
 
       const result = await roomManager.findOrCreateQuickMatchRoom(
         socket,

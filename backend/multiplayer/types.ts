@@ -97,6 +97,8 @@ export interface SocketData {
   roomId?: string;
   /** Authenticated user ID from Supabase JWT or ephemeral match token ID */
   userId?: string;
+  /** Profile display_name resolved from the authenticated user — authoritative name for this socket */
+  displayName?: string;
   /** The roomId from the match token — used to enforce token/room binding */
   matchedRoomId?: string;
   /** Client IP address for connection limiting */

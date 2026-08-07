@@ -17,6 +17,7 @@ import {
   buildOptimalInfo,
 } from '../utils/keyFormatting';
 import type { PlayerTaskAverages } from '../utils/taskSummaries';
+import { useAuth } from '../contexts/AuthContext';
 import { Lobby } from '../components/Lobby';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { RaceCountdown } from '../components/RaceCountdown';
@@ -345,6 +346,7 @@ const MultiplayerGame: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialMode = searchParams.get('mode') as 'quick' | 'private' | null;
+  const { profile } = useAuth();
 
   const {
     isConnected,
@@ -1093,6 +1095,7 @@ const MultiplayerGame: React.FC = () => {
           queuePosition={queuePosition}
           relativeLineNumbersEnabled={relativeLineNumbers}
           onRelativeLineNumbersChange={setRelativeLineNumbers}
+          playerName={profile?.display_name ?? ''}
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onQuickMatch={quickMatch}

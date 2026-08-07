@@ -8,6 +8,7 @@ interface LobbyProps {
   queuePosition?: number | null;
   relativeLineNumbersEnabled: boolean;
   onRelativeLineNumbersChange: (enabled: boolean) => void;
+  playerName: string;
   onCreateRoom: (playerName: string) => void;
   onJoinRoom: (roomId: string, playerName: string) => void;
   onQuickMatch: (playerName: string) => void;
@@ -293,12 +294,12 @@ export const Lobby: React.FC<LobbyProps> = ({
   queuePosition = null,
   relativeLineNumbersEnabled,
   onRelativeLineNumbersChange,
+  playerName,
   onCreateRoom,
   onJoinRoom,
   onQuickMatch,
   onCancelQuickMatch,
 }) => {
-  const [playerName, setPlayerName] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
 
@@ -538,15 +539,8 @@ export const Lobby: React.FC<LobbyProps> = ({
             ) : (
               <>
                 <div style={styles.card}>
-                  <div style={styles.cardTitle}>Your Name</div>
-                  <input
-                    type="text"
-                    placeholder="Enter your name..."
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    style={styles.input}
-                    maxLength={20}
-                  />
+                  <div style={styles.cardTitle}>Playing as</div>
+                  <div style={styles.input}>{playerName}</div>
                 </div>
                 <label style={styles.optionToggleRow}>
                   <span style={styles.optionToggleLabel}>
@@ -632,17 +626,9 @@ export const Lobby: React.FC<LobbyProps> = ({
 
             {error && <div style={styles.error}>{error}</div>}
 
-            {/* Name input - always shown */}
             <div style={styles.card}>
-              <div style={styles.cardTitle}>Your Name</div>
-              <input
-                type="text"
-                placeholder="Enter your name..."
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                style={styles.input}
-                maxLength={20}
-              />
+              <div style={styles.cardTitle}>Playing as</div>
+              <div style={styles.input}>{playerName}</div>
             </div>
             <label style={styles.optionToggleRow}>
               <span style={styles.optionToggleLabel}>

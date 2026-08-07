@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
+import type { Profile, ProfileStatus } from '../contexts/AuthContext';
 
-const signOut = vi.fn().mockResolvedValue({ error: null });
-vi.mock('../lib/supabase', () => ({
-  supabase: { auth: { signOut: () => signOut() } },
-}));
-
-const authState: { session: Session | null; loading: boolean } = {
+const authState: {
+  session: Session | null;
+  loading: boolean;
+  profile: Profile | null;
+  profileStatus: ProfileStatus;
+} = {
   session: null,
   loading: false,
+  profile: null,
+  profileStatus: 'loading',
 };
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => authState,
@@ -20,6 +23,14 @@ vi.mock('../contexts/AuthContext', () => ({
 const { AuthGuard } = await import('./AuthGuard');
 
 const FAKE_SESSION = { access_token: 'token-abc' } as Session;
+
+const READY_PROFILE: Profile = {
+  id: 'u1',
+  display_name: 'zaphod',
+  avatar_url: null,
+  is_premium: false,
+  has_completed_onboarding: true,
+};
 
 /** Renders the guard inside a router so redirects resolve to a visible page. */
 function renderGuard(initialPath = '/') {
@@ -41,109 +52,62 @@ function renderGuard(initialPath = '/') {
   );
 }
 
-function jsonResponse(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
-
-let fetchMock: ReturnType<typeof vi.fn>;
-const originalFetch = globalThis.fetch;
-
 beforeEach(() => {
-  signOut.mockClear();
   authState.session = null;
   authState.loading = false;
-  fetchMock = vi.fn();
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  authState.profile = null;
+  authState.profileStatus = 'loading';
 });
 
 afterEach(() => {
-  // Explicit: RTL only auto-cleans when vitest `globals` is enabled, and this
-  // project's config leaves it off, so renders would otherwise stack up.
   cleanup();
-  globalThis.fetch = originalFetch;
   vi.clearAllMocks();
 });
 
 describe('AuthGuard', () => {
   it('redirects to login when there is no session', async () => {
     authState.session = null;
+    authState.profileStatus = 'rejected';
     renderGuard();
     expect(await screen.findByText('LOGIN PAGE')).toBeDefined();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('renders protected content for an onboarded user', async () => {
     authState.session = FAKE_SESSION;
-    fetchMock.mockResolvedValue(
-      jsonResponse({
-        success: true,
-        profile: { has_completed_onboarding: true },
-      })
-    );
+    authState.profile = READY_PROFILE;
+    authState.profileStatus = 'ready';
     renderGuard();
     expect(await screen.findByText('PROTECTED CONTENT')).toBeDefined();
   });
 
   it('redirects to onboarding when onboarding is incomplete', async () => {
     authState.session = FAKE_SESSION;
-    fetchMock.mockResolvedValue(
-      jsonResponse({
-        success: true,
-        profile: { has_completed_onboarding: false },
-      })
-    );
+    authState.profile = { ...READY_PROFILE, has_completed_onboarding: false };
+    authState.profileStatus = 'ready';
     renderGuard();
     expect(await screen.findByText('ONBOARDING PAGE')).toBeDefined();
   });
 
-  it('signs out and redirects to login when the backend rejects the token (401)', async () => {
+  it('redirects to login when the profile fetch was rejected (401)', async () => {
     authState.session = FAKE_SESSION;
-    fetchMock.mockResolvedValue(
-      jsonResponse({ success: false, error: 'Authentication required' }, 401)
-    );
+    authState.profileStatus = 'rejected';
     renderGuard();
-
-    // Signing out clears the stale session, which is what stops /login from
-    // bouncing straight back to / and re-triggering this request forever.
-    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('LOGIN PAGE')).toBeDefined();
   });
 
-  it('does not sign the user out when the request is rate limited (429)', async () => {
+  it('shows a retry screen when the backend is unreachable', async () => {
     authState.session = FAKE_SESSION;
-    fetchMock.mockResolvedValue(
-      jsonResponse({ success: false, error: 'Too Many Requests' }, 429)
-    );
+    authState.profileStatus = 'unreachable';
     renderGuard();
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(await screen.findByText(/couldn't reach/i)).toBeDefined();
-    expect(signOut).not.toHaveBeenCalled();
     expect(screen.queryByText('LOGIN PAGE')).toBeNull();
   });
 
-  it('shows an error instead of redirecting when the request fails', async () => {
+  it('renders nothing while the profile is loading', () => {
     authState.session = FAKE_SESSION;
-    fetchMock.mockRejectedValue(new Error('network down'));
+    authState.profileStatus = 'loading';
     renderGuard();
-
-    expect(await screen.findByText(/couldn't reach/i)).toBeDefined();
-    expect(signOut).not.toHaveBeenCalled();
+    expect(screen.queryByText('PROTECTED CONTENT')).toBeNull();
     expect(screen.queryByText('LOGIN PAGE')).toBeNull();
-  });
-
-  it('requests the profile only once per session rather than looping', async () => {
-    authState.session = FAKE_SESSION;
-    fetchMock.mockResolvedValue(
-      jsonResponse({ success: false, error: 'Authentication required' }, 401)
-    );
-    renderGuard();
-
-    await waitFor(() => expect(signOut).toHaveBeenCalled());
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,6 +10,7 @@ export function getPool(): pg.Pool | null {
     pool = new pg.Pool({
       connectionString: DATABASE_URL,
       max: 8,
+      connectionTimeoutMillis: 5000,
     });
     pool.on('error', (err) => {
       console.error('Unexpected error on idle pg client', err);

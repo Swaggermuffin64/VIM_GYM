@@ -43,6 +43,7 @@ import { connectionLimiter } from './rateLimit/connectionLimiter.js';
 import { verifySupabaseToken, isSupabaseToken } from './auth/supabaseAuth.js';
 import type { SupabaseUser } from './auth/supabaseAuth.js';
 import { resolveSocketIdentity } from './auth/socketIdentity.js';
+import { invalidateCachedDisplayName } from './auth/identityCache.js';
 import { getProfile, upsertProfile } from './db/profiles.js';
 import { getHeapStatistics } from 'v8';
 import {
@@ -199,6 +200,8 @@ fastify.post<{
       .status(500)
       .send({ success: false, error: 'Failed to update profile' });
   }
+
+  invalidateCachedDisplayName(user.id);
 
   return {
     success: true,

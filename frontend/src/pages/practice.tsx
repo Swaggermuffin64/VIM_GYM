@@ -12,6 +12,8 @@ import { Transaction } from '@codemirror/state';
 
 import type { PracticeSummary, Task, TaskSummary } from '../types/task';
 import type { LeaderboardRanks } from '../types/multiplayer';
+import { submitPracticeSession } from '../api/leaderboard';
+import { useAuth } from '../contexts/AuthContext';
 import type {
   KeystrokeEvent,
   TaskKeystrokeSubmission,
@@ -48,8 +50,6 @@ import {
 import { SummaryTaskSandbox } from '../components/SummaryTaskSandbox';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-const LEADERBOARD_TASK_SCHEMA_VERSION = 1;
-const PLAYER_NAME_STORAGE_KEY = 'vim_gym_player_name';
 const KEY_LOG_VISIBLE_KEYS = 5;
 const CHEATSHEET_DOCK_WIDTH = 'clamp(18rem, 22vw, 24rem)';
 const CHEATSHEET_CONTAINER_SHIFT = 'clamp(2.375rem, 3.25vw, 3.5rem)';
@@ -1171,17 +1171,11 @@ const PracticeEditor: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as PracticeLocationState | null;
+  const { session } = useAuth();
   const editorRef = useRef<VimRaceEditorHandle>(null);
   const timerRef = useRef<number>(0);
 
   // Practice session state
-  const [playerName, setPlayerName] = useState(() => {
-    try {
-      return (localStorage.getItem(PLAYER_NAME_STORAGE_KEY) ?? '').slice(0, 20);
-    } catch {
-      return '';
-    }
-  });
   const [isReady, setIsReady] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -1234,7 +1228,6 @@ const PracticeEditor: React.FC = () => {
   const submittedTaskIdsRef = useRef<Set<string>>(new Set());
   const leaderboardSessionSubmittedRef = useRef(false);
   const skipLeaderboardRef = useRef(false);
-  const playerNameRef = useRef(playerName);
   const isFetchingPracticeSessionRef = useRef(false);
   const blockedHintTimerRef = useRef<number | null>(null);
   const yankConfirmedRef = useRef(false);
@@ -1245,8 +1238,7 @@ const PracticeEditor: React.FC = () => {
     tasksRef.current = tasks;
     taskProgressRef.current = taskProgress;
     isTaskCompleteRef.current = isTaskComplete;
-    playerNameRef.current = playerName;
-  }, [tasks, taskProgress, isTaskComplete, playerName]);
+  }, [tasks, taskProgress, isTaskComplete]);
 
   // Timer effect
   useEffect(() => {
@@ -1268,53 +1260,20 @@ const PracticeEditor: React.FC = () => {
 
     if (skipLeaderboardRef.current) return;
 
+    const accessToken = session?.access_token;
+    if (!accessToken) return;
+
     const duration_ms = Date.now() - sessionStartTime;
-    void fetch(`${API_BASE}/api/leaderboard/session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        play_mode: 'practice',
-        duration_ms,
-        tasks: taskList,
-        task_schema_version: LEADERBOARD_TASK_SCHEMA_VERSION,
-        display_name: playerNameRef.current.trim() || 'Anonymous',
-      }),
-    })
-      .then(async (res) => {
-        const text = await res.text();
-        let body: unknown;
-        try {
-          body = text ? JSON.parse(text) : null;
-        } catch {
-          body = text;
-        }
-        if (!res.ok) {
-          console.error(
-            '[leaderboard] session record HTTP error',
-            res.status,
-            body
-          );
-          return;
-        }
-        if (
-          body &&
-          typeof body === 'object' &&
-          'persisted' in body &&
-          (body as { persisted?: boolean }).persisted === false
-        ) {
-          console.warn('[leaderboard] session not persisted', body);
-          return;
-        }
-        console.info('[leaderboard] session recorded', body);
-        if (body && typeof body === 'object' && 'ranks' in body) {
-          const ranks = (body as { ranks?: LeaderboardRanks }).ranks ?? null;
-          setLeaderboardRanks(ranks);
-        }
-      })
-      .catch((err) => {
-        console.error('[leaderboard] session record network error:', err);
-      });
-  }, [isSessionComplete, sessionStartTime]);
+    void submitPracticeSession({
+      accessToken,
+      durationMs: duration_ms,
+      tasks: taskList,
+    }).then((result) => {
+      if (result.status === 'recorded') {
+        setLeaderboardRanks(result.ranks);
+      }
+    });
+  }, [isSessionComplete, sessionStartTime, session]);
 
   useEffect(
     () => () => {
@@ -1484,19 +1443,6 @@ const PracticeEditor: React.FC = () => {
       }
     },
     [formatKeyLabel, isSessionComplete]
-  );
-
-  const handlePlayerNameChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      setPlayerName(value);
-      try {
-        localStorage.setItem(PLAYER_NAME_STORAGE_KEY, value);
-      } catch {
-        /* storage full or unavailable */
-      }
-    },
-    []
   );
 
   // Start practice session when user clicks Ready
@@ -2028,34 +1974,6 @@ const PracticeEditor: React.FC = () => {
                 Complete all tasks as fast as you can
               </div>
               <div style={styles.readyOptionsGroup}>
-                <div style={styles.readyOptionRow}>
-                  <label
-                    htmlFor="player-name-input"
-                    style={styles.readyOptionLabel}
-                  >
-                    Player Name (optional)
-                  </label>
-                  <input
-                    id="player-name-input"
-                    type="text"
-                    value={playerName}
-                    onChange={handlePlayerNameChange}
-                    placeholder="Anonymous"
-                    maxLength={20}
-                    autoComplete="off"
-                    style={{
-                      width: '140px',
-                      padding: '6px 10px',
-                      fontSize: '13px',
-                      fontFamily: '"JetBrains Mono", monospace',
-                      background: colors.bgDark,
-                      border: `1px solid ${colors.borderLight}`,
-                      borderRadius: '6px',
-                      color: colors.textPrimary,
-                      outline: 'none',
-                    }}
-                  />
-                </div>
                 <div style={styles.readyOptionRow}>
                   <span style={styles.readyOptionLabel}>
                     Start with Relative Line Numbers

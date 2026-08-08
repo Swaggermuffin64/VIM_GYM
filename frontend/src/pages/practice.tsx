@@ -13,6 +13,7 @@ import { Transaction } from '@codemirror/state';
 import type { PracticeSummary, Task, TaskSummary } from '../types/task';
 import type { LeaderboardRanks } from '../types/multiplayer';
 import { submitPracticeSession } from '../api/leaderboard';
+import { submitTaskKeystrokes as postTaskKeystrokes } from '../api/keystrokes';
 import { useAuth } from '../contexts/AuthContext';
 import type {
   KeystrokeEvent,
@@ -1380,25 +1381,12 @@ const PracticeEditor: React.FC = () => {
 
       submittedTaskIdsRef.current.add(task.id);
 
-      try {
-        const accessToken = session?.access_token;
-        await fetch(`${API_BASE}/api/task/keystrokes`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Required for the backend to persist the attempt — without it the
-            // request is treated as anonymous and stats are silently skipped.
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({
-            ...payload,
-            ...(statsGameId != null ? { gameId: statsGameId } : {}),
-            ...(task.contentHash ? { taskHash: task.contentHash } : {}),
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to submit task keystrokes:', error);
-      }
+      await postTaskKeystrokes({
+        payload,
+        accessToken: session?.access_token,
+        gameId: statsGameId,
+        ...(task.contentHash ? { taskHash: task.contentHash } : {}),
+      });
     },
     [statsGameId, session]
   );

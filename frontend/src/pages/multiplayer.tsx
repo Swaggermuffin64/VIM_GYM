@@ -23,6 +23,7 @@ import { WaitingRoom } from '../components/WaitingRoom';
 import { RaceCountdown } from '../components/RaceCountdown';
 import { RaceResults } from '../components/RaceResults';
 import { TaskReviewOverlay } from '../components/TaskReviewOverlay';
+import { submitTaskKeystrokes as postTaskKeystrokes } from '../api/keystrokes';
 import {
   setTargetPosition,
   setTargetRange,
@@ -486,18 +487,10 @@ const MultiplayerGame: React.FC = () => {
       // gameId is intentionally omitted — the client does not know the
       // database game ID for multiplayer matches yet (follow-up item).
       const task = currentTaskObjRef.current;
-      try {
-        await fetch(`${API_BASE}/api/task/keystrokes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...payload,
-            ...(task?.contentHash ? { taskHash: task.contentHash } : {}),
-          }),
-        });
-      } catch (error) {
-        console.error('Failed to submit multiplayer keystrokes:', error);
-      }
+      await postTaskKeystrokes({
+        payload,
+        ...(task?.contentHash ? { taskHash: task.contentHash } : {}),
+      });
     },
     [gameState.myPlayerId, gameState.roomId]
   );

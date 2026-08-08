@@ -49,9 +49,14 @@ export function attachContentHashes<T extends Task>(tasks: T[]): T[] {
 // With random selection (with replacement) the number of unique 10-task games is ≈2.56×10^22.
 // ---------------------------------------------------------------------------
 
-const CACHE_NAVIGATE_COUNT = 200;
-const CACHE_DELETE_COUNT = 200;
-const CACHE_YANK_PASTE_COUNT = 100;
+/** Cache sizes; env overrides exist so integration tests can boot fast. */
+function cacheCount(envVar: string, fallback: number): number {
+  const parsed = parseInt(process.env[envVar] ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+const CACHE_NAVIGATE_COUNT = cacheCount('TASK_CACHE_NAVIGATE_COUNT', 200);
+const CACHE_DELETE_COUNT = cacheCount('TASK_CACHE_DELETE_COUNT', 200);
+const CACHE_YANK_PASTE_COUNT = cacheCount('TASK_CACHE_YANK_PASTE_COUNT', 100);
 
 const cachedNavigateTasks: Task[] = [];
 const cachedDeleteTasks: Task[] = [];

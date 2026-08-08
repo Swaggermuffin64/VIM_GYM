@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, act } from '@testing-library/react';
 import type { Session } from '@supabase/supabase-js';
 
 const getSession = vi.fn();
@@ -117,6 +117,88 @@ describe('AuthProvider profile fetching', () => {
       await screen.findByText('STATUS:unreachable NAME:none')
     ).toBeDefined();
     expect(signOut).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Fires the callback registered with supabase.auth.onAuthStateChange, the
+   * way supabase-js does for events like INITIAL_SESSION / TOKEN_REFRESHED.
+   * Those events always carry a NEW session object, even for the same user.
+   */
+  function emitAuthStateChange(event: string, session: Session | null) {
+    const callback = onAuthStateChange.mock.calls[0][0] as (
+      event: string,
+      session: Session | null
+    ) => void;
+    act(() => callback(event, session));
+  }
+
+  it('does not refetch or blank when the same token is re-emitted by onAuthStateChange', async () => {
+    getSession.mockResolvedValue({ data: { session: FAKE_SESSION } });
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        profile: {
+          id: 'u1',
+          display_name: 'zaphod',
+          avatar_url: null,
+          is_premium: false,
+          has_completed_onboarding: true,
+        },
+      })
+    );
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+    await screen.findByText('STATUS:ready NAME:zaphod');
+
+    // Same token, new object reference — supabase re-emits sessions like this
+    emitAuthStateChange('INITIAL_SESSION', {
+      access_token: 'token-abc',
+    } as Session);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('STATUS:ready NAME:zaphod')).toBeDefined();
+  });
+
+  it('keeps the ready profile visible while refetching after a token refresh', async () => {
+    getSession.mockResolvedValue({ data: { session: FAKE_SESSION } });
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        profile: {
+          id: 'u1',
+          display_name: 'zaphod',
+          avatar_url: null,
+          is_premium: false,
+          has_completed_onboarding: true,
+        },
+      })
+    );
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+    await screen.findByText('STATUS:ready NAME:zaphod');
+
+    // Refresh fetch stays in flight — the old profile must remain visible
+    fetchMock.mockReturnValueOnce(new Promise(() => {}));
+    emitAuthStateChange('TOKEN_REFRESHED', {
+      access_token: 'token-refreshed',
+    } as Session);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining('/api/user/me'),
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer token-refreshed' },
+      })
+    );
+    expect(screen.getByText('STATUS:ready NAME:zaphod')).toBeDefined();
   });
 
   it('does not fetch a profile when there is no session', async () => {

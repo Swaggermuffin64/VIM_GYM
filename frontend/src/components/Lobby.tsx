@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface LobbyProps {
   isConnected: boolean;
@@ -300,6 +301,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   onQuickMatch,
   onCancelQuickMatch,
 }) => {
+  const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState('');
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
 
@@ -380,8 +382,10 @@ export const Lobby: React.FC<LobbyProps> = ({
     return 'Race your friends with Vim motions';
   };
 
+  // Client-side navigation: a full page reload here would restart the auth
+  // pipeline (session load + profile fetch) and flash a black screen.
   const handleBack = () => {
-    window.location.href = '/';
+    navigate('/');
   };
 
   const longWaitMessage = showLongWaitMessage ? (

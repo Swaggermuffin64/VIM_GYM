@@ -55,20 +55,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Key the profile fetch on the token string, not the session object:
+  // supabase re-emits a NEW session object for events like INITIAL_SESSION
+  // and TOKEN_REFRESHED even when nothing changed, and refetching on every
+  // re-emission would blank all AuthGuard-protected pages.
+  const accessToken = session?.access_token ?? null;
+
   useEffect(() => {
-    if (!session) {
+    if (!accessToken) {
       setProfile(null);
       setProfileStatus('rejected');
       return;
     }
 
     let abandoned = false;
-    setProfileStatus('loading');
+    // Keep the current profile visible while revalidating (e.g. after a
+    // token refresh); only show 'loading' when there is no profile yet.
+    setProfileStatus((prev) => (prev === 'ready' ? prev : 'loading'));
 
     const loadProfile = async () => {
       try {
         const response = await fetch(`${BACKEND_URL}/api/user/me`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
 
         if (response.status === 401) {
@@ -104,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       abandoned = true;
     };
-  }, [session]);
+  }, [accessToken]);
 
   return (
     <AuthContext.Provider

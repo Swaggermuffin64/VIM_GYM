@@ -9,13 +9,41 @@ import { useAuth } from '../contexts/AuthContext';
  *   (AuthContext already signs the user out when this happens)
  * - Profile fetch unreachable (backend down/throttled) → retryable error, session left alone
  * - Onboarding incomplete → redirect to /onboarding
- * - Shows nothing while loading to avoid a flash of redirect or protected content
+ * - Shows a branded loading screen while loading to avoid a flash of
+ *   redirect or protected content (only hit on cold start — client-side
+ *   navigation and token refreshes keep the profile 'ready')
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, loading, profile, profileStatus } = useAuth();
   const location = useLocation();
 
-  if (loading || (session && profileStatus === 'loading')) return null;
+  // Branded loading screen for the cold-start case (hard refresh / first
+  // visit) so the auth check doesn't look like a broken black screen.
+  if (loading || (session && profileStatus === 'loading')) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#000000',
+        }}
+      >
+        <span
+          style={{
+            color: '#3f3f46',
+            fontSize: '20px',
+            fontWeight: 700,
+            fontFamily: '"JetBrains Mono", monospace',
+            letterSpacing: '1px',
+          }}
+        >
+          VIM_GYM
+        </span>
+      </div>
+    );
+  }
   if (!session || profileStatus === 'rejected') {
     return <Navigate to="/login" replace />;
   }

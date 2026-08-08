@@ -103,11 +103,12 @@ describe('AuthGuard', () => {
     expect(screen.queryByText('LOGIN PAGE')).toBeNull();
   });
 
-  it('renders nothing while the profile is loading', () => {
+  it('shows a branded loading screen (not protected content or a redirect) while the profile is loading', () => {
     authState.session = FAKE_SESSION;
     authState.profileStatus = 'loading';
     renderGuard();
     expect(screen.queryByText('PROTECTED CONTENT')).toBeNull();
     expect(screen.queryByText('LOGIN PAGE')).toBeNull();
+    expect(screen.getByText('VIM_GYM')).toBeDefined();
   });
 });

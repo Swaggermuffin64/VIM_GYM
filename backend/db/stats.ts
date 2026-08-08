@@ -118,8 +118,9 @@ export async function createGameSession(params: {
     logSkip('createGameSession');
     return null;
   }
-  const client = await pool.connect();
+  let client: import('pg').PoolClient | undefined;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     const res = await client.query<{ id: string }>(
       `INSERT INTO games (play_mode, room_id, task_hashes, started_at)
@@ -131,6 +132,7 @@ export async function createGameSession(params: {
         params.startedAt,
       ]
     );
+    // BIGSERIAL id cast: Number is safe up to 2^53; acceptable for game ids.
     const gameId = Number(res.rows[0]!.id);
     for (const userId of params.userIds) {
       await client.query(
@@ -142,13 +144,13 @@ export async function createGameSession(params: {
     await client.query('COMMIT');
     return gameId;
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     // 23503 = FK violation: a userId with no profiles row (e.g. ephemeral
     // match-token id). Signed-in-only policy: drop the whole session record.
     logError('createGameSession', err);
     return null;
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
@@ -169,8 +171,9 @@ export async function finishGameSession(params: {
 }): Promise<void> {
   const pool = getPool();
   if (!pool) return logSkip('finishGameSession');
-  const client = await pool.connect();
+  let client: import('pg').PoolClient | undefined;
   try {
+    client = await pool.connect();
     await client.query('BEGIN');
     await client.query(`UPDATE games SET finished_at = $2 WHERE id = $1`, [
       params.gameId,
@@ -193,10 +196,10 @@ export async function finishGameSession(params: {
     }
     await client.query('COMMIT');
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    if (client) await client.query('ROLLBACK').catch(() => {});
     logError('finishGameSession', err);
   } finally {
-    client.release();
+    client?.release();
   }
 }
 

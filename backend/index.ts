@@ -200,6 +200,7 @@ fastify.get('/api/user/me', async (request, reply) => {
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+      created_at: profile.created_at,
     },
   };
 });
@@ -244,6 +245,7 @@ fastify.post<{
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+      created_at: profile.created_at,
     },
   };
 });

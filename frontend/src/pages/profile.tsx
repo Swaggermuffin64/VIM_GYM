@@ -258,6 +258,7 @@ const styles: Record<string, React.CSSProperties> = {
 
 export default function ProfilePage() {
   const { session } = useAuth();
+  const accessToken = session?.access_token ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Inline name editing
@@ -268,9 +269,9 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<PlayerStats | null>(null);
 
   useEffect(() => {
-    if (!session) return;
+    if (!accessToken) return;
     fetch(`${BACKEND_URL}/api/user/me`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then((r) => r.json())
       .then((data: { success: boolean; profile?: Profile; error?: string }) => {
@@ -278,12 +279,12 @@ export default function ProfilePage() {
         else setError(data.error ?? 'Failed to load profile');
       })
       .catch(() => setError('Network error'));
-  }, [session]);
+  }, [accessToken]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!accessToken) return;
     fetch(`${BACKEND_URL}/api/user/stats`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then((r) => r.json())
       .then((data: { success: boolean; stats?: PlayerStats }) => {
@@ -291,7 +292,7 @@ export default function ProfilePage() {
         // Failure: leave stats null — page renders identity-only.
       })
       .catch(() => {});
-  }, [session]);
+  }, [accessToken]);
 
   const startEditing = () => {
     setNameDraft(profile?.display_name ?? '');
@@ -300,14 +301,14 @@ export default function ProfilePage() {
   };
 
   const saveName = async () => {
-    if (!session) return;
+    if (!accessToken) return;
     setSaving(true);
     setEditError(null);
     try {
       const res = await fetch(`${BACKEND_URL}/api/user/profile`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ display_name: nameDraft }),
@@ -346,6 +347,8 @@ export default function ProfilePage() {
     return <div style={styles.container} />;
   }
 
+  const memberSince = formatMemberSince(profile.created_at);
+
   return (
     <div style={styles.container}>
       <div style={styles.card}>
@@ -374,6 +377,7 @@ export default function ProfilePage() {
                 </button>
                 <button
                   onClick={() => setEditing(false)}
+                  disabled={saving}
                   style={styles.smallButtonMuted}
                 >
                   Cancel
@@ -394,10 +398,8 @@ export default function ProfilePage() {
               </div>
             )}
             {editError && <p style={styles.editError}>{editError}</p>}
-            {formatMemberSince(profile.created_at) && (
-              <p style={styles.memberSince}>
-                Member since {formatMemberSince(profile.created_at)}
-              </p>
+            {memberSince && (
+              <p style={styles.memberSince}>Member since {memberSince}</p>
             )}
           </div>
           {profile.is_premium && (

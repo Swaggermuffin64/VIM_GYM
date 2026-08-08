@@ -99,6 +99,7 @@ export function isValidTasksPayload(tasks: unknown): tasks is Task[] {
     if (
       t.type !== 'navigate' &&
       t.type !== 'delete' &&
+      t.type !== 'yank_paste' &&
       t.type !== 'change' &&
       t.type !== 'insert'
     ) {

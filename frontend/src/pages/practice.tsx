@@ -1381,9 +1381,15 @@ const PracticeEditor: React.FC = () => {
       submittedTaskIdsRef.current.add(task.id);
 
       try {
+        const accessToken = session?.access_token;
         await fetch(`${API_BASE}/api/task/keystrokes`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            // Required for the backend to persist the attempt — without it the
+            // request is treated as anonymous and stats are silently skipped.
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
           body: JSON.stringify({
             ...payload,
             ...(statsGameId != null ? { gameId: statsGameId } : {}),
@@ -1394,7 +1400,7 @@ const PracticeEditor: React.FC = () => {
         console.error('Failed to submit task keystrokes:', error);
       }
     },
-    [statsGameId]
+    [statsGameId, session]
   );
 
   const handleTaskKeyStroke = useCallback(

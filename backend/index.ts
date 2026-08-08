@@ -45,6 +45,14 @@ import type { SupabaseUser } from './auth/supabaseAuth.js';
 import { resolveSocketIdentity } from './auth/socketIdentity.js';
 import { invalidateCachedDisplayName } from './auth/identityCache.js';
 import { getProfile, upsertProfile } from './db/profiles.js';
+import {
+  upsertTasksOnFirstUse,
+  createGameSession,
+  finishGameSession,
+  insertTaskAttempt,
+  attachKeystrokesToAttempt,
+  compactKeystrokes,
+} from './db/stats.js';
 import { getHeapStatistics } from 'v8';
 import {
   validatePlayerName,
@@ -106,6 +114,22 @@ async function requireSupabaseAuth(
       .send({ success: false, error: result.error || 'Authentication failed' });
     return null;
   }
+  return result.user;
+}
+
+/**
+ * Attempt to resolve a Supabase user from the request's Authorization header.
+ * Unlike requireSupabaseAuth, this never writes a response — it simply returns
+ * null when no valid token is present. Used for endpoints where authentication
+ * is optional (e.g. practice tasks served to anonymous players).
+ */
+async function tryResolveSupabaseUser(request: {
+  headers: { authorization?: string | string[] | undefined };
+}): Promise<SupabaseUser | null> {
+  const token = extractTokenFromAuthHeader(request.headers);
+  if (!token || !isSupabaseToken(token)) return null;
+  const result = await verifySupabaseToken(token);
+  if (!result.success || !result.user) return null;
   return result.user;
 }
 
@@ -277,6 +301,8 @@ fastify.post<{
     roomId?: string;
     playerId?: string;
     events: unknown;
+    gameId?: number;
+    taskHash?: string;
   };
 }>('/api/task/keystrokes', async (request) => {
   const {
@@ -289,6 +315,7 @@ fastify.post<{
     playerId,
     events,
   } = request.body;
+  let { gameId, taskHash } = request.body;
 
   if (source !== 'practice' && source !== 'multiplayer') {
     return { success: false, error: 'Invalid source' };
@@ -328,6 +355,20 @@ fastify.post<{
       playerId.length > 64)
   ) {
     return { success: false, error: 'Invalid player ID' };
+  }
+
+  // Validate optional gameId and taskHash — invalid values are treated as absent
+  if (
+    gameId !== undefined &&
+    (typeof gameId !== 'number' || !Number.isInteger(gameId) || gameId < 1)
+  ) {
+    gameId = undefined;
+  }
+  if (
+    taskHash !== undefined &&
+    (typeof taskHash !== 'string' || !/^[0-9a-f]{64}$/.test(taskHash))
+  ) {
+    taskHash = undefined;
   }
 
   const eventsResult = validateKeystrokeEvents(events);
@@ -372,6 +413,39 @@ fastify.post<{
     },
     'recorded task keystrokes'
   );
+
+  // Persist attempt to the database when gameId and taskHash are provided
+  if (typeof gameId === 'number' && typeof taskHash === 'string') {
+    const user = await tryResolveSupabaseUser(request);
+    if (user) {
+      const compacted = compactKeystrokes(eventsResult.value!);
+      const count = eventsResult.value!.length;
+      if (source === 'practice') {
+        const durationMs = completedAt - startedAt;
+        if (durationMs > 0) {
+          void insertTaskAttempt({
+            userId: user.id,
+            taskHash,
+            gameId,
+            playMode: 'practice',
+            durationMs,
+            keystrokeCount: count,
+            keystrokes: compacted,
+          });
+        }
+      } else {
+        // multiplayer: metrics row already inserted server-side; attach array.
+        void attachKeystrokesToAttempt({
+          userId: user.id,
+          gameId,
+          taskHash,
+          keystrokeCount: count,
+          keystrokes: compacted,
+        });
+      }
+    }
+  }
+
   return {
     success: true,
     recordedEventCount: submission.events.length,
@@ -385,9 +459,11 @@ fastify.post<{
     duration_ms: number;
     tasks: unknown;
     task_schema_version?: number;
+    game_id?: number;
   };
 }>('/api/leaderboard/session', async (request, reply) => {
-  const { play_mode, duration_ms, tasks, task_schema_version } = request.body;
+  const { play_mode, duration_ms, tasks, task_schema_version, game_id } =
+    request.body;
 
   const authUser = await requireSupabaseAuth(request, reply);
   if (!authUser) return;
@@ -489,6 +565,27 @@ fastify.post<{
       { persisted: true, ranks: result.ranks },
       'leaderboard session stored'
     );
+
+    if (
+      typeof game_id === 'number' &&
+      Number.isInteger(game_id) &&
+      game_id > 0
+    ) {
+      void finishGameSession({
+        gameId: game_id,
+        finishedAt: new Date(),
+        results: [
+          {
+            userId: authUser.id,
+            position: null, // no opponents in practice
+            totalTimeMs: Math.round(duration_ms),
+            finished: true,
+            leftRace: false,
+          },
+        ],
+      });
+    }
+
     return { success: true, persisted: true, ranks: result.ranks };
   }
 
@@ -632,7 +729,7 @@ fastify.get<{
 });
 
 // Get a practice session (10 tasks: 4 navigate + 4 delete + 2 yank_paste, shuffled)
-fastify.get('/api/task/practice', async () => {
+fastify.get('/api/task/practice', async (request) => {
   const allTasks = pickTasksFromCache();
 
   const navigateTasksWithRecommendation = allTasks.reduce((count, task) => {
@@ -657,11 +754,29 @@ fastify.get('/api/task/practice', async () => {
     deleteTasksWithRecommendation,
   };
 
+  let gameId: number | null = null;
+  const user = await tryResolveSupabaseUser(request);
+  if (user) {
+    const taskHashes = allTasks
+      .map((t) => t.contentHash)
+      .filter((h): h is string => typeof h === 'string');
+    if (taskHashes.length === allTasks.length) {
+      await upsertTasksOnFirstUse(allTasks);
+      gameId = await createGameSession({
+        playMode: 'practice',
+        taskHashes,
+        startedAt: new Date(),
+        userIds: [user.id],
+      });
+    }
+  }
+
   return {
     tasks: allTasks,
     numTasks: allTasks.length,
     practiceSummary,
     startTime: Date.now(),
+    gameId,
   };
 });
 

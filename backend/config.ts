@@ -27,3 +27,11 @@ export const SUPABASE_URL = process.env.SUPABASE_URL?.trim() || undefined;
 /** JWT secret from Supabase → Project Settings → API → JWT Secret */
 export const SUPABASE_JWT_SECRET =
   process.env.SUPABASE_JWT_SECRET?.trim() || undefined;
+
+/**
+ * Shared token that unlocks the detailed `/health` metrics payload. When unset,
+ * `/health` returns only a minimal status and never exposes operational
+ * internals (fail closed).
+ */
+export const HEALTH_METRICS_TOKEN =
+  process.env.HEALTH_METRICS_TOKEN?.trim() || undefined;

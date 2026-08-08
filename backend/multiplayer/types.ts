@@ -17,6 +17,8 @@ export interface Player {
   taskStartedAt?: number;
   /** Server-side only: last validated editor buffer for the current delete task */
   editorBuffer?: string;
+  /** Server-side only: Supabase user id when the socket is authenticated. */
+  userId?: string;
 }
 
 export interface GameRoom {
@@ -29,6 +31,8 @@ export interface GameRoom {
   isLoadTest?: boolean; // True if any player is a load test bot — skips leaderboard writes
   startTime?: number;
   countdownStart?: number;
+  /** games.id row for this race; undefined until created / when stats skipped. */
+  dbGameId?: number;
 }
 
 // Client → Server Events

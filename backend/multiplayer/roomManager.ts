@@ -11,6 +11,12 @@ import type {
 import { pickTasksFromCache } from '../taskPool.js';
 import type { Task } from '../types.js';
 import { insertMultiplayerRaceLeaderboardRows } from '../db/leaderboard.js';
+import {
+  upsertTasksOnFirstUse,
+  createGameSession,
+  finishGameSession,
+  insertTaskAttempt,
+} from '../db/stats.js';
 type GameSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
@@ -106,6 +112,9 @@ export class RoomManager {
       taskProgress: 0, // 0 to NUM_TASKS - 1
       isFinished: false,
       readyToPlay: false,
+      ...(typeof socket.data.userId === 'string' && {
+        userId: socket.data.userId,
+      }),
     };
 
     const finishedTask: Task = {
@@ -192,6 +201,9 @@ export class RoomManager {
       taskProgress: 0,
       isFinished: false,
       readyToPlay: false,
+      ...(typeof socket.data.userId === 'string' && {
+        userId: socket.data.userId,
+      }),
     };
 
     room.players.set(playerId, player);
@@ -352,6 +364,31 @@ export class RoomManager {
       tasks: room.tasks,
       num_tasks: room.num_tasks,
     });
+
+    if (!room.isLoadTest) {
+      const authedUserIds = Array.from(room.players.values())
+        .map((p) => p.userId)
+        .filter((id): id is string => typeof id === 'string');
+      const playable = room.tasks.slice(0, room.num_tasks);
+      const taskHashes = playable
+        .map((t) => t.contentHash)
+        .filter((h): h is string => typeof h === 'string');
+      if (authedUserIds.length > 0 && taskHashes.length === playable.length) {
+        void upsertTasksOnFirstUse(playable)
+          .then(() =>
+            createGameSession({
+              playMode: room.isPublic ? 'quick_play' : 'private_match',
+              roomId,
+              taskHashes,
+              startedAt: new Date(now),
+              userIds: authedUserIds,
+            })
+          )
+          .then((gameId) => {
+            if (gameId !== null) room.dbGameId = gameId;
+          });
+      }
+    }
   }
 
   handleTaskComplete(
@@ -470,6 +507,30 @@ export class RoomManager {
     player: Player,
     roomId: string
   ): void {
+    const completedTaskIndex = player.taskProgress;
+    const completedTask = room.tasks[completedTaskIndex];
+    const serverDurationMs =
+      player.taskStartedAt !== undefined
+        ? Date.now() - player.taskStartedAt
+        : null;
+    if (
+      room.dbGameId !== undefined &&
+      player.userId &&
+      completedTask?.contentHash &&
+      serverDurationMs !== null &&
+      serverDurationMs > 0
+    ) {
+      void insertTaskAttempt({
+        userId: player.userId,
+        taskHash: completedTask.contentHash,
+        gameId: room.dbGameId,
+        playMode: room.isPublic ? 'quick_play' : 'private_match',
+        durationMs: serverDurationMs,
+        keystrokeCount: null,
+        keystrokes: null,
+      });
+    }
+
     const playerId = player.id;
     player.taskProgress += 1;
     player.taskStartedAt = Date.now();
@@ -549,6 +610,28 @@ export class RoomManager {
       `🏆 Race complete in room ${roomId} (${room.isPublic ? 'public' : 'private'}):`,
       rankings
     );
+
+    if (room.dbGameId !== undefined) {
+      const results = Array.from(room.players.values())
+        .filter(
+          (p): p is typeof p & { userId: string } =>
+            typeof p.userId === 'string'
+        )
+        .map((p) => ({
+          userId: p.userId,
+          position: p.isFinished
+            ? (rankings.find((r) => r.playerId === p.id)?.position ?? null)
+            : null,
+          totalTimeMs: p.finishTime ? Math.round(p.finishTime) : null,
+          finished: p.isFinished,
+          leftRace: p.leftRace === true,
+        }));
+      void finishGameSession({
+        gameId: room.dbGameId,
+        finishedAt: new Date(),
+        results,
+      });
+    }
 
     const ranksMap = room.isLoadTest
       ? new Map()

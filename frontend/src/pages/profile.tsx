@@ -12,6 +12,74 @@ import { colors } from '../theme';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
+interface RecentGame {
+  play_mode: string;
+  position: number | null;
+  finished: boolean;
+  left_race: boolean;
+  total_time_ms: number | null;
+  started_at: string;
+}
+
+interface PlayerStats {
+  races_played: number;
+  wins: number;
+  win_rate: number;
+  best_race_ms: number | null;
+  tasks_completed: number;
+  avg_task_ms: number | null;
+  recent_games: RecentGame[];
+}
+
+/** 61234 -> "1:01.2"; 4120 -> "4.1s". Race times get m:ss.t, short times s.t. */
+function formatDuration(ms: number): string {
+  const totalSeconds = ms / 1000;
+  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds - minutes * 60;
+  return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`;
+}
+
+/** 1 -> "1st", 2 -> "2nd", 3 -> "3rd", 4 -> "4th". */
+function ordinal(n: number): string {
+  const suffix = n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
+  return `${n}${suffix}`;
+}
+
+/** ISO date -> "Aug 8" style short label in the viewer's locale. */
+function formatGameDate(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/** Result label for a recent-game row: position, "left", "DNF", or mode. */
+function gameResultLabel(g: RecentGame): string {
+  if (g.play_mode === 'practice') return 'practice';
+  if (g.position !== null) return ordinal(g.position);
+  if (g.left_race) return 'left';
+  return 'DNF';
+}
+
+/** One tile in the profile stat row: big value, small uppercase label. */
+function StatTile({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div style={styles.tile}>
+      <p style={styles.tileValue}>{value}</p>
+      <p style={styles.tileLabel}>{label}</p>
+      {sub && <p style={styles.tileSub}>{sub}</p>}
+    </div>
+  );
+}
+
 interface Profile {
   id: string;
   display_name: string;
@@ -37,6 +105,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     alignItems: 'center',
     padding: '80px 32px',
+    gap: '16px',
     fontFamily: '"JetBrains Mono", monospace',
   },
   card: {
@@ -111,6 +180,62 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#f87171',
     margin: '4px 0 0',
   },
+  tileRow: {
+    display: 'flex',
+    gap: '12px',
+    width: '100%',
+    maxWidth: '640px',
+    flexWrap: 'wrap' as const,
+  },
+  tile: {
+    flex: '1 1 120px',
+    padding: '20px 16px',
+    textAlign: 'center' as const,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '12px',
+    background: colors.bgCard,
+  },
+  tileValue: {
+    fontSize: '28px',
+    fontWeight: 700,
+    color: colors.textPrimary,
+    margin: 0,
+  },
+  tileLabel: {
+    fontSize: '11px',
+    color: colors.textSecondary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+    margin: '4px 0 0',
+  },
+  tileSub: { fontSize: '11px', color: colors.textMuted, margin: '2px 0 0' },
+  recentCard: {
+    width: '100%',
+    maxWidth: '640px',
+    padding: '20px 24px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '12px',
+    background: colors.bgCard,
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '10px',
+  },
+  gameRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr auto auto auto',
+    gap: '16px',
+    fontSize: '13px',
+    alignItems: 'center',
+  },
+  gameMode: { textTransform: 'capitalize' as const },
+  label: {
+    fontSize: '11px',
+    color: colors.textSecondary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+    margin: 0,
+    fontWeight: 700,
+  },
   premiumBadge: {
     marginLeft: 'auto',
     padding: '4px 12px',
@@ -134,6 +259,7 @@ export default function ProfilePage() {
   const [nameDraft, setNameDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [stats, setStats] = useState<PlayerStats | null>(null);
 
   useEffect(() => {
     if (!session) return;
@@ -146,6 +272,19 @@ export default function ProfilePage() {
         else setError(data.error ?? 'Failed to load profile');
       })
       .catch(() => setError('Network error'));
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch(`${BACKEND_URL}/api/user/stats`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then((r) => r.json())
+      .then((data: { success: boolean; stats?: PlayerStats }) => {
+        if (data.success && data.stats) setStats(data.stats);
+        // Failure: leave stats null — page renders identity-only.
+      })
+      .catch(() => {});
   }, [session]);
 
   const startEditing = () => {
@@ -260,6 +399,65 @@ export default function ProfilePage() {
           )}
         </div>
       </div>
+      {stats && (
+        <>
+          <div style={styles.tileRow}>
+            <StatTile label="Races" value={String(stats.races_played)} />
+            <StatTile label="Wins" value={String(stats.wins)} />
+            <StatTile
+              label="Win rate"
+              value={`${Math.round(stats.win_rate * 100)}%`}
+            />
+            <StatTile
+              label="Tasks"
+              value={String(stats.tasks_completed)}
+              sub={
+                stats.avg_task_ms !== null
+                  ? `avg ${formatDuration(stats.avg_task_ms)}`
+                  : undefined
+              }
+            />
+          </div>
+          {stats.recent_games.length > 0 && (
+            <div style={styles.recentCard}>
+              <p style={styles.label}>Recent games</p>
+              {stats.recent_games.map((g, i) => (
+                <div
+                  key={i}
+                  style={{
+                    ...styles.gameRow,
+                    color:
+                      g.play_mode === 'practice'
+                        ? colors.textMuted
+                        : colors.textPrimary,
+                  }}
+                >
+                  <span style={styles.gameMode}>
+                    {g.play_mode.replace('_', ' ')}
+                  </span>
+                  <span
+                    style={
+                      g.position === 1
+                        ? { color: colors.successLight }
+                        : undefined
+                    }
+                  >
+                    {gameResultLabel(g)}
+                  </span>
+                  <span>
+                    {g.total_time_ms !== null
+                      ? formatDuration(g.total_time_ms)
+                      : '—'}
+                  </span>
+                  <span style={{ color: colors.textMuted }}>
+                    {formatGameDate(g.started_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -155,6 +155,45 @@ export async function createGameSession(params: {
 }
 
 /**
+ * Looks up a practice game session that belongs to the given user, for
+ * server-side timing validation of leaderboard submissions.
+ *
+ * Returns the session's server-recorded `startedAt` and `finishedAt` only when
+ * a `play_mode='practice'` game with this id exists AND the user is one of its
+ * participants. Returns null otherwise — a forged, replayed, or someone else's
+ * game id cannot be used to anchor a submission. Also returns null when no pool
+ * is configured (persistence disabled).
+ */
+export async function getPracticeGameForUser(
+  gameId: number,
+  userId: string
+): Promise<{ startedAt: Date; finishedAt: Date | null } | null> {
+  const pool = getPool();
+  if (!pool) {
+    logSkip('getPracticeGameForUser');
+    return null;
+  }
+  try {
+    const res = await pool.query<{
+      started_at: Date;
+      finished_at: Date | null;
+    }>(
+      `SELECT g.started_at, g.finished_at
+         FROM games g
+         JOIN game_players gp ON gp.game_id = g.id
+        WHERE g.id = $1 AND gp.user_id = $2 AND g.play_mode = 'practice'`,
+      [gameId, userId]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return { startedAt: row.started_at, finishedAt: row.finished_at };
+  } catch (err) {
+    logError('getPracticeGameForUser', err);
+    return null;
+  }
+}
+
+/**
  * Marks a game as finished and updates each player's final stats (position,
  * total time, finished/left flags) in a transaction. No-ops when no pool.
  */

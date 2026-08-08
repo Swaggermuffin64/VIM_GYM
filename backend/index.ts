@@ -24,7 +24,7 @@ import type {
   SocketData,
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
-import { BACKEND_PORT, CORS_ORIGINS } from './config.js';
+import { BACKEND_PORT, CORS_ORIGINS, HEALTH_METRICS_TOKEN } from './config.js';
 import { dbHealthCheck } from './db/pool.js';
 import {
   insertSessionLeaderboardRow,
@@ -49,11 +49,15 @@ import {
   upsertTasksOnFirstUse,
   createGameSession,
   finishGameSession,
+  getPracticeGameForUser,
   insertTaskAttempt,
   attachKeystrokesToAttempt,
   compactKeystrokes,
 } from './db/stats.js';
+import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
+import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
+import { isAuthorizedForHealthMetrics } from './health/healthMetrics.js';
 import {
   validatePlayerName,
   validateRoomId,
@@ -78,6 +82,10 @@ const fastify = Fastify({
   logger: true,
   disableRequestLogging: true,
 });
+
+// Log root-cause details (e.g. pg error codes) for unhandled route errors
+// and expose a safe short code in 500 responses.
+fastify.setErrorHandler(httpErrorHandler);
 
 // Enable CORS for frontend
 await fastify.register(cors, {
@@ -551,6 +559,47 @@ fastify.post<{
     return reply.status(400).send({ success: false, error: 'Invalid tasks' });
   }
 
+  // Anti-forgery: a leaderboard-eligible run must ride a real practice game
+  // session the server created (in /api/task/practice) for this user, and its
+  // client-reported duration must be consistent with the session's
+  // server-recorded start time. Runs without a valid owned session (e.g.
+  // replays, which carry no game_id) are accepted but not persisted.
+  if (
+    typeof game_id !== 'number' ||
+    !Number.isInteger(game_id) ||
+    game_id <= 0
+  ) {
+    request.log.warn(
+      { persisted: false },
+      'leaderboard session has no game_id'
+    );
+    return { success: true, persisted: false, reason: 'no_game_session' };
+  }
+
+  const gameSession = await getPracticeGameForUser(game_id, authUser.id);
+  if (!gameSession) {
+    request.log.warn(
+      { persisted: false, game_id },
+      'leaderboard session references unknown or unowned game'
+    );
+    return { success: true, persisted: false, reason: 'unknown_game_session' };
+  }
+
+  const timing = validatePracticeSubmissionTiming({
+    durationMs: duration_ms,
+    taskCount: tasks.length,
+    serverStartedAt: gameSession.startedAt.getTime(),
+    now: Date.now(),
+    alreadyFinished: gameSession.finishedAt !== null,
+  });
+  if (!timing.ok) {
+    request.log.warn(
+      { persisted: false, game_id, reason: timing.reason, duration_ms },
+      'leaderboard session failed timing validation'
+    );
+    return { success: true, persisted: false, reason: timing.reason };
+  }
+
   const result = await insertSessionLeaderboardRow({
     playMode: play_mode,
     durationMs: duration_ms,
@@ -786,17 +835,21 @@ let roomManager: RoomManager | null = null;
 
 fastify.get('/health', async (request, reply) => {
   const mem = process.memoryUsage();
-  const heap = getHeapStatistics();
   const rssMB = mem.rss / 1024 / 1024;
 
+  // Fly.io's health checker reads only the status code, so the memory-based
+  // 503 stays public and minimal — it never leaks internals.
   if (rssMB > MEMORY_LIMIT_MB) {
-    return reply.status(503).send({
-      status: 'unhealthy',
-      memMB: Math.round(rssMB),
-      rooms: roomManager?.roomCount ?? 0,
-    });
+    return reply.status(503).send({ status: 'unhealthy' });
   }
 
+  // Detailed operational metrics help an attacker time and tune abuse, so they
+  // are exposed only to a caller presenting the shared HEALTH_METRICS_TOKEN.
+  if (!isAuthorizedForHealthMetrics(request.headers, HEALTH_METRICS_TOKEN)) {
+    return { status: 'ok' };
+  }
+
+  const heap = getHeapStatistics();
   const database = await dbHealthCheck();
 
   return {

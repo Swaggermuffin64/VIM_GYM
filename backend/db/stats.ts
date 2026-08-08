@@ -219,10 +219,14 @@ export async function insertTaskAttempt(params: {
   const pool = getPool();
   if (!pool) return logSkip('insertTaskAttempt');
   try {
+    // Guard: only insert when the user is an actual participant of this game.
+    // The game_id comes from the client, so we must not allow writes into
+    // games the authenticated user never joined.
     await pool.query(
       `INSERT INTO task_attempts
          (user_id, task_hash, game_id, play_mode, duration_ms, keystroke_count, keystrokes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+       SELECT $1, $2, $3, $4, $5, $6, $7
+       WHERE EXISTS (SELECT 1 FROM game_players WHERE game_id = $3 AND user_id = $1)`,
       [
         params.userId,
         params.taskHash,

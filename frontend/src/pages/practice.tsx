@@ -1583,6 +1583,7 @@ const PracticeEditor: React.FC = () => {
     }
 
     skipLeaderboardRef.current = true;
+    setStatsGameId(null); // Replay runs carry no gameId — prevents writing into the finished game
     setNumTasks(sameTasks.length);
     resetPracticeRunState();
     setupTaskInEditor(sameTasks[0]!);

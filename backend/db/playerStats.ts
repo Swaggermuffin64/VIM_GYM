@@ -25,14 +25,14 @@ export interface PlayerStats {
   recentGames: RecentGame[];
 }
 
-const ZERO_STATS: PlayerStats = {
+const ZERO_STATS: Readonly<PlayerStats> = Object.freeze({
   racesPlayed: 0,
   wins: 0,
   bestRaceMs: null,
   tasksCompleted: 0,
   avgTaskMs: null,
-  recentGames: [],
-};
+  recentGames: Object.freeze([]) as readonly RecentGame[] as RecentGame[],
+});
 
 /** Default number of recent games returned for the profile page list. */
 export const RECENT_GAMES_LIMIT = 8;

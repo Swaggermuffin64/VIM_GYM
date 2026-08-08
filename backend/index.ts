@@ -54,6 +54,7 @@ import {
   attachKeystrokesToAttempt,
   compactKeystrokes,
 } from './db/stats.js';
+import { getPlayerStats } from './db/playerStats.js';
 import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
 import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
@@ -243,6 +244,33 @@ fastify.post<{
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+    },
+  };
+});
+
+// Aggregated racing/task stats for the signed-in user's profile page.
+fastify.get('/api/user/stats', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const stats = await getPlayerStats(user.id);
+  return {
+    success: true,
+    stats: {
+      races_played: stats.racesPlayed,
+      wins: stats.wins,
+      win_rate: stats.racesPlayed > 0 ? stats.wins / stats.racesPlayed : 0,
+      best_race_ms: stats.bestRaceMs,
+      tasks_completed: stats.tasksCompleted,
+      avg_task_ms: stats.avgTaskMs,
+      recent_games: stats.recentGames.map((g) => ({
+        play_mode: g.playMode,
+        position: g.position,
+        finished: g.finished,
+        left_race: g.leftRace,
+        total_time_ms: g.totalTimeMs,
+        started_at: g.startedAt,
+      })),
     },
   };
 });

@@ -1,6 +1,8 @@
 .claude/
 docs/
 .superpowers/
+.agents/
+skills-lock.json
 
 # Environment files
 .env

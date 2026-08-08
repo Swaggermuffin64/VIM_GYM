@@ -121,4 +121,35 @@ describe('submitPracticeSession', () => {
 
     expect(result).toEqual({ status: 'error' });
   });
+
+  it('includes game_id in the session payload when provided', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, ranks: null }));
+
+    await submitPracticeSession({
+      accessToken: 'token-abc',
+      durationMs: 4200,
+      tasks: TASKS,
+      gameId: 42,
+    });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0][1] as RequestInit).body as string
+    );
+    expect(body.game_id).toBe(42);
+  });
+
+  it('omits game_id from the session payload when not provided', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true, ranks: null }));
+
+    await submitPracticeSession({
+      accessToken: 'token-abc',
+      durationMs: 4200,
+      tasks: TASKS,
+    });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0][1] as RequestInit).body as string
+    );
+    expect(body.game_id).toBeUndefined();
+  });
 });

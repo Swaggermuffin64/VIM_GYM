@@ -483,11 +483,17 @@ const MultiplayerGame: React.FC = () => {
 
       submittedTaskIdsRef.current.add(taskId);
 
+      // gameId is intentionally omitted — the client does not know the
+      // database game ID for multiplayer matches yet (follow-up item).
+      const task = currentTaskObjRef.current;
       try {
         await fetch(`${API_BASE}/api/task/keystrokes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            ...(task?.contentHash ? { taskHash: task.contentHash } : {}),
+          }),
         });
       } catch (error) {
         console.error('Failed to submit multiplayer keystrokes:', error);

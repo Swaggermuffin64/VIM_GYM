@@ -92,6 +92,7 @@ interface PracticeSessionResponse {
   numTasks: number;
   startTime: number;
   practiceSummary?: PracticeSummary;
+  gameId: number | null;
 }
 
 const VIM_CHEATSHEET: Array<{
@@ -1187,6 +1188,7 @@ const PracticeEditor: React.FC = () => {
   const [relativeLineNumbers, setRelativeLineNumbers] = useState(true);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [statsGameId, setStatsGameId] = useState<number | null>(null);
   const [finalTime, setFinalTime] = useState(0);
   const [editorReadyTick, setEditorReadyTick] = useState(0);
   const [recentKeys, setRecentKeys] = useState<string[]>([]);
@@ -1268,12 +1270,13 @@ const PracticeEditor: React.FC = () => {
       accessToken,
       durationMs: duration_ms,
       tasks: taskList,
+      gameId: statsGameId,
     }).then((result) => {
       if (result.status === 'recorded') {
         setLeaderboardRanks(result.ranks);
       }
     });
-  }, [isSessionComplete, sessionStartTime, session]);
+  }, [isSessionComplete, sessionStartTime, session, statsGameId]);
 
   useEffect(
     () => () => {
@@ -1381,13 +1384,17 @@ const PracticeEditor: React.FC = () => {
         await fetch(`${API_BASE}/api/task/keystrokes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            ...payload,
+            ...(statsGameId != null ? { gameId: statsGameId } : {}),
+            ...(task.contentHash ? { taskHash: task.contentHash } : {}),
+          }),
         });
       } catch (error) {
         console.error('Failed to submit task keystrokes:', error);
       }
     },
-    []
+    [statsGameId]
   );
 
   const handleTaskKeyStroke = useCallback(
@@ -1540,13 +1547,20 @@ const PracticeEditor: React.FC = () => {
     setIsLoadingTasks(true);
     setLoadError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/task/practice`);
+      const accessToken = session?.access_token;
+      const headers: HeadersInit = accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : {};
+      const response = await fetch(`${API_BASE}/api/task/practice`, {
+        headers,
+      });
       if (!response.ok) {
         throw new Error(`Server responded with ${response.status}`);
       }
       const data = (await response.json()) as PracticeSessionResponse;
 
       skipLeaderboardRef.current = false;
+      setStatsGameId(data.gameId ?? null);
       setTasks(data.tasks);
       setNumTasks(data.numTasks);
       resetPracticeRunState();
@@ -1559,7 +1573,7 @@ const PracticeEditor: React.FC = () => {
       isFetchingPracticeSessionRef.current = false;
       setIsLoadingTasks(false);
     }
-  }, [resetPracticeRunState]);
+  }, [resetPracticeRunState, session]);
 
   const restartSameTasks = useCallback(() => {
     const sameTasks = tasksRef.current;

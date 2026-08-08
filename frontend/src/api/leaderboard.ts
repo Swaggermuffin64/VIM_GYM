@@ -18,6 +18,7 @@ export async function submitPracticeSession(params: {
   accessToken: string;
   durationMs: number;
   tasks: Task[];
+  gameId?: number | null;
 }): Promise<SubmitPracticeSessionResult> {
   try {
     const res = await fetch(`${API_BASE}/api/leaderboard/session`, {
@@ -31,6 +32,7 @@ export async function submitPracticeSession(params: {
         duration_ms: params.durationMs,
         tasks: params.tasks,
         task_schema_version: LEADERBOARD_TASK_SCHEMA_VERSION,
+        ...(params.gameId != null ? { game_id: params.gameId } : {}),
       }),
     });
 

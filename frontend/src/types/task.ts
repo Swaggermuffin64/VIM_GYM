@@ -27,6 +27,7 @@ export interface PositionTask {
   targetOffset: number;
   recommendedSequence?: string[];
   recommendedWeight?: number;
+  contentHash?: string;
 }
 export interface DeleteTask {
   id: string;
@@ -38,6 +39,7 @@ export interface DeleteTask {
   strategy: DeleteStrategy;
   recommendedSequence?: string[];
   recommendedWeight?: number;
+  contentHash?: string;
 }
 
 export type YankStrategy = 'WORD' | 'LINE' | 'BRACKET';
@@ -56,6 +58,7 @@ export interface YankPasteTask {
   linewise?: boolean;
   recommendedSequence?: string[];
   recommendedWeight?: number;
+  contentHash?: string;
 }
 
 export type Task = PositionTask | DeleteTask | YankPasteTask;

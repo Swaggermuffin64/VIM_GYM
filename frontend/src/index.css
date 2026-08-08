@@ -21,6 +21,19 @@ body {
   color: #f1f5f9;
 }
 
+/* Hide the page-level scrollbar (page stays scrollable) so content growing
+   past the viewport — e.g. expanding the leaderboard — doesn't shrink the
+   viewport width and shift centered layout. Inner scroll areas keep the
+   custom scrollbar styles below. */
+html {
+  scrollbar-width: none; /* Firefox */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
 code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }

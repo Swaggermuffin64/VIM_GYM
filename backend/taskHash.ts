@@ -32,12 +32,19 @@ function sortValue(value: unknown): unknown {
 
 /** sha256 hex over the task's content fields (id + recommendations excluded). */
 export function taskContentHash(task: Task): string {
-  const { id, recommendedSequence, recommendedWeight, ...content } =
-    task as Task & {
-      recommendedSequence?: string[];
-      recommendedWeight?: number;
-    };
+  const {
+    id,
+    contentHash,
+    recommendedSequence,
+    recommendedWeight,
+    ...content
+  } = task as Task & {
+    contentHash?: string;
+    recommendedSequence?: string[];
+    recommendedWeight?: number;
+  };
   void id;
+  void contentHash;
   void recommendedSequence;
   void recommendedWeight;
   const canonical = canonicalJsonStringify({

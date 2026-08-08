@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import os from 'node:os';
 import type { Task, PositionTask } from './types.js';
+import { taskContentHash } from './taskHash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +25,18 @@ const pool = new Piscina({
 });
 
 console.log(`[TaskPool] Started ${poolSize} worker threads via piscina`);
+
+// ---------------------------------------------------------------------------
+// Content hashing
+// ---------------------------------------------------------------------------
+
+/** Stamp each generated task with its stable content hash (mutates + returns). */
+export function attachContentHashes<T extends Task>(tasks: T[]): T[] {
+  for (const task of tasks) {
+    task.contentHash = taskContentHash(task);
+  }
+  return tasks;
+}
 
 // ---------------------------------------------------------------------------
 // Pre-generated task cache
@@ -117,27 +130,27 @@ export async function fillTaskCache(): Promise<void> {
   // Navigate tasks
   for (let i = 0; i < CACHE_NAVIGATE_COUNT; i += batchSize) {
     const count = Math.min(batchSize, CACHE_NAVIGATE_COUNT - i);
-    const tasks = (await pool.run(count, {
-      name: 'generatePositionTasks',
-    })) as Task[];
+    const tasks = attachContentHashes(
+      (await pool.run(count, { name: 'generatePositionTasks' })) as Task[]
+    );
     cachedNavigateTasks.push(...tasks);
   }
 
   // Delete tasks
   for (let i = 0; i < CACHE_DELETE_COUNT; i += batchSize) {
     const count = Math.min(batchSize, CACHE_DELETE_COUNT - i);
-    const tasks = (await pool.run(count, {
-      name: 'generateDeleteTasks',
-    })) as Task[];
+    const tasks = attachContentHashes(
+      (await pool.run(count, { name: 'generateDeleteTasks' })) as Task[]
+    );
     cachedDeleteTasks.push(...tasks);
   }
 
   // Yank/paste tasks
   for (let i = 0; i < CACHE_YANK_PASTE_COUNT; i += batchSize) {
     const count = Math.min(batchSize, CACHE_YANK_PASTE_COUNT - i);
-    const tasks = (await pool.run(count, {
-      name: 'generateYankPasteTasks',
-    })) as Task[];
+    const tasks = attachContentHashes(
+      (await pool.run(count, { name: 'generateYankPasteTasks' })) as Task[]
+    );
     cachedYankPasteTasks.push(...tasks);
   }
 
@@ -157,19 +170,26 @@ cacheReadyPromise = fillTaskCache();
 // ---------------------------------------------------------------------------
 
 export async function generatePositionTaskAsync(): Promise<PositionTask> {
-  return pool.run(null, {
+  const task = (await pool.run(null, {
     name: 'generatePositionTask',
-  }) as Promise<PositionTask>;
+  })) as PositionTask;
+  return attachContentHashes([task])[0]!;
 }
 
 export async function generatePositionTasksAsync(
   count: number
 ): Promise<Task[]> {
-  return pool.run(count, { name: 'generatePositionTasks' }) as Promise<Task[]>;
+  const tasks = (await pool.run(count, {
+    name: 'generatePositionTasks',
+  })) as Task[];
+  return attachContentHashes(tasks);
 }
 
 export async function generateDeleteTasksAsync(count: number): Promise<Task[]> {
-  return pool.run(count, { name: 'generateDeleteTasks' }) as Promise<Task[]>;
+  const tasks = (await pool.run(count, {
+    name: 'generateDeleteTasks',
+  })) as Task[];
+  return attachContentHashes(tasks);
 }
 
 /** One worker job: all task types (shuffle on main thread). */
@@ -180,11 +200,15 @@ export async function generateRaceTaskBatchesAsync(
   deleteTasks: Task[];
   yankPasteTasks: Task[];
 }> {
-  return pool.run(tasksPerType, {
+  const result = (await pool.run(tasksPerType, {
     name: 'generateRaceTaskBatches',
-  }) as Promise<{
+  })) as {
     positionTasks: Task[];
     deleteTasks: Task[];
     yankPasteTasks: Task[];
-  }>;
+  };
+  attachContentHashes(result.positionTasks);
+  attachContentHashes(result.deleteTasks);
+  attachContentHashes(result.yankPasteTasks);
+  return result;
 }

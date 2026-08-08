@@ -53,3 +53,48 @@ describe('compactKeystrokes', () => {
     expect(compactKeystrokes([])).toBeNull();
   });
 });
+
+import {
+  upsertTasksOnFirstUse,
+  createGameSession,
+  finishGameSession,
+  insertTaskAttempt,
+  attachKeystrokesToAttempt,
+} from './stats.js';
+
+describe('stats writers without DATABASE_URL', () => {
+  it('all resolve as no-ops instead of throwing', async () => {
+    await expect(upsertTasksOnFirstUse([])).resolves.toBeUndefined();
+    await expect(
+      createGameSession({
+        playMode: 'practice',
+        taskHashes: ['a'.repeat(64)],
+        startedAt: new Date(),
+        userIds: ['00000000-0000-0000-0000-000000000000'],
+      })
+    ).resolves.toBeNull();
+    await expect(
+      finishGameSession({ gameId: 1, finishedAt: new Date(), results: [] })
+    ).resolves.toBeUndefined();
+    await expect(
+      insertTaskAttempt({
+        userId: '00000000-0000-0000-0000-000000000000',
+        taskHash: 'a'.repeat(64),
+        gameId: 1,
+        playMode: 'practice',
+        durationMs: 1000,
+        keystrokeCount: 5,
+        keystrokes: null,
+      })
+    ).resolves.toBeUndefined();
+    await expect(
+      attachKeystrokesToAttempt({
+        userId: '00000000-0000-0000-0000-000000000000',
+        gameId: 1,
+        taskHash: 'a'.repeat(64),
+        keystrokeCount: 5,
+        keystrokes: [{ k: 'w', t: 0 }],
+      })
+    ).resolves.toBeUndefined();
+  });
+});

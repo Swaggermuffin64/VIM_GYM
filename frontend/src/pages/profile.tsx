@@ -32,17 +32,23 @@ interface PlayerStats {
 }
 
 /** 61234 -> "1:01.2"; 4120 -> "4.1s". Race times get m:ss.t, short times s.t. */
-function formatDuration(ms: number): string {
-  const totalSeconds = ms / 1000;
-  if (totalSeconds < 60) return `${totalSeconds.toFixed(1)}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds - minutes * 60;
-  return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`;
+export function formatDuration(ms: number): string {
+  const tenths = Math.round(ms / 100); // deciseconds, rounded once
+  const totalSec = Math.floor(tenths / 10);
+  const frac = tenths % 10;
+  if (totalSec < 60) return `${totalSec}.${frac}s`;
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec - minutes * 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}.${frac}`;
 }
 
-/** 1 -> "1st", 2 -> "2nd", 3 -> "3rd", 4 -> "4th". */
-function ordinal(n: number): string {
-  const suffix = n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th';
+/** 1 -> "1st", 2 -> "2nd", 3 -> "3rd", 11 -> "11th", 21 -> "21st". */
+export function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  const mod10 = n % 10;
+  const suffix =
+    mod10 === 1 ? 'st' : mod10 === 2 ? 'nd' : mod10 === 3 ? 'rd' : 'th';
   return `${n}${suffix}`;
 }
 
@@ -433,7 +439,7 @@ export default function ProfilePage() {
                   }}
                 >
                   <span style={styles.gameMode}>
-                    {g.play_mode.replace('_', ' ')}
+                    {g.play_mode.replaceAll('_', ' ')}
                   </span>
                   <span
                     style={

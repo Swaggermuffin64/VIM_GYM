@@ -7,6 +7,37 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Session } from '@supabase/supabase-js';
+import { formatDuration, ordinal } from './profile';
+
+describe('formatDuration', () => {
+  it.each([
+    [4120, '4.1s'],
+    [59950, '1:00.0'],
+    [61234, '1:01.2'],
+    [119950, '2:00.0'],
+    [500, '0.5s'],
+    [0, '0.0s'],
+  ])('formatDuration(%i) === "%s"', (ms, expected) => {
+    expect(formatDuration(ms)).toBe(expected);
+  });
+});
+
+describe('ordinal', () => {
+  it.each([
+    [1, '1st'],
+    [2, '2nd'],
+    [3, '3rd'],
+    [4, '4th'],
+    [11, '11th'],
+    [12, '12th'],
+    [13, '13th'],
+    [21, '21st'],
+    [22, '22nd'],
+    [23, '23rd'],
+  ])('ordinal(%i) === "%s"', (n, expected) => {
+    expect(ordinal(n)).toBe(expected);
+  });
+});
 
 const authState = { session: { access_token: 'tok' } as Session };
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState }));

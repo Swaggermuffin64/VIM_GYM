@@ -13,3 +13,4 @@ node_modules/
 
 # Build outputs
 backend/dist/
+coverage/

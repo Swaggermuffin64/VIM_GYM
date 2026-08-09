@@ -385,8 +385,20 @@ export class RoomManager {
             })
           )
           .then((gameId) => {
-            if (gameId !== null) room.dbGameId = gameId;
+            if (gameId !== null) {
+              room.dbGameId = gameId;
+            } else {
+              console.warn(
+                `[stats] game session not persisted for room ${roomId} (createGameSession returned null)`
+              );
+            }
           });
+      } else {
+        console.warn(
+          `[stats] skipping game session for room ${roomId}: ` +
+            `authedUsers=${authedUserIds.length}/${room.players.size}, ` +
+            `taskHashes=${taskHashes.length}/${playable.length}`
+        );
       }
     }
   }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
@@ -14,109 +14,138 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     padding: '24px',
     boxSizing: 'border-box',
+    position: 'relative',
+    overflow: 'hidden',
   },
+  // Floating cyan/magenta glows matching the home page background
+  // (App.tsx bgGlow1/bgGlow2).
+  bgGlow1: {
+    position: 'absolute',
+    top: '10%',
+    left: '10%',
+    width: '500px',
+    height: '500px',
+    background: `radial-gradient(circle, ${colors.primaryGlow} 0%, transparent 70%)`,
+    filter: 'blur(80px)',
+    pointerEvents: 'none',
+    animation:
+      'float 15s ease-in-out infinite, pulse-glow 4s ease-in-out infinite',
+  },
+  bgGlow2: {
+    position: 'absolute',
+    bottom: '10%',
+    right: '10%',
+    width: '500px',
+    height: '500px',
+    background: `radial-gradient(circle, ${colors.secondaryGlow} 0%, transparent 70%)`,
+    filter: 'blur(80px)',
+    pointerEvents: 'none',
+    animation:
+      'float 18s ease-in-out infinite reverse, pulse-glow 5s ease-in-out infinite 1s',
+  },
+  // minHeight gives both columns room to breathe; each panel spreads its
+  // content top/middle/bottom so the two sides' edges stay level.
   card: {
     display: 'flex',
     width: '100%',
     maxWidth: '860px',
+    minHeight: '380px',
     border: `1px solid ${colors.border}`,
     borderRadius: '16px',
     overflow: 'hidden',
+    position: 'relative',
+    zIndex: 1,
   },
+  // Mirrors the right panel's vertical span: the logo tops out level with
+  // "Welcome back", the subtext bottoms out level with the legal text, and
+  // the hero floats between them.
   leftPanel: {
     flex: '1.1',
-    background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
+    background: colors.bgDark,
     borderRight: `1px solid ${colors.border}`,
     padding: '48px 40px',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
-  title: {
+  // The logo and heading rows share a fixed 40px height, and both middle
+  // bands top-align with the same 40px offset, so the hero's first line
+  // and the Google button share a top edge exactly.
+  logoLabel: {
     fontSize: '28px',
     fontWeight: 800,
     color: colors.textPrimary,
-    margin: '0 0 6px',
     letterSpacing: '-1px',
+    margin: 0,
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
   },
-  tagline: {
-    fontSize: '13px',
-    color: colors.textSecondary,
-    margin: '0 0 36px',
-  },
-  statNumber: {
-    fontSize: '48px',
-    fontWeight: 800,
-    color: '#7c3aed',
-    lineHeight: 1,
-    margin: '0 0 4px',
-  },
-  statLabel: {
-    fontSize: '12px',
-    color: '#888',
-    margin: '0 0 28px',
-  },
-  bullets: {
+  heroBand: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '14px',
+    justifyContent: 'flex-start',
+    paddingTop: '40px',
   },
-  bullet: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '10px',
-  },
-  bulletCheck: {
-    color: '#4ade80',
-    fontSize: '14px',
-    marginTop: '1px',
-    flexShrink: 0,
-  },
-  bulletTitle: {
-    fontSize: '12px',
-    color: colors.textPrimary,
-    fontWeight: 600,
-    margin: '0 0 2px',
-  },
-  bulletDesc: {
-    fontSize: '11px',
-    color: colors.textMuted,
-    lineHeight: 1.4,
+  heroPhrase: {
+    fontSize: '27px',
+    fontWeight: 800,
+    color: '#ffffff',
+    lineHeight: 1.3,
+    letterSpacing: '-0.5px',
     margin: 0,
   },
+  heroCursor: {
+    display: 'inline-block',
+    width: '0.6em',
+    animation: 'cursor-blink 1.1s step-end infinite',
+  },
+  heroPoints: {
+    fontSize: '16px',
+    color: colors.textSecondary,
+    lineHeight: 1.6,
+    margin: '24px 0 0',
+    paddingLeft: '20px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '6px',
+  },
+  // Mirrors leftPanel: heading pinned level with the logo, buttons in the
+  // middle, legal text level with the bullet list at the bottom.
   rightPanel: {
     flex: 1,
     background: '#09090f',
     padding: '48px 40px',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
   },
   heading: {
     fontSize: '20px',
     fontWeight: 700,
     color: colors.textPrimary,
-    margin: '0 0 6px',
-  },
-  subtitle: {
-    fontSize: '13px',
-    color: colors.textSecondary,
-    margin: '0 0 28px',
+    margin: 0,
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
   },
   buttons: {
+    flex: 1,
     display: 'flex',
     flexDirection: 'column' as const,
+    justifyContent: 'flex-start',
+    paddingTop: '40px',
     gap: '12px',
-    marginBottom: '20px',
   },
   googleButton: {
     width: '100%',
-    padding: '12px 16px',
+    padding: '16px',
     borderRadius: '6px',
     border: 'none',
     background: '#24292f',
     color: '#ffffff',
-    fontSize: '14px',
+    fontSize: '15px',
     fontWeight: 600,
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
@@ -130,12 +159,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   githubButton: {
     width: '100%',
-    padding: '12px 16px',
+    padding: '16px',
     borderRadius: '6px',
     border: 'none',
     background: '#24292f',
     color: '#ffffff',
-    fontSize: '14px',
+    fontSize: '15px',
     fontWeight: 600,
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
@@ -147,11 +176,19 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.2s ease',
     boxSizing: 'border-box' as const,
   },
+  // 12px secondary gray clears WCAG AA contrast on the dark panel;
+  // the previous 11px muted gray did not.
   legal: {
-    fontSize: '11px',
-    color: '#333',
+    fontSize: '12px',
+    color: colors.textSecondary,
     lineHeight: 1.6,
     margin: 0,
+  },
+  // Underlined so links are distinguishable without relying on color
+  // alone (WCAG 1.4.1).
+  legalLink: {
+    color: colors.textPrimary,
+    textDecoration: 'underline',
   },
 };
 
@@ -169,41 +206,29 @@ export default function Login() {
 
   return (
     <div style={styles.container}>
+      <div style={styles.bgGlow1} aria-hidden="true" />
+      <div style={styles.bgGlow2} aria-hidden="true" />
       <div style={styles.card}>
         {/* Left — branding */}
         <div style={styles.leftPanel}>
-          <h1 style={styles.title}>VIM_GYM</h1>
-          <p style={styles.tagline}>Train your Vim muscles.</p>
-
-          <p style={styles.statNumber}>10,000+</p>
-          <p style={styles.statLabel}>players so far</p>
-
-          <div style={styles.bullets}>
-            <div style={styles.bullet}>
-              <span style={styles.bulletCheck}>✓</span>
-              <div>
-                <p style={styles.bulletTitle}>Free to play</p>
-                <p style={styles.bulletDesc}>
-                  Core gameplay is always free. No limits.
-                </p>
-              </div>
-            </div>
-            <div style={styles.bullet}>
-              <span style={styles.bulletCheck}>✓</span>
-              <div>
-                <p style={styles.bulletTitle}>Open source</p>
-                <p style={styles.bulletDesc}>
-                  Built in the open. Contribute on GitHub.
-                </p>
-              </div>
-            </div>
+          <p style={styles.logoLabel}>VIM_GYM</p>
+          <div style={styles.heroBand}>
+            <h1 style={styles.heroPhrase}>
+              How fast are you,
+              <br />
+              <em>really</em>?<span style={styles.heroCursor}>&nbsp;</span>
+            </h1>
           </div>
+          <ul style={styles.heroPoints}>
+            <li>Race people with VIM motions.</li>
+            <li>Assert VIM dominance.</li>
+            <li>Entirely free and open source.</li>
+          </ul>
         </div>
 
         {/* Right — sign in */}
         <div style={styles.rightPanel}>
-          <h2 style={styles.heading}>Welcome back</h2>
-          <p style={styles.subtitle}>Sign in to track scores and compete.</p>
+          <h2 style={styles.heading}>Sign in to compete.</h2>
 
           <div style={styles.buttons}>
             <button
@@ -254,6 +279,18 @@ export default function Login() {
               Continue with GitHub
             </button>
           </div>
+
+          <p style={styles.legal}>
+            By signing in you agree to our{' '}
+            <Link to="/terms" style={styles.legalLink}>
+              Terms of Service
+            </Link>{' '}
+            and{' '}
+            <Link to="/privacy" style={styles.legalLink}>
+              Privacy Policy
+            </Link>
+            .
+          </p>
         </div>
       </div>
     </div>

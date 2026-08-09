@@ -1,5 +1,5 @@
 /**
- * Profile page: identity header (avatar, inline-editable display name,
+ * Profile page: identity header (inline-editable display name,
  * premium badge, member-since) plus racing/task stats and recent games
  * (spec: docs/superpowers/specs/2026-08-08-profile-page-revamp-design.md).
  *
@@ -7,7 +7,9 @@
  * sections; a stats failure degrades to identity-only.
  */
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { SiteBanner } from '../components/SiteBanner';
 import { colors } from '../theme';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -28,8 +30,17 @@ interface PlayerStats {
   best_race_ms: number | null;
   tasks_completed: number;
   avg_task_ms: number | null;
+  /** Mean finished-session time across ALL modes, practice included. */
+  avg_race_ms: number | null;
+  /** 0–1 mean of capped optimal/actual keystroke ratios; null if no data. */
+  avg_task_efficiency: number | null;
+  /** Attempts behind avg_task_efficiency; small samples are hidden. */
+  efficiency_sample: number;
   recent_games: RecentGame[];
 }
+
+/** Hide the efficiency tile until this many attempts back the average. */
+const EFFICIENCY_MIN_SAMPLE = 5;
 
 /** 61234 -> "1:01.2"; 4120 -> "4.1s". Race times get m:ss.t, short times s.t. */
 export function formatDuration(ms: number): string {
@@ -109,10 +120,15 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#000000',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    padding: '80px 32px',
-    gap: '16px',
     fontFamily: '"JetBrains Mono", monospace',
+  },
+  mainContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: '64px 32px',
+    gap: '16px',
   },
   card: {
     display: 'flex',
@@ -131,12 +147,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: colors.textPrimary,
     margin: 0,
-  },
-  avatar: {
-    width: '64px',
-    height: '64px',
-    borderRadius: '50%',
-    border: `2px solid ${colors.border}`,
   },
   nameInput: {
     fontSize: '20px',
@@ -186,11 +196,17 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#f87171',
     margin: '4px 0 0',
   },
+  tileGroup: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '8px',
+    width: '100%',
+    maxWidth: '640px',
+  },
   tileRow: {
     display: 'flex',
     gap: '12px',
     width: '100%',
-    maxWidth: '640px',
     flexWrap: 'wrap' as const,
   },
   tile: {
@@ -242,6 +258,20 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontWeight: 700,
   },
+  backButton: {
+    width: '100%',
+    maxWidth: '640px',
+    padding: '16px 24px',
+    fontSize: '15px',
+    fontWeight: 500,
+    background: 'transparent',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '10px',
+    color: colors.textMuted,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    transition: 'all 0.2s ease',
+  },
   premiumBadge: {
     marginLeft: 'auto',
     padding: '4px 12px',
@@ -257,7 +287,8 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export default function ProfilePage() {
-  const { session } = useAuth();
+  const navigate = useNavigate();
+  const { session, applyProfileUpdate } = useAuth();
   const accessToken = session?.access_token ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -317,6 +348,8 @@ export default function ProfilePage() {
         await res.json();
       if (data.success && data.profile) {
         setProfile((prev) => ({ ...prev, ...data.profile! }));
+        // Sync the shared auth profile so the site banner shows the new name
+        applyProfileUpdate(data.profile);
         setEditing(false);
       } else {
         setEditError(data.error ?? 'Failed to save name');
@@ -331,141 +364,184 @@ export default function ProfilePage() {
   if (error) {
     return (
       <div style={styles.container}>
-        <p
-          style={{
-            color: '#f87171',
-            fontFamily: '"JetBrains Mono", monospace',
-          }}
-        >
-          {error}
-        </p>
+        <SiteBanner />
+        <div style={styles.mainContent}>
+          <p
+            style={{
+              color: '#f87171',
+              fontFamily: '"JetBrains Mono", monospace',
+            }}
+          >
+            {error}
+          </p>
+        </div>
       </div>
     );
   }
 
   if (!profile) {
-    return <div style={styles.container} />;
+    return (
+      <div style={styles.container}>
+        <SiteBanner />
+      </div>
+    );
   }
 
   const memberSince = formatMemberSince(profile.created_at);
 
   return (
     <div style={styles.container}>
-      <div style={styles.card}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {profile.avatar_url && (
-            <img src={profile.avatar_url} alt="avatar" style={styles.avatar} />
-          )}
-          <div>
-            {editing ? (
-              <div
-                style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-              >
-                <input
-                  aria-label="Display name"
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  maxLength={30}
-                  style={styles.nameInput}
-                />
-                <button
-                  onClick={saveName}
-                  disabled={saving}
-                  style={styles.smallButton}
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditing(false)}
-                  disabled={saving}
-                  style={styles.smallButtonMuted}
-                >
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <div
-                style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-              >
-                <h1 style={styles.name}>{profile.display_name}</h1>
-                <button
-                  aria-label="Edit name"
-                  onClick={startEditing}
-                  style={styles.iconButton}
-                >
-                  ✎
-                </button>
-              </div>
-            )}
-            {editError && <p style={styles.editError}>{editError}</p>}
-            {memberSince && (
-              <p style={styles.memberSince}>Member since {memberSince}</p>
-            )}
-          </div>
-          {profile.is_premium && (
-            <span style={styles.premiumBadge}>Premium</span>
-          )}
-        </div>
-      </div>
-      {stats && (
-        <>
-          <div style={styles.tileRow}>
-            <StatTile label="Races" value={String(stats.races_played)} />
-            <StatTile label="Wins" value={String(stats.wins)} />
-            <StatTile
-              label="Win rate"
-              value={`${Math.round(stats.win_rate * 100)}%`}
-            />
-            <StatTile
-              label="Tasks"
-              value={String(stats.tasks_completed)}
-              sub={
-                stats.avg_task_ms !== null
-                  ? `avg ${formatDuration(stats.avg_task_ms)}`
-                  : undefined
-              }
-            />
-          </div>
-          {stats.recent_games.length > 0 && (
-            <div style={styles.recentCard}>
-              <p style={styles.label}>Recent games</p>
-              {stats.recent_games.map((g, i) => (
+      <SiteBanner />
+      <div style={styles.mainContent}>
+        <div style={styles.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div>
+              {editing ? (
                 <div
-                  key={i}
-                  style={{
-                    ...styles.gameRow,
-                    color:
-                      g.play_mode === 'practice'
-                        ? colors.textMuted
-                        : colors.textPrimary,
-                  }}
+                  style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
                 >
-                  <span style={styles.gameMode}>
-                    {g.play_mode.replaceAll('_', ' ')}
-                  </span>
-                  <span
-                    style={
-                      g.position === 1
-                        ? { color: colors.successLight }
-                        : undefined
-                    }
+                  <input
+                    aria-label="Display name"
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    maxLength={30}
+                    style={styles.nameInput}
+                  />
+                  <button
+                    onClick={saveName}
+                    disabled={saving}
+                    style={styles.smallButton}
                   >
-                    {gameResultLabel(g)}
-                  </span>
-                  <span>
-                    {g.total_time_ms !== null
-                      ? formatDuration(g.total_time_ms)
-                      : '—'}
-                  </span>
-                  <span style={{ color: colors.textMuted }}>
-                    {formatGameDate(g.started_at)}
-                  </span>
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditing(false)}
+                    disabled={saving}
+                    style={styles.smallButtonMuted}
+                  >
+                    Cancel
+                  </button>
                 </div>
-              ))}
+              ) : (
+                <div
+                  style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+                >
+                  <h1 style={styles.name}>{profile.display_name}</h1>
+                  <button
+                    aria-label="Edit name"
+                    onClick={startEditing}
+                    style={styles.iconButton}
+                  >
+                    ✎
+                  </button>
+                </div>
+              )}
+              {editError && <p style={styles.editError}>{editError}</p>}
+              {memberSince && (
+                <p style={styles.memberSince}>Member since {memberSince}</p>
+              )}
             </div>
-          )}
-        </>
-      )}
+            {profile.is_premium && (
+              <span style={styles.premiumBadge}>Premium</span>
+            )}
+          </div>
+        </div>
+        {stats && (
+          <>
+            <div style={styles.tileGroup}>
+              <p style={styles.label}>Racing</p>
+              <div style={styles.tileRow}>
+                <StatTile label="Races" value={String(stats.races_played)} />
+                <StatTile label="Wins" value={String(stats.wins)} />
+                <StatTile
+                  label="Win rate"
+                  value={`${Math.round(stats.win_rate * 100)}%`}
+                />
+                <StatTile
+                  label="Best race"
+                  value={
+                    stats.best_race_ms !== null
+                      ? formatDuration(stats.best_race_ms)
+                      : '—'
+                  }
+                />
+              </div>
+            </div>
+            <div style={styles.tileGroup}>
+              <p style={styles.label}>Tasks</p>
+              <div style={styles.tileRow}>
+                <StatTile
+                  label="Tasks"
+                  value={String(stats.tasks_completed)}
+                  sub={
+                    stats.avg_task_ms !== null
+                      ? `avg ${formatDuration(stats.avg_task_ms)}`
+                      : undefined
+                  }
+                />
+                <StatTile
+                  label="Avg race"
+                  value={
+                    stats.avg_race_ms !== null
+                      ? formatDuration(stats.avg_race_ms)
+                      : '—'
+                  }
+                  sub="incl. practice"
+                />
+                {stats.avg_task_efficiency !== null &&
+                  stats.efficiency_sample >= EFFICIENCY_MIN_SAMPLE && (
+                    <StatTile
+                      label="Efficiency"
+                      value={`${Math.round(stats.avg_task_efficiency * 100)}%`}
+                      sub="keystrokes vs optimal"
+                    />
+                  )}
+              </div>
+            </div>
+            {stats.recent_games.length > 0 && (
+              <div style={styles.recentCard}>
+                <p style={styles.label}>Recent games</p>
+                {stats.recent_games.map((g, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      ...styles.gameRow,
+                      color:
+                        g.play_mode === 'practice'
+                          ? colors.textMuted
+                          : colors.textPrimary,
+                    }}
+                  >
+                    <span style={styles.gameMode}>
+                      {g.play_mode.replaceAll('_', ' ')}
+                    </span>
+                    <span
+                      style={
+                        g.position === 1
+                          ? { color: colors.successLight }
+                          : undefined
+                      }
+                    >
+                      {gameResultLabel(g)}
+                    </span>
+                    <span>
+                      {g.total_time_ms !== null
+                        ? formatDuration(g.total_time_ms)
+                        : '—'}
+                    </span>
+                    <span style={{ color: colors.textMuted }}>
+                      {formatGameDate(g.started_at)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        <button style={styles.backButton} onClick={() => navigate('/')}>
+          Back
+        </button>
+      </div>
     </div>
   );
 }

@@ -15,7 +15,8 @@ body {
 
 /* Home page animations */
 @keyframes float {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0) translateX(0);
   }
   25% {
@@ -29,8 +30,20 @@ body {
   }
 }
 
+/* Block cursor blink on the login page hero phrase. */
+@keyframes cursor-blink {
+  0%,
+  100% {
+    background-color: #f1f5f9;
+  }
+  50% {
+    background-color: transparent;
+  }
+}
+
 @keyframes pulse-glow {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.6;
   }
   50% {
@@ -39,11 +52,14 @@ body {
 }
 
 @keyframes title-glow {
-  0%, 100% {
+  0%,
+  100% {
     text-shadow: 0 0 40px rgba(6, 182, 212, 0.3);
   }
   50% {
-    text-shadow: 0 0 60px rgba(6, 182, 212, 0.5), 0 0 100px rgba(6, 182, 212, 0.2);
+    text-shadow:
+      0 0 60px rgba(6, 182, 212, 0.5),
+      0 0 100px rgba(6, 182, 212, 0.2);
   }
 }
 
@@ -52,7 +68,7 @@ code {
   background: rgba(6, 182, 212, 0.15);
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: "JetBrains Mono", monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 0.9em;
 }
 

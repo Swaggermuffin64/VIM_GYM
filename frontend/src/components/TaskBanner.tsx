@@ -66,9 +66,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
-export const TaskBanner: React.FC<TaskBannerProps> = ({ 
-  task, 
-  isComplete, 
+export const TaskBanner: React.FC<TaskBannerProps> = ({
+  task,
+  isComplete,
   onNextTask,
   taskProgress,
   numTasks,
@@ -85,7 +85,9 @@ export const TaskBanner: React.FC<TaskBannerProps> = ({
   const taskLabel = task.type === 'navigate' ? 'Navigate' : 'Delete';
 
   return (
-    <div style={{ ...styles.container, ...(isComplete ? styles.complete : {}) }}>
+    <div
+      style={{ ...styles.container, ...(isComplete ? styles.complete : {}) }}
+    >
       <div style={styles.header}>
         <span style={styles.taskType}>
           {taskLabel}
@@ -97,17 +99,25 @@ export const TaskBanner: React.FC<TaskBannerProps> = ({
           </button>
         )}
       </div>
-      <div style={{ ...styles.description, ...(isComplete ? styles.completeText : {}) }}>
-        {isComplete ? 'Complete! ' : ''}{task.description}
+      <div
+        style={{
+          ...styles.description,
+          ...(isComplete ? styles.completeText : {}),
+        }}
+      >
+        {isComplete ? 'Complete! ' : ''}
+        {task.description}
       </div>
       {!isComplete && task.type === 'navigate' && (
         <div style={styles.hint}>
-          Use vim motions like <code>gg</code>, <code>G</code>, <code>w</code>, <code>f</code>, <code>$</code> to navigate
+          Use vim motions like <code>gg</code>, <code>G</code>, <code>w</code>,{' '}
+          <code>f</code>, <code>$</code> to navigate
         </div>
       )}
       {!isComplete && task.type === 'delete' && (
         <div style={styles.hint}>
-          Use vim delete commands like <code>dw</code>, <code>dd</code>, <code>d$</code>, <code>di{'{'}</code>, <code>da(</code> to delete
+          Use vim delete commands like <code>dw</code>, <code>dd</code>,{' '}
+          <code>d$</code>, <code>di{'{'}</code>, <code>da(</code> to delete
         </div>
       )}
       {isComplete && (
@@ -118,4 +128,3 @@ export const TaskBanner: React.FC<TaskBannerProps> = ({
     </div>
   );
 };
-

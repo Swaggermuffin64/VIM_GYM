@@ -1,6 +1,6 @@
 /**
  * Connection Limiter
- * 
+ *
  * Limits the number of concurrent connections per IP address to prevent
  * resource exhaustion attacks.
  */
@@ -13,8 +13,8 @@ export interface ConnectionLimiterOptions {
 }
 
 const DEFAULT_OPTIONS: ConnectionLimiterOptions = {
-  maxConnectionsPerIp: 10,  // 10 concurrent connections per IP
-  cleanupDelayMs: 60000,    // Keep tracking for 1 minute after disconnect
+  maxConnectionsPerIp: 10, // 10 concurrent connections per IP
+  cleanupDelayMs: 60000, // Keep tracking for 1 minute after disconnect
 };
 
 export class ConnectionLimiter {
@@ -57,7 +57,7 @@ export class ConnectionLimiter {
       this.connections.set(ip, new Set());
     }
     this.connections.get(ip)!.add(socketId);
-    
+
     return true;
   }
 
@@ -76,7 +76,7 @@ export class ConnectionLimiter {
         this.connections.delete(ip);
         this.cleanupTimers.delete(ip);
       }, this.options.cleanupDelayMs);
-      
+
       this.cleanupTimers.set(ip, timer);
     }
   }
@@ -109,5 +109,5 @@ export class ConnectionLimiter {
 
 // Singleton instance for the backend
 export const connectionLimiter = new ConnectionLimiter({
-  maxConnectionsPerIp: 10,  // Allow 10 concurrent connections per IP
+  maxConnectionsPerIp: 10, // Allow 10 concurrent connections per IP
 });

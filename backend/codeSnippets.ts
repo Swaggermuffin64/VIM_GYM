@@ -1,4 +1,4 @@
-import type {codeSnippet} from "./types.js"
+import type { codeSnippet } from './types.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
@@ -63,5 +63,5 @@ export const CODE_SNIPPETS_RAW: string[] = [
         current = next;
     }
     return prev;
-}`
+}`,
 ];

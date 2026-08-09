@@ -10,7 +10,8 @@ import WebSocket from 'ws';
 const LOCAL_URL = 'ws://localhost:3002';
 const PROD_URL = 'wss://vim-racing-matchmaker.fly.dev';
 
-const MATCHMAKING_URL = process.env.MATCHMAKING_URL || (process.env.PROD ? PROD_URL : LOCAL_URL);
+const MATCHMAKING_URL =
+  process.env.MATCHMAKING_URL || (process.env.PROD ? PROD_URL : LOCAL_URL);
 
 if (!process.env.MATCHMAKING_URL && !process.env.PROD) {
   console.log('ℹ️  No MATCHMAKING_URL set, defaulting to local:', LOCAL_URL);
@@ -82,7 +83,9 @@ function simulatePlayer(playerNum: number): Promise<void> {
         switch (msg.type) {
           case 'queue:joined':
             stats.queued++;
-            console.log(`[${playerName}] 📋 Queued (playerId: ${msg.playerId})`);
+            console.log(
+              `[${playerName}] 📋 Queued (playerId: ${msg.playerId})`
+            );
             break;
 
           case 'match:found': {
@@ -92,7 +95,7 @@ function simulatePlayer(playerNum: number): Promise<void> {
             console.log(
               `[${playerName}] ✅ Matched! Room: ${msg.roomId} (${matchTime}ms)`
             );
-            
+
             // Track match info
             if (!matches.has(msg.roomId)) {
               matches.set(msg.roomId, {
@@ -103,7 +106,7 @@ function simulatePlayer(playerNum: number): Promise<void> {
               });
             }
             matches.get(msg.roomId)!.players.push(playerName);
-            
+
             clearTimeout(timeout);
             ws.close();
             cleanup();
@@ -187,7 +190,7 @@ function printStats() {
     console.log('');
     console.log('🎮 MATCHES:');
     console.log('');
-    
+
     let roomNum = 1;
     for (const [roomId, match] of matches) {
       console.log(`   Room ${roomNum}: ${roomId}`);

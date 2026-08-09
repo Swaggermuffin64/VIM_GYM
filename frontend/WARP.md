@@ -9,22 +9,26 @@ This is the frontend component of the vim-racing project, built with Create Reac
 ## Key Commands
 
 ### Development
+
 - `npm start` - Start development server (runs on http://localhost:3000)
 - `npm test` - Run test suite in interactive watch mode
 - `npm run build` - Create production build in `build/` folder
 
 ### Testing
+
 - `npm test` - Interactive test runner with Jest and React Testing Library
 - `npm test -- --coverage` - Run tests with coverage report
 - `npm test -- --watchAll=false` - Run tests once without watching
 
 ### TypeScript
+
 - TypeScript compilation is handled automatically by react-scripts
 - `tsc --noEmit` - Type check without emitting files (if needed manually)
 
 ## Architecture
 
 ### Project Structure
+
 - `src/App.tsx` - Main application component (TypeScript + JSX)
 - `src/index.tsx` - Application entry point with React 18+ createRoot API
 - `src/react-app-env.d.ts` - TypeScript declarations for Create React App
@@ -32,6 +36,7 @@ This is the frontend component of the vim-racing project, built with Create Reac
 - `public/` - Static assets and HTML template
 
 ### TypeScript Configuration
+
 - Strict mode enabled for better type safety
 - ES5 target with modern library support (DOM, ESNext)
 - JSX transform: `react-jsx` (React 17+ transform)
@@ -39,6 +44,7 @@ This is the frontend component of the vim-racing project, built with Create Reac
 - Isolated modules for better build performance
 
 ### Testing Setup
+
 - Jest configured via react-scripts with TypeScript support
 - React Testing Library (@testing-library/react)
 - TypeScript test files use `.test.tsx` or `.test.ts` extensions

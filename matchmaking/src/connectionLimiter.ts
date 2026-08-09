@@ -1,6 +1,6 @@
 /**
  * Connection Limiter for Matchmaking Service
- * 
+ *
  * Limits concurrent connections per IP address.
  */
 
@@ -10,7 +10,7 @@ export interface ConnectionLimiterOptions {
 }
 
 const DEFAULT_OPTIONS: ConnectionLimiterOptions = {
-  maxConnectionsPerIp: 5,   // 5 concurrent connections per IP for matchmaking
+  maxConnectionsPerIp: 5, // 5 concurrent connections per IP for matchmaking
   cleanupDelayMs: 60000,
 };
 
@@ -43,7 +43,7 @@ export class ConnectionLimiter {
       this.connections.set(ip, new Set());
     }
     this.connections.get(ip)!.add(connectionId);
-    
+
     return true;
   }
 
@@ -58,7 +58,7 @@ export class ConnectionLimiter {
         this.connections.delete(ip);
         this.cleanupTimers.delete(ip);
       }, this.options.cleanupDelayMs);
-      
+
       this.cleanupTimers.set(ip, timer);
     }
   }
@@ -69,5 +69,5 @@ export class ConnectionLimiter {
 }
 
 export const connectionLimiter = new ConnectionLimiter({
-  maxConnectionsPerIp: 5,  // Matchmaking needs fewer concurrent connections
+  maxConnectionsPerIp: 5, // Matchmaking needs fewer concurrent connections
 });

@@ -40,4 +40,3 @@ jobs:
         env:
           MATCHMAKING_URL: wss://vim-racing-matchmaker.fly.dev
         run: npm run smoke-test:prod
-

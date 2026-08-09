@@ -14,7 +14,9 @@ export interface PlayerTaskAverages {
   avgKeys: number;
 }
 
-export function computeTaskSummaryAverages(taskSummaries: TaskSummary[]): TaskSummaryAverages | null {
+export function computeTaskSummaryAverages(
+  taskSummaries: TaskSummary[]
+): TaskSummaryAverages | null {
   const count = taskSummaries.length;
   if (count === 0) return null;
 
@@ -27,7 +29,10 @@ export function computeTaskSummaryAverages(taskSummaries: TaskSummary[]): TaskSu
   for (const summary of taskSummaries) {
     totalDurationMs += summary.durationMs;
     totalKeys += summary.keyCount;
-    totalKeysPerSecond += summary.durationMs > 0 ? summary.keyCount / (summary.durationMs / 1000) : 0;
+    totalKeysPerSecond +=
+      summary.durationMs > 0
+        ? summary.keyCount / (summary.durationMs / 1000)
+        : 0;
     if (typeof summary.ourSolutionKeyCount === 'number') {
       totalDiscrepancy += summary.ourSolutionKeyCount - summary.keyCount;
       discrepancyCount += 1;
@@ -38,7 +43,8 @@ export function computeTaskSummaryAverages(taskSummaries: TaskSummary[]): TaskSu
     durationMs: totalDurationMs / count,
     keys: Math.round(totalKeys / count),
     keysPerSecond: totalKeysPerSecond / count,
-    discrepancy: discrepancyCount > 0 ? totalDiscrepancy / discrepancyCount : null,
+    discrepancy:
+      discrepancyCount > 0 ? totalDiscrepancy / discrepancyCount : null,
   };
 }
 

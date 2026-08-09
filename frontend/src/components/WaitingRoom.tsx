@@ -14,18 +14,18 @@ const colors = {
   bgDark: '#0a0a0f',
   bgGradientStart: '#0f172a',
   bgGradientEnd: '#1e1b4b',
-  
+
   accent: '#a78bfa',
   accentLight: '#c4b5fd',
   accentGlow: 'rgba(167, 139, 250, 0.25)',
-  
+
   success: '#10b981',
   successLight: '#34d399',
-  
+
   textPrimary: '#f1f5f9',
   textSecondary: '#94a3b8',
   textMuted: '#64748b',
-  
+
   border: '#334155',
 };
 
@@ -263,8 +263,8 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
   onLeave,
 }) => {
   const [copied, setCopied] = React.useState(false);
-  const me = players.find(p => p.id === myPlayerId);
-  const opponent = players.find(p => p.id !== myPlayerId);
+  const me = players.find((p) => p.id === myPlayerId);
+  const opponent = players.find((p) => p.id !== myPlayerId);
   const isReady = me?.readyToPlay ?? false;
   const hasOpponent = players.length === 2;
 
@@ -334,18 +334,22 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
           opponentDisconnected ? (
             // Opponent disconnected — room is a dead end
             <>
-              <div style={{
-                ...styles.searchingText,
-                color: colors.textSecondary,
-              }}>
+              <div
+                style={{
+                  ...styles.searchingText,
+                  color: colors.textSecondary,
+                }}
+              >
                 Opponent disconnected
               </div>
-              <div style={{
-                fontSize: '14px',
-                color: colors.textMuted,
-                fontFamily: '"JetBrains Mono", monospace',
-                marginBottom: '24px',
-              }}>
+              <div
+                style={{
+                  fontSize: '14px',
+                  color: colors.textMuted,
+                  fontFamily: '"JetBrains Mono", monospace',
+                  marginBottom: '24px',
+                }}
+              >
                 Returning to lobby...
               </div>
               <button style={styles.cancelButton} onClick={onLeave}>
@@ -356,7 +360,8 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
             // Searching state
             <>
               <div style={styles.searchingText}>
-                Searching for players<span className="animated-dots" style={styles.dots}></span>
+                Searching for players
+                <span className="animated-dots" style={styles.dots}></span>
               </div>
 
               <button style={styles.cancelButton} onClick={onLeave}>
@@ -368,13 +373,14 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
           // Match found state
           <>
             <div style={styles.matchFoundText}>Match found</div>
-            
+
             <div style={styles.opponentName}>
               vs {opponent?.name || 'Opponent'}
             </div>
 
             <div style={styles.startingText}>
-              Starting<span className="animated-dots" style={styles.dots}></span>
+              Starting
+              <span className="animated-dots" style={styles.dots}></span>
             </div>
 
             <button style={styles.cancelButton} onClick={onLeave}>
@@ -400,11 +406,11 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
       <h1 style={styles.title}>Waiting Room</h1>
       <p style={styles.subtitle}>Share the room ID to invite a friend</p>
 
-      <div 
+      <div
         style={{
           ...styles.roomCodeCard,
           borderColor: copied ? colors.accent : `${colors.accent}40`,
-        }} 
+        }}
         onClick={copyRoomCode}
       >
         <div style={styles.roomCodeLabel}>Room ID</div>
@@ -416,7 +422,7 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
 
       <div style={styles.playersSection}>
         <div style={styles.sectionTitle}>Players ({players.length}/2)</div>
-        
+
         {players.map((player) => (
           <div key={player.id} style={styles.playerCard}>
             <div style={styles.playerAvatar}>
@@ -426,9 +432,7 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
               {player.name}
               {player.id === myPlayerId && ' (You)'}
             </div>
-            {player.readyToPlay && (
-              <div style={styles.readyBadge}>Ready</div>
-            )}
+            {player.readyToPlay && <div style={styles.readyBadge}>Ready</div>}
           </div>
         ))}
 
@@ -457,4 +461,3 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
     </div>
   );
 };
-

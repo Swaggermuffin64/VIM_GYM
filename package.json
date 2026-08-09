@@ -6,7 +6,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend && npm run test --prefix matchmaking",
     "prepare": "husky"
   },
   "devDependencies": {

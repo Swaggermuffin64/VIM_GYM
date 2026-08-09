@@ -542,10 +542,6 @@ export const Lobby: React.FC<LobbyProps> = ({
               </div>
             ) : (
               <>
-                <div style={styles.card}>
-                  <div style={styles.cardTitle}>Playing as</div>
-                  <div style={styles.input}>{playerName}</div>
-                </div>
                 <label style={styles.optionToggleRow}>
                   <span style={styles.optionToggleLabel}>
                     Start with Relative Line Numbers
@@ -630,10 +626,6 @@ export const Lobby: React.FC<LobbyProps> = ({
 
             {error && <div style={styles.error}>{error}</div>}
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Playing as</div>
-              <div style={styles.input}>{playerName}</div>
-            </div>
             <label style={styles.optionToggleRow}>
               <span style={styles.optionToggleLabel}>
                 Start with Relative Line Numbers

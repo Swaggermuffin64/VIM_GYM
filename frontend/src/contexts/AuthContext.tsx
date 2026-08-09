@@ -22,6 +22,12 @@ interface AuthContextValue {
   profile: Profile | null;
   /** Status of the profile fetch for the current session — see fetchProfile */
   profileStatus: ProfileStatus;
+  /**
+   * Replace the shared profile after the server confirms an edit (e.g. the
+   * profile page saving a new display name), so every consumer — like the
+   * site banner's account dropdown — shows the change without a refetch.
+   */
+  applyProfileUpdate: (profile: Profile) => void;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -30,6 +36,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   profile: null,
   profileStatus: 'loading',
+  applyProfileUpdate: () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -122,6 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         profile,
         profileStatus,
+        applyProfileUpdate: setProfile,
       }}
     >
       {children}

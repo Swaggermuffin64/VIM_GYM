@@ -29,11 +29,24 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 function Probe() {
-  const { profile, profileStatus, loading } = useAuth();
+  const { profile, profileStatus, loading, applyProfileUpdate } = useAuth();
   if (loading) return <div>LOADING</div>;
   return (
     <div>
       STATUS:{profileStatus} NAME:{profile?.display_name ?? 'none'}
+      <button
+        onClick={() =>
+          applyProfileUpdate({
+            id: 'u1',
+            display_name: 'ford',
+            avatar_url: null,
+            is_premium: false,
+            has_completed_onboarding: true,
+          })
+        }
+      >
+        RENAME
+      </button>
     </div>
   );
 }
@@ -199,6 +212,35 @@ describe('AuthProvider profile fetching', () => {
       })
     );
     expect(screen.getByText('STATUS:ready NAME:zaphod')).toBeDefined();
+  });
+
+  it('applyProfileUpdate replaces the profile shared with all consumers', async () => {
+    getSession.mockResolvedValue({ data: { session: FAKE_SESSION } });
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        profile: {
+          id: 'u1',
+          display_name: 'zaphod',
+          avatar_url: null,
+          is_premium: false,
+          has_completed_onboarding: true,
+        },
+      })
+    );
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>
+    );
+    await screen.findByText(/NAME:zaphod/);
+
+    act(() => screen.getByText('RENAME').click());
+
+    expect(screen.getByText(/NAME:ford/)).toBeDefined();
+    // A local update must not trigger a refetch
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('does not fetch a profile when there is no session', async () => {

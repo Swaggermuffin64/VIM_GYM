@@ -1,6 +1,6 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { colors } from '../theme';
+import { SiteBanner } from '../components/SiteBanner';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -10,37 +10,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     position: 'relative',
     overflow: 'hidden',
-  },
-  topBanner: {
-    width: '100%',
-    padding: '16px 32px',
-    background: '#000000',
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  topBannerTitle: {
-    fontSize: '20px',
-    fontWeight: 700,
-    color: colors.textPrimary,
-    fontFamily: '"JetBrains Mono", monospace',
-    margin: 0,
-    textDecoration: 'none',
-  },
-  navLinks: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '32px',
-  },
-  navLink: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: colors.textPrimary,
-    fontFamily: '"JetBrains Mono", monospace',
-    textDecoration: 'none',
-    textTransform: 'uppercase' as const,
-    transition: 'color 0.2s ease',
   },
   mainContent: {
     flex: 1,
@@ -194,25 +163,7 @@ const styles: Record<string, React.CSSProperties> = {
 function About() {
   return (
     <div style={styles.container}>
-      {/* Top Banner */}
-      <div style={styles.topBanner}>
-        <Link to="/" style={styles.topBannerTitle}>
-          VIM_GYM
-        </Link>
-        <div style={styles.navLinks}>
-          <Link to="/about" style={styles.navLink}>
-            ABOUT
-          </Link>
-          <a
-            href="https://buymeacoffee.com/jacksonfisk"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={styles.navLink}
-          >
-            SUPPORT
-          </a>
-        </div>
-      </div>
+      <SiteBanner />
 
       <div style={styles.mainContent}>
         {/* Background glow effects */}

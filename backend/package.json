@@ -32,6 +32,9 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.7.2",
     "@types/pg": "^8.11.10",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^2.1.9",
+    "socket.io-client": "^4.8.3",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^2.1.8"

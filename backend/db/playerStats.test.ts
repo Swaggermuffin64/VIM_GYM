@@ -14,6 +14,9 @@ describe('getPlayerStats without DATABASE_URL', () => {
       bestRaceMs: null,
       tasksCompleted: 0,
       avgTaskMs: null,
+      avgRaceMs: null,
+      avgTaskEfficiency: null,
+      efficiencySample: 0,
       recentGames: [],
     });
   });

@@ -265,6 +265,9 @@ fastify.get('/api/user/stats', async (request, reply) => {
       best_race_ms: stats.bestRaceMs,
       tasks_completed: stats.tasksCompleted,
       avg_task_ms: stats.avgTaskMs,
+      avg_race_ms: stats.avgRaceMs,
+      avg_task_efficiency: stats.avgTaskEfficiency,
+      efficiency_sample: stats.efficiencySample,
       recent_games: stats.recentGames.map((g) => ({
         play_mode: g.playMode,
         position: g.position,

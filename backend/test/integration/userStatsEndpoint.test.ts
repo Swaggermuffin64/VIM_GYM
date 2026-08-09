@@ -107,6 +107,9 @@ describe('GET /api/user/stats', () => {
         best_race_ms: null,
         tasks_completed: 0,
         avg_task_ms: null,
+        avg_race_ms: null,
+        avg_task_efficiency: null,
+        efficiency_sample: 0,
         recent_games: [],
       },
     });
@@ -126,16 +129,41 @@ describe('GET /api/user/stats', () => {
        VALUES (201, $1, 1, 60000, true)`,
       [TEST_USERS.alice]
     );
+    // Attempt with keystrokes on a task with an optimal count: 4/8 = 0.5.
+    await db.query(
+      `INSERT INTO tasks (content_hash, task_type, task_json, optimal_keystroke_count)
+       VALUES ('h2', 'navigate', '{}', 4)`
+    );
+    await db.query(
+      `INSERT INTO task_attempts (user_id, task_hash, game_id, play_mode, duration_ms, keystroke_count)
+       VALUES ($1, 'h2', 201, 'quick_play', 2000, 8)`,
+      [TEST_USERS.alice]
+    );
     const res = await fetch(`${base}/api/user/stats`, {
       headers: { Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}` },
     });
-    const body = await res.json();
+    const body = (await res.json()) as {
+      success: boolean;
+      stats: {
+        races_played: number;
+        wins: number;
+        win_rate: number;
+        best_race_ms: number | null;
+        avg_race_ms: number | null;
+        avg_task_efficiency: number | null;
+        efficiency_sample: number;
+        recent_games: Array<{ play_mode: string }>;
+      };
+    };
     expect(body.success).toBe(true);
     expect(body.stats.races_played).toBe(1);
     expect(body.stats.wins).toBe(1);
     expect(body.stats.win_rate).toBe(1);
     expect(body.stats.best_race_ms).toBe(60000);
+    expect(body.stats.avg_race_ms).toBe(60000);
+    expect(body.stats.avg_task_efficiency).toBeCloseTo(0.5);
+    expect(body.stats.efficiency_sample).toBe(1);
     expect(body.stats.recent_games).toHaveLength(1);
-    expect(body.stats.recent_games[0].play_mode).toBe('quick_play');
+    expect(body.stats.recent_games[0]!.play_mode).toBe('quick_play');
   });
 });

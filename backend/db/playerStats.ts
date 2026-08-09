@@ -22,6 +22,16 @@ export interface PlayerStats {
   bestRaceMs: number | null;
   tasksCompleted: number;
   avgTaskMs: number | null;
+  /** Mean session time over finished sessions in ALL modes incl. practice. */
+  avgRaceMs: number | null;
+  /**
+   * Mean of per-attempt optimal/actual keystroke ratios, capped at 1.0
+   * (beating the recommended sequence reads as 100%). Only attempts where
+   * both counts exist contribute; null when none qualify.
+   */
+  avgTaskEfficiency: number | null;
+  /** Number of attempts behind avgTaskEfficiency (frontend hides small N). */
+  efficiencySample: number;
   recentGames: RecentGame[];
 }
 
@@ -31,6 +41,9 @@ const ZERO_STATS: Readonly<PlayerStats> = Object.freeze({
   bestRaceMs: null,
   tasksCompleted: 0,
   avgTaskMs: null,
+  avgRaceMs: null,
+  avgTaskEfficiency: null,
+  efficiencySample: 0,
   recentGames: Object.freeze([]) as readonly RecentGame[] as RecentGame[],
 });
 
@@ -38,9 +51,10 @@ const ZERO_STATS: Readonly<PlayerStats> = Object.freeze({
 export const RECENT_GAMES_LIMIT = 8;
 
 /**
- * Aggregates a player's racing record, task totals, and recent games in
- * three queries. Returns the zero-state when persistence is disabled or a
- * query fails — callers never need a try/catch.
+ * Aggregates a player's racing record, task totals, all-mode session time,
+ * keystroke efficiency, and recent games in five queries. Returns the
+ * zero-state when persistence is disabled or a query fails — callers never
+ * need a try/catch.
  */
 export async function getPlayerStats(
   userId: string,
@@ -54,7 +68,7 @@ export async function getPlayerStats(
     return ZERO_STATS;
   }
   try {
-    const [racing, tasks, recent] = await Promise.all([
+    const [racing, tasks, sessionTime, efficiency, recent] = await Promise.all([
       pool.query<{
         races_played: number;
         wins: number;
@@ -77,6 +91,27 @@ export async function getPlayerStats(
          WHERE user_id = $1`,
         [userId]
       ),
+      pool.query<{ avg_race_ms: number | null }>(
+        `SELECT ROUND(AVG(total_time_ms))::int AS avg_race_ms
+         FROM game_players
+         WHERE user_id = $1 AND finished`,
+        [userId]
+      ),
+      pool.query<{
+        avg_task_efficiency: number | null;
+        efficiency_sample: number;
+      }>(
+        `SELECT
+           AVG(LEAST(1.0, t.optimal_keystroke_count::float8 / ta.keystroke_count))
+             AS avg_task_efficiency,
+           COUNT(*)::int AS efficiency_sample
+         FROM task_attempts ta
+         JOIN tasks t ON t.content_hash = ta.task_hash
+         WHERE ta.user_id = $1
+           AND ta.keystroke_count IS NOT NULL
+           AND t.optimal_keystroke_count IS NOT NULL`,
+        [userId]
+      ),
       pool.query<{
         play_mode: string;
         position: number | null;
@@ -97,12 +132,17 @@ export async function getPlayerStats(
     ]);
     const r = racing.rows[0]!;
     const t = tasks.rows[0]!;
+    const s = sessionTime.rows[0]!;
+    const e = efficiency.rows[0]!;
     return {
       racesPlayed: r.races_played,
       wins: r.wins,
       bestRaceMs: r.best_race_ms,
       tasksCompleted: t.tasks_completed,
       avgTaskMs: t.avg_task_ms,
+      avgRaceMs: s.avg_race_ms,
+      avgTaskEfficiency: e.avg_task_efficiency,
+      efficiencySample: e.efficiency_sample,
       recentGames: recent.rows.map((row) => ({
         playMode: row.play_mode,
         position: row.position,

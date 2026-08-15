@@ -10,6 +10,10 @@ primary_region = "iad"
 
 [env]
   PORT = "8080"
+  # Required for queue auth: REQUIRE_AUTH derives from NODE_ENV. The
+  # matchmaker also needs the SUPABASE_JWT_SECRET (or SUPABASE_URL) secret
+  # set via `fly secrets set` so it can verify Supabase access tokens.
+  NODE_ENV = "production"
   PLAYERS_PER_MATCH = "2"
   GAME_SERVER_URL = "https://vim-racing-server.fly.dev"
   FRONTEND_URL = "https://vimgym.app,https://www.vimgym.app"

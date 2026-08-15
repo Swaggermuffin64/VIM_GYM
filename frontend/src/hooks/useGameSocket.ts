@@ -352,7 +352,26 @@ export function useGameSocket(): UseGameSocketReturn {
             ws.close();
             return;
           }
-          ws.send(JSON.stringify({ type: 'queue:join', playerName }));
+          // The matchmaker verifies identity before allowing queue entry, so
+          // join with the current Supabase access token.
+          void (async () => {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            if (
+              quickMatchCancelledRef.current ||
+              matchmakingWsRef.current !== ws
+            ) {
+              return;
+            }
+            ws.send(
+              JSON.stringify({
+                type: 'queue:join',
+                playerName,
+                ...(session?.access_token && { token: session.access_token }),
+              })
+            );
+          })();
         };
 
         ws.onmessage = (event) => {

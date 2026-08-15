@@ -56,4 +56,12 @@ describe('RateLimiter (matchmaking)', () => {
     expect(limiter.check('c1')).toBe(true);
     expect(limiter.check('c1')).toBe(true);
   });
+
+  it('destroy() stops the cleanup interval so shutdown is not held open', () => {
+    const before = vi.getTimerCount();
+    limiter.destroy();
+    expect(vi.getTimerCount()).toBe(before - 1);
+    // Still usable for pure checks after destroy — only the sweeper stops.
+    expect(limiter.check('c1')).toBe(true);
+  });
 });

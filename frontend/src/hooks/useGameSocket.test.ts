@@ -129,6 +129,31 @@ describe('useGameSocket connection lifecycle', () => {
     expect(createdSockets.filter((s) => s.connected)).toHaveLength(0);
   });
 
+  it('sends the Supabase access token with queue:join so the matchmaker can verify identity', async () => {
+    getSession.mockResolvedValue({
+      data: { session: { access_token: 'supa-token' } },
+    });
+    const { result } = renderHook(() => useGameSocket());
+    await flush();
+
+    act(() => {
+      result.current.quickMatch('speedy');
+    });
+    const ws = FakeWebSocket.instances[0];
+    await act(async () => {
+      ws.onopen?.();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(ws.sent).toHaveLength(1);
+    expect(JSON.parse(ws.sent[0])).toEqual({
+      type: 'queue:join',
+      playerName: 'speedy',
+      token: 'supa-token',
+    });
+  });
+
   it('joins the matched room on the new game socket after match:found', async () => {
     const { result } = renderHook(() => useGameSocket());
     await flush(); // initial connect to the persistent game server completes

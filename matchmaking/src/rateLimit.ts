@@ -16,6 +16,7 @@ export class RateLimiter {
   private maxRequests: number;
   private windowMs: number;
   private blockDurationMs: number;
+  private cleanupTimer: NodeJS.Timeout;
 
   constructor(
     options: {
@@ -28,8 +29,15 @@ export class RateLimiter {
     this.windowMs = options.windowMs ?? 60000; // per minute
     this.blockDurationMs = options.blockDurationMs ?? 60000; // block for 1 minute
 
-    // Cleanup old entries every minute
-    setInterval(() => this.cleanup(), 60000);
+    // Cleanup old entries every minute. unref() so this sweeper never keeps
+    // the process alive on its own.
+    this.cleanupTimer = setInterval(() => this.cleanup(), 60000);
+    this.cleanupTimer.unref?.();
+  }
+
+  /** Stop the cleanup interval. Call during graceful shutdown. */
+  destroy(): void {
+    clearInterval(this.cleanupTimer);
   }
 
   /**

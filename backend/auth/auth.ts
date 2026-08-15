@@ -29,7 +29,9 @@ if (!MATCH_TOKEN_SECRET) {
     console.error('❌ MATCH_TOKEN_SECRET is required in production');
     process.exit(1);
   }
-  console.warn('⚠️ MATCH_TOKEN_SECRET not set — match token verification disabled (dev only)');
+  console.warn(
+    '⚠️ MATCH_TOKEN_SECRET not set — match token verification disabled (dev only)'
+  );
 }
 
 /**
@@ -51,9 +53,15 @@ export function verifyMatchToken(token: string | undefined): AuthResult {
       const decoded = jwt.decode(token);
       if (decoded && typeof decoded === 'object' && 'playerId' in decoded) {
         const payload = decoded as MatchTokenPayload;
-        return { success: true, userId: payload.playerId, matchedRoomId: payload.roomId };
+        return {
+          success: true,
+          userId: payload.playerId,
+          matchedRoomId: payload.roomId,
+        };
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
     return {
       success: true,
       userId: `local_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -61,11 +69,17 @@ export function verifyMatchToken(token: string | undefined): AuthResult {
   }
 
   try {
-    const payload = jwt.verify(token, MATCH_TOKEN_SECRET, { algorithms: ['HS256'] }) as MatchTokenPayload;
+    const payload = jwt.verify(token, MATCH_TOKEN_SECRET, {
+      algorithms: ['HS256'],
+    }) as MatchTokenPayload;
     if (!payload.playerId) {
       return { success: false, error: 'Token missing player ID' };
     }
-    return { success: true, userId: payload.playerId, matchedRoomId: payload.roomId };
+    return {
+      success: true,
+      userId: payload.playerId,
+      matchedRoomId: payload.roomId,
+    };
   } catch {
     return { success: false, error: 'Invalid or expired match token' };
   }
@@ -74,16 +88,18 @@ export function verifyMatchToken(token: string | undefined): AuthResult {
 /**
  * Extract auth token from Socket.IO handshake
  */
-export function extractTokenFromHandshake(handshake: { auth?: { token?: string } }): string | undefined {
+export function extractTokenFromHandshake(handshake: {
+  auth?: { token?: string };
+}): string | undefined {
   return handshake?.auth?.token;
 }
 
 /**
  * Extract bearer token from HTTP Authorization header.
  */
-export function extractTokenFromAuthHeader(
-  headers: { authorization?: string | string[] | undefined }
-): string | undefined {
+export function extractTokenFromAuthHeader(headers: {
+  authorization?: string | string[] | undefined;
+}): string | undefined {
   const rawAuth = headers.authorization;
   const authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
   if (!authHeader) return undefined;

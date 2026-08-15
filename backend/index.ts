@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -23,7 +24,7 @@ import type {
   SocketData,
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
-import { BACKEND_PORT, CORS_ORIGINS } from './config.js';
+import { BACKEND_PORT, CORS_ORIGINS, HEALTH_METRICS_TOKEN } from './config.js';
 import { dbHealthCheck } from './db/pool.js';
 import {
   insertSessionLeaderboardRow,
@@ -39,7 +40,25 @@ import {
 } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
+import { verifySupabaseToken, isSupabaseToken } from './auth/supabaseAuth.js';
+import type { SupabaseUser } from './auth/supabaseAuth.js';
+import { resolveSocketIdentity } from './auth/socketIdentity.js';
+import { invalidateCachedDisplayName } from './auth/identityCache.js';
+import { getProfile, upsertProfile } from './db/profiles.js';
+import {
+  upsertTasksOnFirstUse,
+  createGameSession,
+  finishGameSession,
+  getPracticeGameForUser,
+  insertTaskAttempt,
+  attachKeystrokesToAttempt,
+  compactKeystrokes,
+} from './db/stats.js';
+import { getPlayerStats } from './db/playerStats.js';
+import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
+import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
+import { isAuthorizedForHealthMetrics } from './health/healthMetrics.js';
 import {
   validatePlayerName,
   validateRoomId,
@@ -48,6 +67,7 @@ import {
   validateEditorText,
   validateBoolean,
   validateKeystrokeEvents,
+  validateAvatarUrl,
 } from './validation/inputValidation.js';
 
 // Event loop lag tracker — measures how late setImmediate fires vs expected
@@ -65,6 +85,10 @@ const fastify = Fastify({
   disableRequestLogging: true,
 });
 
+// Log root-cause details (e.g. pg error codes) for unhandled route errors
+// and expose a safe short code in 500 responses.
+fastify.setErrorHandler(httpErrorHandler);
+
 // Enable CORS for frontend
 await fastify.register(cors, {
   origin: CORS_ORIGINS,
@@ -77,6 +101,47 @@ await fastify.register(fastifyRateLimit, {
   // Skip rate limiting for health check
   allowList: (req: { url?: string }) => req.url === '/',
 });
+
+/**
+ * Extract and verify a Supabase JWT from the Authorization header.
+ * Returns the user on success, or sends a 401 and returns null.
+ */
+async function requireSupabaseAuth(
+  request: { headers: { authorization?: string | string[] | undefined } },
+  reply: { status: (code: number) => { send: (body: unknown) => unknown } }
+): Promise<SupabaseUser | null> {
+  const token = extractTokenFromAuthHeader(request.headers);
+  if (!token || !isSupabaseToken(token)) {
+    reply
+      .status(401)
+      .send({ success: false, error: 'Authentication required' });
+    return null;
+  }
+  const result = await verifySupabaseToken(token);
+  if (!result.success || !result.user) {
+    reply
+      .status(401)
+      .send({ success: false, error: result.error || 'Authentication failed' });
+    return null;
+  }
+  return result.user;
+}
+
+/**
+ * Attempt to resolve a Supabase user from the request's Authorization header.
+ * Unlike requireSupabaseAuth, this never writes a response — it simply returns
+ * null when no valid token is present. Used for endpoints where authentication
+ * is optional (e.g. practice tasks served to anonymous players).
+ */
+async function tryResolveSupabaseUser(request: {
+  headers: { authorization?: string | string[] | undefined };
+}): Promise<SupabaseUser | null> {
+  const token = extractTokenFromAuthHeader(request.headers);
+  if (!token || !isSupabaseToken(token)) return null;
+  const result = await verifySupabaseToken(token);
+  if (!result.success || !result.user) return null;
+  return result.user;
+}
 
 // Store active tasks with TTL to prevent unbounded memory growth
 const ACTIVE_TASKS_MAX = 10_000;
@@ -115,6 +180,112 @@ setInterval(() => {
 // Basic root health check (used by allowList for rate limiting)
 fastify.get('/', async () => {
   return { status: 'ok', service: 'vim-racing' };
+});
+
+fastify.get('/api/user/me', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const profile = await getProfile(user.id);
+  if (!profile) {
+    return reply
+      .status(404)
+      .send({ success: false, error: 'Profile not found' });
+  }
+
+  return {
+    success: true,
+    profile: {
+      id: profile.id,
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+      is_premium: profile.is_premium,
+      has_completed_onboarding: profile.has_completed_onboarding,
+      created_at: profile.created_at,
+    },
+  };
+});
+
+fastify.post<{
+  Body: { display_name?: string; avatar_url?: string };
+}>('/api/user/profile', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const { display_name, avatar_url } = request.body;
+
+  if (display_name === undefined) {
+    return reply
+      .status(400)
+      .send({ success: false, error: 'display_name is required' });
+  }
+
+  const nameResult = validatePlayerName(display_name);
+  if (!nameResult.valid) {
+    return reply.status(400).send({ success: false, error: nameResult.error });
+  }
+
+  const avatarResult = validateAvatarUrl(avatar_url);
+  if (!avatarResult.valid) {
+    return reply
+      .status(400)
+      .send({ success: false, error: avatarResult.error });
+  }
+
+  const profile = await upsertProfile(user.id, {
+    display_name: nameResult.value!,
+    avatar_url: avatarResult.value,
+  });
+
+  if (!profile) {
+    return reply
+      .status(500)
+      .send({ success: false, error: 'Failed to update profile' });
+  }
+
+  invalidateCachedDisplayName(user.id);
+
+  return {
+    success: true,
+    profile: {
+      id: profile.id,
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+      is_premium: profile.is_premium,
+      has_completed_onboarding: profile.has_completed_onboarding,
+      created_at: profile.created_at,
+    },
+  };
+});
+
+// Aggregated racing/task stats for the signed-in user's profile page.
+fastify.get('/api/user/stats', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const stats = await getPlayerStats(user.id);
+  return {
+    success: true,
+    stats: {
+      races_played: stats.racesPlayed,
+      wins: stats.wins,
+      win_rate: stats.racesPlayed > 0 ? stats.wins / stats.racesPlayed : 0,
+      best_race_ms: stats.bestRaceMs,
+      tasks_completed: stats.tasksCompleted,
+      avg_task_ms: stats.avgTaskMs,
+      avg_race_ms: stats.avgRaceMs,
+      avg_task_efficiency: stats.avgTaskEfficiency,
+      efficiency_sample: stats.efficiencySample,
+      recent_games: stats.recentGames.map((g) => ({
+        play_mode: g.playMode,
+        position: g.position,
+        finished: g.finished,
+        left_race: g.leftRace,
+        total_time_ms: g.totalTimeMs,
+        started_at: g.startedAt,
+      })),
+    },
+  };
 });
 
 // Get a new position task (single player)
@@ -179,6 +350,8 @@ fastify.post<{
     roomId?: string;
     playerId?: string;
     events: unknown;
+    gameId?: number;
+    taskHash?: string;
   };
 }>('/api/task/keystrokes', async (request) => {
   const {
@@ -191,6 +364,7 @@ fastify.post<{
     playerId,
     events,
   } = request.body;
+  let { gameId, taskHash } = request.body;
 
   if (source !== 'practice' && source !== 'multiplayer') {
     return { success: false, error: 'Invalid source' };
@@ -230,6 +404,20 @@ fastify.post<{
       playerId.length > 64)
   ) {
     return { success: false, error: 'Invalid player ID' };
+  }
+
+  // Validate optional gameId and taskHash — invalid values are treated as absent
+  if (
+    gameId !== undefined &&
+    (typeof gameId !== 'number' || !Number.isInteger(gameId) || gameId < 1)
+  ) {
+    gameId = undefined;
+  }
+  if (
+    taskHash !== undefined &&
+    (typeof taskHash !== 'string' || !/^[0-9a-f]{64}$/.test(taskHash))
+  ) {
+    taskHash = undefined;
   }
 
   const eventsResult = validateKeystrokeEvents(events);
@@ -274,6 +462,39 @@ fastify.post<{
     },
     'recorded task keystrokes'
   );
+
+  // Persist attempt to the database when gameId and taskHash are provided
+  if (typeof gameId === 'number' && typeof taskHash === 'string') {
+    const user = await tryResolveSupabaseUser(request);
+    if (user) {
+      const compacted = compactKeystrokes(eventsResult.value!);
+      const count = eventsResult.value!.length;
+      if (source === 'practice') {
+        const durationMs = completedAt - startedAt;
+        if (durationMs > 0) {
+          void insertTaskAttempt({
+            userId: user.id,
+            taskHash,
+            gameId,
+            playMode: 'practice',
+            durationMs,
+            keystrokeCount: count,
+            keystrokes: compacted,
+          });
+        }
+      } else {
+        // multiplayer: metrics row already inserted server-side; attach array.
+        void attachKeystrokesToAttempt({
+          userId: user.id,
+          gameId,
+          taskHash,
+          keystrokeCount: count,
+          keystrokes: compacted,
+        });
+      }
+    }
+  }
+
   return {
     success: true,
     recordedEventCount: submission.events.length,
@@ -287,18 +508,24 @@ fastify.post<{
     duration_ms: number;
     tasks: unknown;
     task_schema_version?: number;
-    player_id?: string;
-    display_name?: string;
+    game_id?: number;
   };
 }>('/api/leaderboard/session', async (request, reply) => {
-  const {
-    play_mode,
-    duration_ms,
-    tasks,
-    task_schema_version,
-    player_id,
-    display_name,
-  } = request.body;
+  const { play_mode, duration_ms, tasks, task_schema_version, game_id } =
+    request.body;
+
+  const authUser = await requireSupabaseAuth(request, reply);
+  if (!authUser) return;
+
+  const profile = await getProfile(authUser.id);
+  if (!profile) {
+    return reply
+      .status(404)
+      .send({ success: false, error: 'Profile not found' });
+  }
+
+  const player_id = authUser.id;
+  const display_name = profile.display_name;
 
   request.log.info(
     {
@@ -373,42 +600,54 @@ fastify.post<{
     return reply.status(400).send({ success: false, error: 'Invalid tasks' });
   }
 
+  // Anti-forgery: a leaderboard-eligible run must ride a real practice game
+  // session the server created (in /api/task/practice) for this user, and its
+  // client-reported duration must be consistent with the session's
+  // server-recorded start time. Runs without a valid owned session (e.g.
+  // replays, which carry no game_id) are accepted but not persisted.
   if (
-    typeof player_id !== 'undefined' &&
-    (typeof player_id !== 'string' || player_id.length > 64)
+    typeof game_id !== 'number' ||
+    !Number.isInteger(game_id) ||
+    game_id <= 0
   ) {
     request.log.warn(
-      { err: 'Invalid player_id' },
-      'leaderboard session rejected'
+      { persisted: false },
+      'leaderboard session has no game_id'
     );
-    return reply
-      .status(400)
-      .send({ success: false, error: 'Invalid player_id' });
+    return { success: true, persisted: false, reason: 'no_game_session' };
   }
 
-  const displayNameResult =
-    display_name !== undefined ? validatePlayerName(display_name) : undefined;
-
-  if (displayNameResult && !displayNameResult.valid) {
+  const gameSession = await getPracticeGameForUser(game_id, authUser.id);
+  if (!gameSession) {
     request.log.warn(
-      { err: displayNameResult.error },
-      'leaderboard session rejected'
+      { persisted: false, game_id },
+      'leaderboard session references unknown or unowned game'
     );
-    return reply
-      .status(400)
-      .send({ success: false, error: displayNameResult.error });
+    return { success: true, persisted: false, reason: 'unknown_game_session' };
   }
 
-  const sanitizedDisplayName = displayNameResult?.value;
+  const timing = validatePracticeSubmissionTiming({
+    durationMs: duration_ms,
+    taskCount: tasks.length,
+    serverStartedAt: gameSession.startedAt.getTime(),
+    now: Date.now(),
+    alreadyFinished: gameSession.finishedAt !== null,
+  });
+  if (!timing.ok) {
+    request.log.warn(
+      { persisted: false, game_id, reason: timing.reason, duration_ms },
+      'leaderboard session failed timing validation'
+    );
+    return { success: true, persisted: false, reason: timing.reason };
+  }
 
   const result = await insertSessionLeaderboardRow({
     playMode: play_mode,
     durationMs: duration_ms,
     tasks,
-    ...(player_id !== undefined ? { playerId: player_id } : {}),
-    ...(sanitizedDisplayName !== undefined
-      ? { displayName: sanitizedDisplayName }
-      : {}),
+    playerId: player_id,
+    displayName: display_name,
+    userId: authUser.id,
   });
 
   if (result.status === 'inserted') {
@@ -416,6 +655,27 @@ fastify.post<{
       { persisted: true, ranks: result.ranks },
       'leaderboard session stored'
     );
+
+    if (
+      typeof game_id === 'number' &&
+      Number.isInteger(game_id) &&
+      game_id > 0
+    ) {
+      void finishGameSession({
+        gameId: game_id,
+        finishedAt: new Date(),
+        results: [
+          {
+            userId: authUser.id,
+            position: null, // no opponents in practice
+            totalTimeMs: Math.round(duration_ms),
+            finished: true,
+            leftRace: false,
+          },
+        ],
+      });
+    }
+
     return { success: true, persisted: true, ranks: result.ranks };
   }
 
@@ -559,7 +819,7 @@ fastify.get<{
 });
 
 // Get a practice session (10 tasks: 4 navigate + 4 delete + 2 yank_paste, shuffled)
-fastify.get('/api/task/practice', async () => {
+fastify.get('/api/task/practice', async (request) => {
   const allTasks = pickTasksFromCache();
 
   const navigateTasksWithRecommendation = allTasks.reduce((count, task) => {
@@ -584,11 +844,29 @@ fastify.get('/api/task/practice', async () => {
     deleteTasksWithRecommendation,
   };
 
+  let gameId: number | null = null;
+  const user = await tryResolveSupabaseUser(request);
+  if (user) {
+    const taskHashes = allTasks
+      .map((t) => t.contentHash)
+      .filter((h): h is string => typeof h === 'string');
+    if (taskHashes.length === allTasks.length) {
+      await upsertTasksOnFirstUse(allTasks);
+      gameId = await createGameSession({
+        playMode: 'practice',
+        taskHashes,
+        startedAt: new Date(),
+        userIds: [user.id],
+      });
+    }
+  }
+
   return {
     tasks: allTasks,
     numTasks: allTasks.length,
     practiceSummary,
     startTime: Date.now(),
+    gameId,
   };
 });
 
@@ -598,17 +876,21 @@ let roomManager: RoomManager | null = null;
 
 fastify.get('/health', async (request, reply) => {
   const mem = process.memoryUsage();
-  const heap = getHeapStatistics();
   const rssMB = mem.rss / 1024 / 1024;
 
+  // Fly.io's health checker reads only the status code, so the memory-based
+  // 503 stays public and minimal — it never leaks internals.
   if (rssMB > MEMORY_LIMIT_MB) {
-    return reply.status(503).send({
-      status: 'unhealthy',
-      memMB: Math.round(rssMB),
-      rooms: roomManager?.roomCount ?? 0,
-    });
+    return reply.status(503).send({ status: 'unhealthy' });
   }
 
+  // Detailed operational metrics help an attacker time and tune abuse, so they
+  // are exposed only to a caller presenting the shared HEALTH_METRICS_TOKEN.
+  if (!isAuthorizedForHealthMetrics(request.headers, HEALTH_METRICS_TOKEN)) {
+    return { status: 'ok' };
+  }
+
+  const heap = getHeapStatistics();
   const database = await dbHealthCheck();
 
   return {
@@ -727,6 +1009,33 @@ io.use((socket, next) => {
   next();
 });
 
+// Resolve Supabase identity + profile — every multiplayer connection must
+// be authenticated; there is no anonymous/guest path.
+io.use((socket, next) => {
+  const userToken = socket.handshake.auth?.userToken as string | undefined;
+  resolveSocketIdentity(userToken)
+    .then((result) => {
+      if (!result.ok) {
+        const ip = socket.data.clientIp || 'unknown';
+        connectionLimiter.removeConnection(ip, socket.id);
+        console.log(
+          `🔒 Socket identity rejected for ${socket.id}: ${result.error}`
+        );
+        next(new Error(result.error));
+        return;
+      }
+      socket.data.userId = result.userId;
+      socket.data.displayName = result.displayName;
+      next();
+    })
+    .catch((err) => {
+      const ip = socket.data.clientIp || 'unknown';
+      connectionLimiter.removeConnection(ip, socket.id);
+      console.error('🔒 Socket identity resolution failed', err);
+      next(new Error('Authentication failed'));
+    });
+});
+
 // Authentication middleware for Socket.IO
 // Verifies match tokens for quick-match connections; allows direct connections for private rooms
 io.use((socket, next) => {
@@ -741,7 +1050,10 @@ io.use((socket, next) => {
     return next(new Error(authResult.error || 'Authentication failed'));
   }
 
-  socket.data.userId = authResult.userId!;
+  // Prefer Supabase-verified user ID over ephemeral match token player ID
+  if (!socket.data.userId) {
+    socket.data.userId = authResult.userId!;
+  }
   if (authResult.matchedRoomId) {
     socket.data.matchedRoomId = authResult.matchedRoomId;
   }
@@ -855,18 +1167,9 @@ io.on('connection', (socket) => {
     rateLimitedHandler(
       socket,
       'room:create',
-      async ({ playerName, roomId: externalRoomId, isPublic }) => {
-        // Validate inputs
-        const nameResult = validatePlayerName(playerName);
+      async ({ roomId: externalRoomId, isPublic }) => {
         const roomIdResult = validateOptionalRoomId(externalRoomId);
         const isPublicResult = validateBoolean(isPublic);
-
-        if (!nameResult.valid) {
-          socket.emit('room:error', {
-            message: nameResult.error || 'Invalid player name',
-          });
-          return;
-        }
 
         if (!roomIdResult.valid) {
           socket.emit('room:error', {
@@ -875,7 +1178,7 @@ io.on('connection', (socket) => {
           return;
         }
 
-        const safeName = nameResult.value!;
+        const safeName = socket.data.displayName!;
         const safeRoomId = roomIdResult.value;
         const safeIsPublic = isPublicResult.value!;
 
@@ -896,17 +1199,8 @@ io.on('connection', (socket) => {
   // Join an existing room
   socket.on(
     'room:join',
-    rateLimitedHandler(socket, 'room:join', ({ roomId, playerName }) => {
-      // Validate inputs
-      const nameResult = validatePlayerName(playerName);
+    rateLimitedHandler(socket, 'room:join', ({ roomId }) => {
       const roomIdResult = validateRoomId(roomId);
-
-      if (!nameResult.valid) {
-        socket.emit('room:error', {
-          message: nameResult.error || 'Invalid player name',
-        });
-        return;
-      }
 
       if (!roomIdResult.valid) {
         socket.emit('room:error', {
@@ -915,7 +1209,7 @@ io.on('connection', (socket) => {
         return;
       }
 
-      const safeName = nameResult.value!;
+      const safeName = socket.data.displayName!;
       const safeRoomId = roomIdResult.value!;
 
       const room = roomManager.joinRoom(socket, safeRoomId, safeName);
@@ -931,88 +1225,65 @@ io.on('connection', (socket) => {
   // Join a matched room (from matchmaking) - creates room if first player, joins if second
   socket.on(
     'room:join_matched',
-    rateLimitedHandler(
-      socket,
-      'room:join_matched',
-      async ({ roomId, playerName }) => {
-        // Validate inputs
-        const nameResult = validatePlayerName(playerName);
-        const roomIdResult = validateRoomId(roomId);
+    rateLimitedHandler(socket, 'room:join_matched', async ({ roomId }) => {
+      const roomIdResult = validateRoomId(roomId);
 
-        if (!nameResult.valid) {
-          socket.emit('room:error', {
-            message: nameResult.error || 'Invalid player name',
-          });
-          return;
-        }
-
-        if (!roomIdResult.valid) {
-          socket.emit('room:error', {
-            message: roomIdResult.error || 'Invalid room ID',
-          });
-          return;
-        }
-
-        const safeName = nameResult.value!;
-        const safeRoomId = roomIdResult.value!;
-
-        // Enforce that the token's roomId matches the requested room
-        if (
-          socket.data.matchedRoomId &&
-          socket.data.matchedRoomId !== safeRoomId
-        ) {
-          socket.emit('room:error', {
-            message: 'Room ID does not match your match token',
-          });
-          return;
-        }
-
-        console.log(
-          `📥 room:join_matched: roomId=${safeRoomId}, playerName=${safeName}`
-        );
-
-        // Check if room already exists (another matched player got here first)
-        const existingRoom = roomManager.getRoom(safeRoomId);
-
-        if (existingRoom) {
-          // Room exists, join it
-          const room = roomManager.joinRoom(socket, safeRoomId, safeName);
-          if (room) {
-            socket.emit('room:joined', {
-              roomId: room.id,
-              players: roomManager.getPlayersArray(room),
-            });
-          }
-        } else {
-          // First player to arrive - create the room with the matched roomId
-          const room = await roomManager.createRoom(
-            socket,
-            safeName,
-            safeRoomId,
-            true
-          );
-          if (!room) return;
-        }
+      if (!roomIdResult.valid) {
+        socket.emit('room:error', {
+          message: roomIdResult.error || 'Invalid room ID',
+        });
+        return;
       }
-    )
+
+      const safeName = socket.data.displayName!;
+      const safeRoomId = roomIdResult.value!;
+
+      // Enforce that the token's roomId matches the requested room
+      if (
+        socket.data.matchedRoomId &&
+        socket.data.matchedRoomId !== safeRoomId
+      ) {
+        socket.emit('room:error', {
+          message: 'Room ID does not match your match token',
+        });
+        return;
+      }
+
+      console.log(
+        `📥 room:join_matched: roomId=${safeRoomId}, playerName=${safeName}`
+      );
+
+      // Check if room already exists (another matched player got here first)
+      const existingRoom = roomManager.getRoom(safeRoomId);
+
+      if (existingRoom) {
+        // Room exists, join it
+        const room = roomManager.joinRoom(socket, safeRoomId, safeName);
+        if (room) {
+          socket.emit('room:joined', {
+            roomId: room.id,
+            players: roomManager.getPlayersArray(room),
+          });
+        }
+      } else {
+        // First player to arrive - create the room with the matched roomId
+        const room = await roomManager.createRoom(
+          socket,
+          safeName,
+          safeRoomId,
+          true
+        );
+        if (!room) return;
+      }
+    })
   );
 
   // Quick match - find or create a room automatically
   socket.on(
     'room:quick_match',
-    rateLimitedHandler(socket, 'room:quick_match', async ({ playerName }) => {
+    rateLimitedHandler(socket, 'room:quick_match', async () => {
       const startTime = performance.now();
-      // Validate input
-      const nameResult = validatePlayerName(playerName);
-
-      if (!nameResult.valid) {
-        socket.emit('room:error', {
-          message: nameResult.error || 'Invalid player name',
-        });
-        return;
-      }
-
-      const safeName = nameResult.value!;
+      const safeName = socket.data.displayName!;
 
       const result = await roomManager.findOrCreateQuickMatchRoom(
         socket,

@@ -14,11 +14,11 @@ services:
       POSTGRES_PASSWORD: vimracing
       POSTGRES_DB: vimracing
     ports:
-      - "5433:5432"
+      - '5433:5432'
     volumes:
       - vim-racing-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vimracing -d vimracing"]
+      test: ['CMD-SHELL', 'pg_isready -U vimracing -d vimracing']
       interval: 3s
       timeout: 5s
       retries: 5
@@ -28,13 +28,21 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"
+      - '3001:3001'
     environment:
       - PORT=3001
       - NODE_ENV=development
       - FRONTEND_URL=http://localhost:3000
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/"]
+      test:
+        [
+          'CMD',
+          'wget',
+          '--no-verbose',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3001/',
+        ]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -42,4 +50,3 @@ services:
 
 volumes:
   vim-racing-pgdata:
-

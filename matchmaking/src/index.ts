@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';
 import { Matchmaker } from './matchmaker.js';
 import type { ClientMessage, ServerMessage, QueuedPlayer } from './types.js';
-import { verifyToken } from './auth.js';
+import { verifyQueueAuth } from './auth.js';
 import { RateLimiter, rateLimiter } from './rateLimit.js';
 import { connectionLimiter } from './connectionLimiter.js';
 import { validatePlayerName } from './validation.js';
@@ -254,8 +254,10 @@ async function handleMessage(
 ) {
   switch (message.type) {
     case 'queue:join': {
-      // Verify auth token
-      const authResult = verifyToken(message.token, REQUIRE_AUTH);
+      // Verify the client's Supabase access token. This gate matters: the
+      // matchmaker signs match tokens the game server trusts, so queue
+      // entry must prove a real identity in production.
+      const authResult = await verifyQueueAuth(message.token, REQUIRE_AUTH);
       if (!authResult.success) {
         console.log(`🔒 Auth failed for ${connectionId}: ${authResult.error}`);
         send(socket, {
@@ -318,6 +320,8 @@ function send(socket: WebSocket, message: ServerMessage) {
 process.on('SIGTERM', () => {
   console.log('🛑 Received SIGTERM, shutting down...');
   matchmaker.stop();
+  rateLimiter.destroy();
+  httpRateLimiter.destroy();
   wss.close(() => {
     server.close(() => {
       console.log('👋 Server closed');
@@ -329,6 +333,8 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('🛑 Received SIGINT, shutting down...');
   matchmaker.stop();
+  rateLimiter.destroy();
+  httpRateLimiter.destroy();
   wss.close(() => {
     server.close(() => {
       console.log('👋 Server closed');

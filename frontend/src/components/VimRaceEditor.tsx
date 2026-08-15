@@ -1,12 +1,16 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
-import { EditorState, Compartment } from "@codemirror/state";
-import { cpp } from "@codemirror/lang-cpp";
+import { EditorState, Compartment } from '@codemirror/state';
+import { cpp } from '@codemirror/lang-cpp';
 import {
-  EditorView, keymap, drawSelection,
-  highlightActiveLine, lineNumbers, highlightActiveLineGutter
-} from "@codemirror/view";
-import { defaultKeymap, history } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
+  EditorView,
+  keymap,
+  drawSelection,
+  highlightActiveLine,
+  lineNumbers,
+  highlightActiveLineGutter,
+} from '@codemirror/view';
+import { defaultKeymap, history } from '@codemirror/commands';
+import { searchKeymap } from '@codemirror/search';
 import { vim, Vim, getCM } from '@replit/codemirror-vim';
 import { oneDark } from '@codemirror/theme-one-dark';
 
@@ -83,10 +87,12 @@ const focusOnlyMouseInteraction = EditorView.domEventHandlers({
 });
 
 function shouldDebugUndo(): boolean {
-  return typeof globalThis !== 'undefined'
-    && (globalThis as { __vimRacingDebugUndo?: boolean }).__vimRacingDebugUndo === true;
+  return (
+    typeof globalThis !== 'undefined' &&
+    (globalThis as { __vimRacingDebugUndo?: boolean }).__vimRacingDebugUndo ===
+      true
+  );
 }
-
 
 function createLineNumbersExtension(relative: boolean) {
   return lineNumbers({
@@ -151,19 +157,25 @@ interface VimRaceEditorProps {
 // Component
 // ---------------------------------------------------------------------------
 
-export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>(
-  ({
-    initialDoc,
-    onReady,
-    onCursorChange,
-    onDocChange,
-    onBlockedEdit,
-    onKeyStroke,
-    shouldAllowBlur,
-    allowMouseNavigation = false,
-    allowMouseFocusOnly = false,
-    autoFocusOnMount = true,
-  }, ref) => {
+export const VimRaceEditor = forwardRef<
+  VimRaceEditorHandle,
+  VimRaceEditorProps
+>(
+  (
+    {
+      initialDoc,
+      onReady,
+      onCursorChange,
+      onDocChange,
+      onBlockedEdit,
+      onKeyStroke,
+      shouldAllowBlur,
+      allowMouseNavigation = false,
+      allowMouseFocusOnly = false,
+      autoFocusOnMount = true,
+    },
+    ref
+  ) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
@@ -174,18 +186,30 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
     const onKeyStrokeRef = useRef(onKeyStroke);
     const shouldAllowBlurRef = useRef(shouldAllowBlur);
 
-    useEffect(() => { onCursorChangeRef.current = onCursorChange; }, [onCursorChange]);
-    useEffect(() => { onDocChangeRef.current = onDocChange; }, [onDocChange]);
-    useEffect(() => { onBlockedEditRef.current = onBlockedEdit; }, [onBlockedEdit]);
-    useEffect(() => { onKeyStrokeRef.current = onKeyStroke; }, [onKeyStroke]);
-    useEffect(() => { shouldAllowBlurRef.current = shouldAllowBlur; }, [shouldAllowBlur]);
+    useEffect(() => {
+      onCursorChangeRef.current = onCursorChange;
+    }, [onCursorChange]);
+    useEffect(() => {
+      onDocChangeRef.current = onDocChange;
+    }, [onDocChange]);
+    useEffect(() => {
+      onBlockedEditRef.current = onBlockedEdit;
+    }, [onBlockedEdit]);
+    useEffect(() => {
+      onKeyStrokeRef.current = onKeyStroke;
+    }, [onKeyStroke]);
+    useEffect(() => {
+      shouldAllowBlurRef.current = shouldAllowBlur;
+    }, [shouldAllowBlur]);
 
     useImperativeHandle(ref, () => ({
-      get view() { return viewRef.current; },
+      get view() {
+        return viewRef.current;
+      },
       setRelativeLineNumbers(relative: boolean) {
         viewRef.current?.dispatch({
           effects: lineNumbersCompartment.reconfigure(
-            createLineNumbersExtension(relative),
+            createLineNumbersExtension(relative)
           ),
         });
       },
@@ -206,8 +230,13 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       if (!containerRef.current) return;
 
       // Use Vim-style regexes in search to avoid PCRE helper prompts/no-match hints.
-      if (typeof (Vim as { setOption?: (name: string, value: unknown) => void }).setOption === 'function') {
-        (Vim as { setOption?: (name: string, value: unknown) => void }).setOption?.('pcre', false);
+      if (
+        typeof (Vim as { setOption?: (name: string, value: unknown) => void })
+          .setOption === 'function'
+      ) {
+        (
+          Vim as { setOption?: (name: string, value: unknown) => void }
+        ).setOption?.('pcre', false);
       }
 
       const docChangeListener = EditorView.updateListener.of((update) => {
@@ -215,7 +244,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           onDocChangeRef.current?.(update.state.doc.toString());
         }
         for (const transaction of update.transactions) {
-          const blockReason = transaction.annotation(blockedEditReasonAnnotation);
+          const blockReason = transaction.annotation(
+            blockedEditReasonAnnotation
+          );
           if (blockReason) {
             onBlockedEditRef.current?.(blockReason);
           }
@@ -238,7 +269,13 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           drawSelection(),
           highlightActiveLine(),
           highlightActiveLineGutter(),
-          ...(allowMouseNavigation ? [] : [allowMouseFocusOnly ? focusOnlyMouseInteraction : disableMouseInteraction]),
+          ...(allowMouseNavigation
+            ? []
+            : [
+                allowMouseFocusOnly
+                  ? focusOnlyMouseInteraction
+                  : disableMouseInteraction,
+              ]),
           keymap.of([...defaultKeymap, ...searchKeymap]),
           EditorView.theme({
             '&': {
@@ -330,7 +367,10 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           dtMs: Math.max(0, Math.floor(e.timeStamp)),
         });
 
-        if (shouldDebugUndo() && (e.key === 'u' || (e.key.toLowerCase() === 'r' && e.ctrlKey))) {
+        if (
+          shouldDebugUndo() &&
+          (e.key === 'u' || (e.key.toLowerCase() === 'r' && e.ctrlKey))
+        ) {
           const cm = getCM(view);
           console.log('[vim-undo-debug] keydown in editor', {
             key: e.key,
@@ -358,7 +398,8 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
 
       const handleWindowKeyCapture = (e: KeyboardEvent) => {
         if (!shouldDebugUndo()) return;
-        if (e.key !== 'u' && !(e.key.toLowerCase() === 'r' && e.ctrlKey)) return;
+        if (e.key !== 'u' && !(e.key.toLowerCase() === 'r' && e.ctrlKey))
+          return;
         if (!view.dom.contains(e.target as Node)) return;
 
         console.log('[vim-undo-debug] window capture keydown', {
@@ -368,7 +409,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
           activeInsideEditor: view.dom.contains(document.activeElement),
         });
       };
-      window.addEventListener('keydown', handleWindowKeyCapture, { capture: true });
+      window.addEventListener('keydown', handleWindowKeyCapture, {
+        capture: true,
+      });
 
       // Refocus the editor whenever it loses focus unintentionally.
       // Parents opt into allowing blur via the shouldAllowBlur callback.
@@ -376,7 +419,10 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       const handleBlur = (e: FocusEvent) => {
         // Allow focus to move to vim dialogs (e.g. '/' search prompt)
         // that live inside the editor DOM but outside contentDOM.
-        if (e.relatedTarget instanceof Node && view.dom.contains(e.relatedTarget)) {
+        if (
+          e.relatedTarget instanceof Node &&
+          view.dom.contains(e.relatedTarget)
+        ) {
           return;
         }
 
@@ -406,7 +452,9 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
       return () => {
         view.contentDOM.removeEventListener('keydown', handleEscapeKey, true);
         view.contentDOM.removeEventListener('blur', handleBlur);
-        window.removeEventListener('keydown', handleWindowKeyCapture, { capture: true });
+        window.removeEventListener('keydown', handleWindowKeyCapture, {
+          capture: true,
+        });
         view.destroy();
         viewRef.current = null;
       };
@@ -415,7 +463,7 @@ export const VimRaceEditor = forwardRef<VimRaceEditorHandle, VimRaceEditorProps>
     }, []);
 
     return <div ref={containerRef} />;
-  },
+  }
 );
 
 VimRaceEditor.displayName = 'VimRaceEditor';

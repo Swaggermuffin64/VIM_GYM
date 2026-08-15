@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { GameState } from '../types/multiplayer';
 import { EMPTY_TASK } from '../types/multiplayer';
+import { supabase } from '../lib/supabase';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const MATCHMAKING_URL =
@@ -56,6 +57,11 @@ export function useGameSocket(): UseGameSocketReturn {
   const pendingPlayerNameRef = useRef<string | null>(null);
   const quickMatchCancelledRef = useRef(false);
   const matchTokenRef = useRef<string | null>(null);
+  // Incremented whenever the current connection attempt becomes stale (a newer
+  // connect started, or the hook unmounted). connectSocket awaits the auth
+  // session before creating its socket, so it re-checks this counter after the
+  // await and discards the socket if it lost the race.
+  const connectEpochRef = useRef(0);
 
   // Setup socket event listeners
   const setupSocketListeners = useCallback((socket: Socket) => {
@@ -238,16 +244,34 @@ export function useGameSocket(): UseGameSocketReturn {
 
   // Connect to game server, optionally with a match token for auth
   const connectSocket = useCallback(
-    (url: string, token?: string) => {
+    async (url: string, token?: string) => {
+      connectEpochRef.current += 1;
+      const epoch = connectEpochRef.current;
+
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
       matchTokenRef.current = token || null;
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       const socket = io(url, {
         transports: ['websocket', 'polling'],
-        auth: token ? { token } : undefined,
+        auth: {
+          ...(token ? { token } : {}),
+          userToken: session?.access_token,
+        },
       });
+
+      // A newer connect or an unmount happened while we awaited the session;
+      // this socket has no owner, so disconnect it instead of leaking it.
+      if (epoch !== connectEpochRef.current) {
+        socket.disconnect();
+        return;
+      }
 
       socketRef.current = socket;
       setupSocketListeners(socket);
@@ -259,20 +283,23 @@ export function useGameSocket(): UseGameSocketReturn {
   useEffect(() => {
     connectSocket(BACKEND_URL);
     return () => {
+      connectEpochRef.current += 1;
       socketRef.current?.disconnect();
+      socketRef.current = null;
     };
   }, [connectSocket]);
 
   // Connect to matchmaking service and join the game room when matched
   const connectToMatchedRoom = useCallback(
-    (
+    async (
       connectionUrl: string,
       roomId: string,
       playerName: string,
       token?: string
-    ): boolean => {
-      // For quick match, reconnect with the auth token
-      connectSocket(connectionUrl, token);
+    ): Promise<boolean> => {
+      // For quick match, reconnect with the auth token. Must complete before
+      // emitting room:join_matched — the new socket doesn't exist until then.
+      await connectSocket(connectionUrl, token);
 
       if (quickMatchCancelledRef.current) {
         socketRef.current?.disconnect();
@@ -325,7 +352,26 @@ export function useGameSocket(): UseGameSocketReturn {
             ws.close();
             return;
           }
-          ws.send(JSON.stringify({ type: 'queue:join', playerName }));
+          // The matchmaker verifies identity before allowing queue entry, so
+          // join with the current Supabase access token.
+          void (async () => {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession();
+            if (
+              quickMatchCancelledRef.current ||
+              matchmakingWsRef.current !== ws
+            ) {
+              return;
+            }
+            ws.send(
+              JSON.stringify({
+                type: 'queue:join',
+                playerName,
+                ...(session?.access_token && { token: session.access_token }),
+              })
+            );
+          })();
         };
 
         ws.onmessage = (event) => {

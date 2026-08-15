@@ -17,11 +17,13 @@ import {
   buildOptimalInfo,
 } from '../utils/keyFormatting';
 import type { PlayerTaskAverages } from '../utils/taskSummaries';
+import { useAuth } from '../contexts/AuthContext';
 import { Lobby } from '../components/Lobby';
 import { WaitingRoom } from '../components/WaitingRoom';
 import { RaceCountdown } from '../components/RaceCountdown';
 import { RaceResults } from '../components/RaceResults';
 import { TaskReviewOverlay } from '../components/TaskReviewOverlay';
+import { submitTaskKeystrokes as postTaskKeystrokes } from '../api/keystrokes';
 import {
   setTargetPosition,
   setTargetRange,
@@ -345,6 +347,7 @@ const MultiplayerGame: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialMode = searchParams.get('mode') as 'quick' | 'private' | null;
+  const { profile } = useAuth();
 
   const {
     isConnected,
@@ -481,15 +484,13 @@ const MultiplayerGame: React.FC = () => {
 
       submittedTaskIdsRef.current.add(taskId);
 
-      try {
-        await fetch(`${API_BASE}/api/task/keystrokes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-      } catch (error) {
-        console.error('Failed to submit multiplayer keystrokes:', error);
-      }
+      // gameId is intentionally omitted — the client does not know the
+      // database game ID for multiplayer matches yet (follow-up item).
+      const task = currentTaskObjRef.current;
+      await postTaskKeystrokes({
+        payload,
+        ...(task?.contentHash ? { taskHash: task.contentHash } : {}),
+      });
     },
     [gameState.myPlayerId, gameState.roomId]
   );
@@ -1093,6 +1094,7 @@ const MultiplayerGame: React.FC = () => {
           queuePosition={queuePosition}
           relativeLineNumbersEnabled={relativeLineNumbers}
           onRelativeLineNumbersChange={setRelativeLineNumbers}
+          playerName={profile?.display_name ?? ''}
           onCreateRoom={createRoom}
           onJoinRoom={joinRoom}
           onQuickMatch={quickMatch}

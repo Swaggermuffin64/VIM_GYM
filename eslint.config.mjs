@@ -52,5 +52,5 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
-  prettier,
+  prettier
 );

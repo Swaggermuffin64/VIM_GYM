@@ -4,7 +4,10 @@ import {
   generatePositionTasksAsync,
   generateDeleteTasksAsync,
   generateRaceTaskBatchesAsync,
+  attachContentHashes,
 } from './taskPool.js';
+import { taskContentHash } from './taskHash.js';
+import type { Task } from './types.js';
 
 /**
  * Measure event loop responsiveness during async work.
@@ -93,5 +96,22 @@ describe('taskPool', () => {
     console.log(
       `Single-job race batch generation took ${elapsed.toFixed(0)}ms`
     );
+  });
+});
+
+describe('attachContentHashes', () => {
+  it('stamps every task with its content hash', () => {
+    const tasks: Task[] = [
+      {
+        id: 't1',
+        type: 'navigate',
+        description: 'd',
+        codeSnippet: 'abc',
+        targetPosition: { line: 1, col: 1 },
+        targetOffset: 1,
+      },
+    ];
+    const out = attachContentHashes(tasks);
+    expect(out[0]!.contentHash).toBe(taskContentHash(tasks[0]!));
   });
 });

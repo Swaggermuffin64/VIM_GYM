@@ -24,7 +24,7 @@ export const opponentCursorField = StateField.define<DecorationSet>({
         // Create decoration for the opponent cursor
         const pos = effect.value;
         const docLength = tr.state.doc.length;
-        
+
         if (pos >= 0 && pos < docLength) {
           return RangeSet.of([opponentCursorMark.range(pos, pos + 1)]);
         }
@@ -61,4 +61,3 @@ export const opponentCursorExtension = [
   opponentCursorField,
   opponentCursorTheme,
 ];
-

@@ -25,11 +25,13 @@ A lightweight WebSocket-based matchmaking server that queues players and assigns
 ## Setup
 
 1. Install dependencies:
+
    ```bash
    npm install
    ```
 
 2. Set environment variables:
+
    ```bash
    export GAME_SERVER_URL=http://localhost:3001
    export MATCH_TOKEN_SECRET=your_shared_secret
@@ -38,6 +40,7 @@ A lightweight WebSocket-based matchmaking server that queues players and assigns
    ```
 
 3. Run in development:
+
    ```bash
    npm run dev
    ```
@@ -76,9 +79,9 @@ A lightweight WebSocket-based matchmaking server that queues players and assigns
 { type: 'queue:left' }
 
 // Match found! Connect to the game server
-{ 
-  type: 'match:found', 
-  roomId: string, 
+{
+  type: 'match:found',
+  roomId: string,
   connectionUrl: string,
   players: Array<{ id: string, name: string }>,
   token?: string  // signed JWT for game server auth
@@ -98,29 +101,34 @@ const MATCHMAKING_URL = 'wss://your-matchmaking-server.com';
 
 function quickMatch(playerName: string) {
   const ws = new WebSocket(MATCHMAKING_URL);
-  
+
   ws.onopen = () => {
     ws.send(JSON.stringify({ type: 'queue:join', playerName }));
   };
-  
+
   ws.onmessage = (event) => {
     const msg = JSON.parse(event.data);
-    
+
     switch (msg.type) {
       case 'queue:joined':
         console.log(`Queued at position ${msg.position}`);
         break;
-        
+
       case 'queue:position':
         console.log(`Queue position: ${msg.position}`);
         break;
-        
+
       case 'match:found':
         console.log(`Match found! Room: ${msg.roomId}`);
         ws.close();
-        connectToGameServer(msg.connectionUrl, msg.roomId, playerName, msg.token);
+        connectToGameServer(
+          msg.connectionUrl,
+          msg.roomId,
+          playerName,
+          msg.token
+        );
         break;
-        
+
       case 'error':
         console.error(msg.message);
         break;
@@ -169,12 +177,12 @@ MATCHMAKING_URL=wss://your-matchmaker.example.com npm run load-test:live
 
 ### Configuration Options
 
-| Environment Variable | Default | Description |
-|---------------------|---------|-------------|
-| `MATCHMAKING_URL` | `ws://localhost:3002` | WebSocket URL of matchmaking server |
-| `NUM_PLAYERS` | `10` | Number of simulated players |
-| `STAGGER_MS` | `500` | Delay between each player joining (ms) |
-| `TIMEOUT_MS` | `60000` | Max time to wait for a match (ms) |
+| Environment Variable | Default               | Description                            |
+| -------------------- | --------------------- | -------------------------------------- |
+| `MATCHMAKING_URL`    | `ws://localhost:3002` | WebSocket URL of matchmaking server    |
+| `NUM_PLAYERS`        | `10`                  | Number of simulated players            |
+| `STAGGER_MS`         | `500`                 | Delay between each player joining (ms) |
+| `TIMEOUT_MS`         | `60000`               | Max time to wait for a match (ms)      |
 
 ### Examples
 

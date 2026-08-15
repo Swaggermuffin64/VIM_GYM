@@ -63,6 +63,20 @@ code {
   color: #f1f5f9;
 }
 
+/* Login page: stack the two card panels when the viewport is too narrow
+   for side-by-side. The mobile overlay covers <=768px, so this handles the
+   tablet/narrow-window band just above it. !important beats the panels'
+   inline styles. */
+@media (max-width: 900px) {
+  .login-card {
+    flex-direction: column !important;
+  }
+  .login-card-left {
+    border-right: none !important;
+    border-bottom: 1px solid #334155;
+  }
+}
+
 /* Mobile overlay */
 #mobile-overlay {
   display: none;

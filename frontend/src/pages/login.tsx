@@ -208,9 +208,9 @@ export default function Login() {
     <div style={styles.container}>
       <div style={styles.bgGlow1} aria-hidden="true" />
       <div style={styles.bgGlow2} aria-hidden="true" />
-      <div style={styles.card}>
+      <div className="login-card" style={styles.card}>
         {/* Left — branding */}
-        <div style={styles.leftPanel}>
+        <div className="login-card-left" style={styles.leftPanel}>
           <p style={styles.logoLabel}>VIM_GYM</p>
           <div style={styles.heroBand}>
             <h1 style={styles.heroPhrase}>

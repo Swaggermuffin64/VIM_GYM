@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, type Profile } from '../contexts/AuthContext';
 import { colors } from '../theme';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
@@ -64,7 +64,7 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 export default function Onboarding() {
-  const { session, user } = useAuth();
+  const { session, user, applyProfileUpdate } = useAuth();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -95,10 +95,20 @@ export default function Onboarding() {
         body: JSON.stringify({ display_name: displayName }),
       });
 
-      const data = (await res.json()) as { success: boolean; error?: string };
+      const data = (await res.json()) as {
+        success: boolean;
+        error?: string;
+        profile?: Profile;
+      };
       if (!data.success) {
         setError(data.error ?? 'Failed to save');
       } else {
+        // Push the confirmed profile (has_completed_onboarding=true) into
+        // the shared auth context BEFORE navigating — AuthGuard reads it and
+        // would otherwise bounce us straight back here.
+        if (data.profile) {
+          applyProfileUpdate(data.profile);
+        }
         navigate('/');
       }
     } catch {

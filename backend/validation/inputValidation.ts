@@ -80,6 +80,43 @@ export function validatePlayerName(input: unknown): ValidationResult<string> {
   return { valid: true, value: name };
 }
 
+const AVATAR_URL_MAX_LENGTH = 2048;
+
+/**
+ * Validate an avatar URL before it is persisted and served to other clients.
+ * Only well-formed https URLs are allowed — this blocks javascript:/data:
+ * URIs that would become XSS payloads in an <img src> or <a href> context.
+ * Absent/empty input is treated as "no avatar" and normalized to undefined.
+ */
+export function validateAvatarUrl(
+  input: unknown
+): ValidationResult<string | undefined> {
+  if (input === undefined || input === null || input === '') {
+    return { valid: true, value: undefined };
+  }
+
+  if (typeof input !== 'string') {
+    return { valid: false, error: 'Avatar URL must be a string' };
+  }
+
+  if (input.length > AVATAR_URL_MAX_LENGTH) {
+    return { valid: false, error: 'Avatar URL exceeds maximum length' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return { valid: false, error: 'Avatar URL is not a valid URL' };
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return { valid: false, error: 'Avatar URL must use https' };
+  }
+
+  return { valid: true, value: input };
+}
+
 /**
  * Validate a room ID format.
  * Accepts 6-char alphanumeric room codes (internal format) and

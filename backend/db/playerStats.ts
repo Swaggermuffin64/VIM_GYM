@@ -108,7 +108,7 @@ export async function getPlayerStats(
          FROM task_attempts ta
          JOIN tasks t ON t.content_hash = ta.task_hash
          WHERE ta.user_id = $1
-           AND ta.keystroke_count IS NOT NULL
+           AND ta.keystroke_count > 0
            AND t.optimal_keystroke_count IS NOT NULL`,
         [userId]
       ),

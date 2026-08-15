@@ -67,6 +67,7 @@ import {
   validateEditorText,
   validateBoolean,
   validateKeystrokeEvents,
+  validateAvatarUrl,
 } from './validation/inputValidation.js';
 
 // Event loop lag tracker — measures how late setImmediate fires vs expected
@@ -224,9 +225,16 @@ fastify.post<{
     return reply.status(400).send({ success: false, error: nameResult.error });
   }
 
+  const avatarResult = validateAvatarUrl(avatar_url);
+  if (!avatarResult.valid) {
+    return reply
+      .status(400)
+      .send({ success: false, error: avatarResult.error });
+  }
+
   const profile = await upsertProfile(user.id, {
-    display_name,
-    avatar_url,
+    display_name: nameResult.value!,
+    avatar_url: avatarResult.value,
   });
 
   if (!profile) {

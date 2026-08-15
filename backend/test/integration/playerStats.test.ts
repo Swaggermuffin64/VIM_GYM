@@ -134,6 +134,23 @@ describe('getPlayerStats', () => {
     });
   });
 
+  it('rejects zero-keystroke attempts at the schema, protecting the efficiency division', async () => {
+    // The efficiency aggregate divides by keystroke_count. A zero row would
+    // error the whole stats query (surfacing as the zero-state), so the
+    // schema must forbid it — this pins that CHECK constraint.
+    await expect(
+      db.query(
+        `INSERT INTO task_attempts (user_id, task_hash, game_id, play_mode, duration_ms, keystroke_count)
+         VALUES ($1, 'h2', 104, 'practice', 3000, 0)`,
+        [TEST_USERS.alice]
+      )
+    ).rejects.toThrow(/keystroke_count_check/);
+    // And the aggregates over the valid rows keep working.
+    const stats = await playerStats.getPlayerStats(TEST_USERS.alice);
+    expect(stats.avgTaskEfficiency).toBeCloseTo(0.75);
+    expect(stats.efficiencySample).toBe(2);
+  });
+
   it('caps the recent list at the requested limit', async () => {
     const stats = await playerStats.getPlayerStats(TEST_USERS.alice, 2);
     expect(stats.recentGames).toHaveLength(2);

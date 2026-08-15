@@ -28,6 +28,16 @@ export const SUPABASE_URL = process.env.SUPABASE_URL?.trim() || undefined;
 export const SUPABASE_JWT_SECRET =
   process.env.SUPABASE_JWT_SECRET?.trim() || undefined;
 
+// Issuer pinning requires SUPABASE_URL: without it, any HS256 token signed
+// with the same shared secret is accepted regardless of which Supabase
+// project issued it. Warn loudly so a misconfigured deployment is visible.
+if (SUPABASE_JWT_SECRET && !SUPABASE_URL) {
+  console.warn(
+    '[config] SUPABASE_JWT_SECRET is set but SUPABASE_URL is not: ' +
+      'token issuer pinning is DISABLED. Set SUPABASE_URL in production.'
+  );
+}
+
 /**
  * Shared token that unlocks the detailed `/health` metrics payload. When unset,
  * `/health` returns only a minimal status and never exposes operational

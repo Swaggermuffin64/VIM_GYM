@@ -64,6 +64,16 @@ describe('verifySupabaseToken with a legacy HS256 shared secret', () => {
     expect(result.error).toMatch(/issuer/i);
   });
 
+  it('fails for a token with no iss claim when SUPABASE_URL is configured', async () => {
+    const token = jwt.sign({ sub: 'user-uuid-123' }, SECRET, {
+      algorithm: 'HS256',
+      expiresIn: '1h',
+    });
+    const result = await verifySupabaseToken(token);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/issuer/i);
+  });
+
   it('fails for a token with no sub', async () => {
     const token = jwt.sign({ iss: `${SUPABASE_URL}/auth/v1` }, SECRET, {
       algorithm: 'HS256',
@@ -190,5 +200,12 @@ describe('isSupabaseToken', () => {
 
   it('returns false for garbage input', () => {
     expect(isSupabaseToken('not-a-jwt')).toBe(false);
+  });
+
+  it('returns false for a lookalike issuer that merely contains "supabase"', () => {
+    // With SUPABASE_URL configured, routing must pin to our project rather
+    // than accept any iss containing the substring "supabase".
+    const token = makeToken({ iss: 'https://evil.com/supabase-lookalike' });
+    expect(isSupabaseToken(token)).toBe(false);
   });
 });

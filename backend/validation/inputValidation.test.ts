@@ -12,7 +12,39 @@ import {
   validateKeystrokeEvents,
   validateBoolean,
   validateOptionalRoomId,
+  validateAvatarUrl,
 } from './inputValidation.js';
+
+describe('validateAvatarUrl', () => {
+  it.each([
+    ['undefined (avatar not set)', undefined],
+    ['null (avatar cleared)', null],
+    ['empty string (avatar cleared)', ''],
+  ])('accepts %s as "no avatar"', (_label, input) => {
+    const result = validateAvatarUrl(input);
+    expect(result.valid).toBe(true);
+    expect(result.value).toBeUndefined();
+  });
+
+  it('accepts a well-formed https URL', () => {
+    const result = validateAvatarUrl('https://cdn.example.com/a/b.png?v=1');
+    expect(result.valid).toBe(true);
+    expect(result.value).toBe('https://cdn.example.com/a/b.png?v=1');
+  });
+
+  it.each([
+    ['javascript: URI', 'javascript:alert(1)'],
+    ['data: URI', 'data:text/html,<script>alert(1)</script>'],
+    ['plain http (not https)', 'http://cdn.example.com/a.png'],
+    ['not a URL at all', 'not a url'],
+    ['non-string input', 42],
+    ['over-long URL', 'https://cdn.example.com/' + 'a'.repeat(2048)],
+  ])('rejects %s', (_label, input) => {
+    const result = validateAvatarUrl(input);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBeTruthy();
+  });
+});
 
 describe('validatePlayerName', () => {
   it.each([

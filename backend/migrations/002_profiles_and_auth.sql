@@ -1,5 +1,9 @@
 -- backend/migrations/002_profiles_and_auth.sql
 
+-- Transactional so a mid-migration failure (e.g. in the backfill) leaves
+-- nothing half-applied.
+BEGIN;
+
 -- 1. Profiles table
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -56,3 +60,5 @@ ALTER TABLE leaderboard_runs
 
 -- Mark all existing rows as pre-auth (they have no real user_id)
 UPDATE leaderboard_runs SET is_pre_auth = true WHERE user_id IS NULL;
+
+COMMIT;

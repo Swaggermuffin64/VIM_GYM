@@ -42,10 +42,14 @@ export function resetJwksCacheForTests(): void {
 
 /**
  * Supabase tokens must be issued by our own project. `iss` is
- * `{SUPABASE_URL}/auth/v1`, so a prefix match pins the project.
+ * `{SUPABASE_URL}/auth/v1`, so a prefix match pins the project. When
+ * SUPABASE_URL is configured a missing `iss` fails closed; when it is not
+ * configured, pinning is off and the signing secret is the sole trust anchor
+ * (config.ts warns loudly about that at startup).
  */
 function hasMatchingIssuer(iss: string | undefined): boolean {
-  if (!SUPABASE_URL || !iss) return true;
+  if (!SUPABASE_URL) return true;
+  if (!iss) return false;
   return iss.startsWith(SUPABASE_URL);
 }
 
@@ -123,13 +127,19 @@ export async function verifySupabaseToken(
 /**
  * Peek at the token's `iss` claim (without verifying) to determine
  * whether it was issued by Supabase. Used to route to the correct verifier.
+ * With SUPABASE_URL configured, only our own project's issuer qualifies;
+ * without it, any issuer mentioning supabase routes here and verification
+ * decides.
  */
 export function isSupabaseToken(token: string): boolean {
   try {
     const decoded = jwt.decode(token);
     if (!decoded || typeof decoded !== 'object') return false;
     const iss = (decoded as { iss?: string }).iss;
-    return typeof iss === 'string' && iss.includes('supabase');
+    if (typeof iss !== 'string') return false;
+    return SUPABASE_URL
+      ? iss.startsWith(SUPABASE_URL)
+      : iss.includes('supabase');
   } catch {
     return false;
   }

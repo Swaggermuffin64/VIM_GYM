@@ -68,5 +68,13 @@ jobs:
           node-version: 22
       - run: npm ci
         working-directory: backend
+      # taskPool.ts loads the piscina worker from dist/ even under tsx,
+      # so the backend must be compiled before the tests spawn it.
+      - run: npm run build
+        working-directory: backend
+      # quickplayFullFlow spawns the matchmaker from matchmaking/src,
+      # which needs its own dependencies installed.
+      - run: npm ci
+        working-directory: matchmaking
       - run: npm run test:integration
         working-directory: backend

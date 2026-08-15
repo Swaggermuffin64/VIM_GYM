@@ -24,6 +24,13 @@ const MIGRATIONS_DIR = path.join(
 /** Shared HS256 secret; the spawned server gets the same value via env. */
 export const TEST_JWT_SECRET = 'integration-test-secret';
 
+/**
+ * Shared MATCH_TOKEN_SECRET for tests that spawn both the matchmaker and
+ * the game server. Without it, the matchmaker issues no match token and
+ * the backend's token-gated endpoints (e.g. /api/multiplayer/stats) 401.
+ */
+export const TEST_MATCH_TOKEN_SECRET = 'integration-test-match-secret';
+
 export const TEST_USERS = {
   alice: '11111111-1111-1111-1111-111111111111',
   bob: '22222222-2222-2222-2222-222222222222',

@@ -18,6 +18,7 @@ import {
   startTestDatabase,
   mintTestToken,
   TEST_JWT_SECRET,
+  TEST_MATCH_TOKEN_SECRET,
   TEST_USERS,
   type TestDatabase,
 } from './harness.js';
@@ -135,6 +136,7 @@ beforeAll(async () => {
       DATABASE_URL: db.url,
       SUPABASE_JWT_SECRET: TEST_JWT_SECRET,
       SUPABASE_URL: '',
+      MATCH_TOKEN_SECRET: TEST_MATCH_TOKEN_SECRET,
       TASK_CACHE_NAVIGATE_COUNT: '20',
       TASK_CACHE_DELETE_COUNT: '20',
       TASK_CACHE_YANK_PASTE_COUNT: '10',
@@ -147,6 +149,7 @@ beforeAll(async () => {
       ...process.env,
       PORT: String(matchmakerPort),
       GAME_SERVER_URL: backendBase,
+      MATCH_TOKEN_SECRET: TEST_MATCH_TOKEN_SECRET,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

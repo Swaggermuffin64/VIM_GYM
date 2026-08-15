@@ -23,7 +23,12 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'queue:joined'; playerId: string }
   | { type: 'queue:left' }
-  | { type: 'match:found'; roomId: string; connectionUrl: string; players: Array<{ id: string; name: string }>; token?: string }
+  | {
+      type: 'match:found';
+      roomId: string;
+      connectionUrl: string;
+      players: Array<{ id: string; name: string }>;
+      token?: string;
+    }
   | { type: 'error'; message: string }
   | { type: 'pong' };
-

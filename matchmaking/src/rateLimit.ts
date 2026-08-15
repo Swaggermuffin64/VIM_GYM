@@ -1,6 +1,6 @@
 /**
  * Simple Rate Limiter for Matchmaking WebSocket
- * 
+ *
  * Tracks requests per connection and blocks excessive usage.
  */
 
@@ -16,18 +16,28 @@ export class RateLimiter {
   private maxRequests: number;
   private windowMs: number;
   private blockDurationMs: number;
+  private cleanupTimer: NodeJS.Timeout;
 
-  constructor(options: { 
-    maxRequests?: number; 
-    windowMs?: number;
-    blockDurationMs?: number;
-  } = {}) {
-    this.maxRequests = options.maxRequests ?? 20;     // 20 requests
-    this.windowMs = options.windowMs ?? 60000;        // per minute
+  constructor(
+    options: {
+      maxRequests?: number;
+      windowMs?: number;
+      blockDurationMs?: number;
+    } = {}
+  ) {
+    this.maxRequests = options.maxRequests ?? 20; // 20 requests
+    this.windowMs = options.windowMs ?? 60000; // per minute
     this.blockDurationMs = options.blockDurationMs ?? 60000; // block for 1 minute
-    
-    // Cleanup old entries every minute
-    setInterval(() => this.cleanup(), 60000);
+
+    // Cleanup old entries every minute. unref() so this sweeper never keeps
+    // the process alive on its own.
+    this.cleanupTimer = setInterval(() => this.cleanup(), 60000);
+    this.cleanupTimer.unref?.();
+  }
+
+  /** Stop the cleanup interval. Call during graceful shutdown. */
+  destroy(): void {
+    clearInterval(this.cleanupTimer);
   }
 
   /**
@@ -68,7 +78,9 @@ export class RateLimiter {
     if (entry.count > this.maxRequests) {
       entry.blocked = true;
       entry.blockExpires = now + this.blockDurationMs;
-      console.log(`⚠️ Rate limited connection ${connectionId} for ${this.blockDurationMs}ms`);
+      console.log(
+        `⚠️ Rate limited connection ${connectionId} for ${this.blockDurationMs}ms`
+      );
       return false;
     }
 
@@ -98,7 +110,7 @@ export class RateLimiter {
 
 // Singleton instance
 export const rateLimiter = new RateLimiter({
-  maxRequests: 30,    // 30 messages per minute (generous for matchmaking)
+  maxRequests: 30, // 30 messages per minute (generous for matchmaking)
   windowMs: 60000,
   blockDurationMs: 60000,
 });

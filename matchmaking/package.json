@@ -17,11 +17,14 @@
     "smoke-test": "tsx scripts/smoke-test.ts",
     "smoke-test:prod": "PROD=1 tsx scripts/smoke-test.ts",
     "bench-taskgen": "tsx scripts/task-gen-benchmark.ts",
-    "bench-taskgen:prod": "PROD=1 tsx scripts/task-gen-benchmark.ts"
+    "bench-taskgen:prod": "PROD=1 tsx scripts/task-gen-benchmark.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "async-mutex": "^0.5.0",
     "dotenv": "^17.2.3",
+    "jose": "^5.10.0",
     "jsonwebtoken": "^9.0.3",
     "socket.io-client": "^4.7.0",
     "ws": "^8.18.0"
@@ -30,7 +33,9 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.10.0",
     "@types/ws": "^8.5.10",
+    "@vitest/coverage-v8": "^2.1.9",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^2.1.9"
   }
 }

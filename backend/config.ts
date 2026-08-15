@@ -20,3 +20,28 @@ export const MATCH_TOKEN_SECRET = process.env.MATCH_TOKEN_SECRET;
 
 /** Supabase / Postgres connection string; optional until leaderboard persistence is used. */
 export const DATABASE_URL = process.env.DATABASE_URL?.trim() || undefined;
+
+/** Supabase project URL, e.g. https://xxx.supabase.co */
+export const SUPABASE_URL = process.env.SUPABASE_URL?.trim() || undefined;
+
+/** JWT secret from Supabase → Project Settings → API → JWT Secret */
+export const SUPABASE_JWT_SECRET =
+  process.env.SUPABASE_JWT_SECRET?.trim() || undefined;
+
+// Issuer pinning requires SUPABASE_URL: without it, any HS256 token signed
+// with the same shared secret is accepted regardless of which Supabase
+// project issued it. Warn loudly so a misconfigured deployment is visible.
+if (SUPABASE_JWT_SECRET && !SUPABASE_URL) {
+  console.warn(
+    '[config] SUPABASE_JWT_SECRET is set but SUPABASE_URL is not: ' +
+      'token issuer pinning is DISABLED. Set SUPABASE_URL in production.'
+  );
+}
+
+/**
+ * Shared token that unlocks the detailed `/health` metrics payload. When unset,
+ * `/health` returns only a minimal status and never exposes operational
+ * internals (fail closed).
+ */
+export const HEALTH_METRICS_TOKEN =
+  process.env.HEALTH_METRICS_TOKEN?.trim() || undefined;

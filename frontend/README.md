@@ -14,12 +14,12 @@ npm run dev
 
 ## Available Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server at http://localhost:3000 |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build locally |
-| `npm run test` | Run tests with Vitest |
+| Command           | Description                                       |
+| ----------------- | ------------------------------------------------- |
+| `npm run dev`     | Start development server at http://localhost:3000 |
+| `npm run build`   | Build for production                              |
+| `npm run preview` | Preview production build locally                  |
+| `npm run test`    | Run tests with Vitest                             |
 
 ## Environment Variables
 

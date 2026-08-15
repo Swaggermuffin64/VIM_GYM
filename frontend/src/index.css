@@ -21,6 +21,19 @@ body {
   color: #f1f5f9;
 }
 
+/* Hide the page-level scrollbar (page stays scrollable) so content growing
+   past the viewport — e.g. expanding the leaderboard — doesn't shrink the
+   viewport width and shift centered layout. Inner scroll areas keep the
+   custom scrollbar styles below. */
+html {
+  scrollbar-width: none; /* Firefox */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
 code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
@@ -48,6 +61,20 @@ code {
 ::selection {
   background: rgba(6, 182, 212, 0.3);
   color: #f1f5f9;
+}
+
+/* Login page: stack the two card panels when the viewport is too narrow
+   for side-by-side. The mobile overlay covers <=768px, so this handles the
+   tablet/narrow-window band just above it. !important beats the panels'
+   inline styles. */
+@media (max-width: 900px) {
+  .login-card {
+    flex-direction: column !important;
+  }
+  .login-card-left {
+    border-right: none !important;
+    border-bottom: 1px solid #334155;
+  }
 }
 
 /* Mobile overlay */

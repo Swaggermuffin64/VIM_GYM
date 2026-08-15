@@ -20,6 +20,8 @@ export interface Position {
 
 export interface PositionTask {
   id: string;
+  /** sha256 content hash — stable identity for stats; set by the task pool. */
+  contentHash?: string;
   type: 'navigate';
   description: string;
   codeSnippet: string;
@@ -33,6 +35,8 @@ export interface PositionTask {
 
 export interface DeleteTask {
   id: string;
+  /** sha256 content hash — stable identity for stats; set by the task pool. */
+  contentHash?: string;
   type: 'delete';
   description: string;
   codeSnippet: string;
@@ -53,6 +57,8 @@ export type YankStrategy = 'WORD' | 'LINE' | 'BRACKET';
 
 export interface YankPasteTask {
   id: string;
+  /** sha256 content hash — stable identity for stats; set by the task pool. */
+  contentHash?: string;
   type: 'yank_paste';
   description: string;
   codeSnippet: string;

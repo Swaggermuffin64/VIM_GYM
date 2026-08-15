@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface LobbyProps {
   isConnected: boolean;
@@ -8,6 +9,7 @@ interface LobbyProps {
   queuePosition?: number | null;
   relativeLineNumbersEnabled: boolean;
   onRelativeLineNumbersChange: (enabled: boolean) => void;
+  playerName: string;
   onCreateRoom: (playerName: string) => void;
   onJoinRoom: (roomId: string, playerName: string) => void;
   onQuickMatch: (playerName: string) => void;
@@ -293,12 +295,13 @@ export const Lobby: React.FC<LobbyProps> = ({
   queuePosition = null,
   relativeLineNumbersEnabled,
   onRelativeLineNumbersChange,
+  playerName,
   onCreateRoom,
   onJoinRoom,
   onQuickMatch,
   onCancelQuickMatch,
 }) => {
-  const [playerName, setPlayerName] = useState('');
+  const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState('');
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
 
@@ -379,8 +382,10 @@ export const Lobby: React.FC<LobbyProps> = ({
     return 'Race your friends with Vim motions';
   };
 
+  // Client-side navigation: a full page reload here would restart the auth
+  // pipeline (session load + profile fetch) and flash a black screen.
   const handleBack = () => {
-    window.location.href = '/';
+    navigate('/');
   };
 
   const longWaitMessage = showLongWaitMessage ? (
@@ -537,17 +542,6 @@ export const Lobby: React.FC<LobbyProps> = ({
               </div>
             ) : (
               <>
-                <div style={styles.card}>
-                  <div style={styles.cardTitle}>Your Name</div>
-                  <input
-                    type="text"
-                    placeholder="Enter your name..."
-                    value={playerName}
-                    onChange={(e) => setPlayerName(e.target.value)}
-                    style={styles.input}
-                    maxLength={20}
-                  />
-                </div>
                 <label style={styles.optionToggleRow}>
                   <span style={styles.optionToggleLabel}>
                     Start with Relative Line Numbers
@@ -632,18 +626,6 @@ export const Lobby: React.FC<LobbyProps> = ({
 
             {error && <div style={styles.error}>{error}</div>}
 
-            {/* Name input - always shown */}
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Your Name</div>
-              <input
-                type="text"
-                placeholder="Enter your name..."
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                style={styles.input}
-                maxLength={20}
-              />
-            </div>
             <label style={styles.optionToggleRow}>
               <span style={styles.optionToggleLabel}>
                 Start with Relative Line Numbers

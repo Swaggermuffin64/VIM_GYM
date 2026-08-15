@@ -11,6 +11,12 @@ import type {
 import { pickTasksFromCache } from '../taskPool.js';
 import type { Task } from '../types.js';
 import { insertMultiplayerRaceLeaderboardRows } from '../db/leaderboard.js';
+import {
+  upsertTasksOnFirstUse,
+  createGameSession,
+  finishGameSession,
+  insertTaskAttempt,
+} from '../db/stats.js';
 type GameSocket = Socket<
   ClientToServerEvents,
   ServerToClientEvents,
@@ -106,6 +112,9 @@ export class RoomManager {
       taskProgress: 0, // 0 to NUM_TASKS - 1
       isFinished: false,
       readyToPlay: false,
+      ...(typeof socket.data.userId === 'string' && {
+        userId: socket.data.userId,
+      }),
     };
 
     const finishedTask: Task = {
@@ -192,6 +201,9 @@ export class RoomManager {
       taskProgress: 0,
       isFinished: false,
       readyToPlay: false,
+      ...(typeof socket.data.userId === 'string' && {
+        userId: socket.data.userId,
+      }),
     };
 
     room.players.set(playerId, player);
@@ -352,6 +364,56 @@ export class RoomManager {
       tasks: room.tasks,
       num_tasks: room.num_tasks,
     });
+
+    if (!room.isLoadTest) {
+      const authedUserIds = Array.from(room.players.values())
+        .map((p) => p.userId)
+        .filter((id): id is string => typeof id === 'string');
+      const playable = room.tasks.slice(0, room.num_tasks);
+      const taskHashes = playable
+        .map((t) => t.contentHash)
+        .filter((h): h is string => typeof h === 'string');
+      if (authedUserIds.length > 0 && taskHashes.length === playable.length) {
+        // Attempts completed before the games row exists are buffered here
+        // and flushed below, so a fast first completion is never lost.
+        room.pendingAttempts = [];
+        void upsertTasksOnFirstUse(playable)
+          .then(() =>
+            createGameSession({
+              playMode: room.isPublic ? 'quick_play' : 'private_match',
+              roomId,
+              taskHashes,
+              startedAt: new Date(now),
+              userIds: authedUserIds,
+            })
+          )
+          .then((gameId) => {
+            const buffered = room.pendingAttempts ?? [];
+            delete room.pendingAttempts;
+            if (gameId !== null) {
+              room.dbGameId = gameId;
+              for (const attempt of buffered) {
+                void insertTaskAttempt({
+                  ...attempt,
+                  gameId,
+                  keystrokeCount: null,
+                  keystrokes: null,
+                });
+              }
+            } else {
+              console.warn(
+                `[stats] game session not persisted for room ${roomId} (createGameSession returned null)`
+              );
+            }
+          });
+      } else {
+        console.warn(
+          `[stats] skipping game session for room ${roomId}: ` +
+            `authedUsers=${authedUserIds.length}/${room.players.size}, ` +
+            `taskHashes=${taskHashes.length}/${playable.length}`
+        );
+      }
+    }
   }
 
   handleTaskComplete(
@@ -470,6 +532,37 @@ export class RoomManager {
     player: Player,
     roomId: string
   ): void {
+    const completedTaskIndex = player.taskProgress;
+    const completedTask = room.tasks[completedTaskIndex];
+    const serverDurationMs =
+      player.taskStartedAt !== undefined
+        ? Date.now() - player.taskStartedAt
+        : null;
+    if (
+      player.userId &&
+      completedTask?.contentHash &&
+      serverDurationMs !== null &&
+      serverDurationMs > 0
+    ) {
+      const attempt = {
+        userId: player.userId,
+        taskHash: completedTask.contentHash,
+        playMode: room.isPublic ? 'quick_play' : 'private_match',
+        durationMs: serverDurationMs,
+      };
+      if (room.dbGameId !== undefined) {
+        void insertTaskAttempt({
+          ...attempt,
+          gameId: room.dbGameId,
+          keystrokeCount: null,
+          keystrokes: null,
+        });
+      } else if (room.pendingAttempts) {
+        // Game session creation is still in flight; flush happens in startRace.
+        room.pendingAttempts.push(attempt);
+      }
+    }
+
     const playerId = player.id;
     player.taskProgress += 1;
     player.taskStartedAt = Date.now();
@@ -549,6 +642,28 @@ export class RoomManager {
       `🏆 Race complete in room ${roomId} (${room.isPublic ? 'public' : 'private'}):`,
       rankings
     );
+
+    if (room.dbGameId !== undefined) {
+      const results = Array.from(room.players.values())
+        .filter(
+          (p): p is typeof p & { userId: string } =>
+            typeof p.userId === 'string'
+        )
+        .map((p) => ({
+          userId: p.userId,
+          position: p.isFinished
+            ? (rankings.find((r) => r.playerId === p.id)?.position ?? null)
+            : null,
+          totalTimeMs: p.finishTime ? Math.round(p.finishTime) : null,
+          finished: p.isFinished,
+          leftRace: p.leftRace === true,
+        }));
+      void finishGameSession({
+        gameId: room.dbGameId,
+        finishedAt: new Date(),
+        results,
+      });
+    }
 
     const ranksMap = room.isLoadTest
       ? new Map()
@@ -712,6 +827,10 @@ export class RoomManager {
     room.state = 'waiting';
     delete room.startTime;
     delete room.countdownStart;
+    // Forget the previous game's row so rematch attempts are never
+    // attributed to it; startRace creates a fresh session.
+    delete room.dbGameId;
+    delete room.pendingAttempts;
 
     console.log(`🔄 Room ${roomId} reset for new game`);
 

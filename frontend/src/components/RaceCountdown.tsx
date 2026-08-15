@@ -53,7 +53,10 @@ let audioUnlockListenersInstalled = false;
 
 function getOrCreateAudioContext(): AudioContext | null {
   if (sharedAudioContext) return sharedAudioContext;
-  const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const Ctx =
+    window.AudioContext ||
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
   if (!Ctx) return null;
   sharedAudioContext = new Ctx();
   return sharedAudioContext;
@@ -143,10 +146,7 @@ export const RaceCountdown: React.FC<RaceCountdownProps> = ({ seconds }) => {
       >
         {seconds === 0 ? 'GO!' : seconds}
       </div>
-      {seconds > 0 && (
-        <div style={styles.label}>Get Ready</div>
-      )}
+      {seconds > 0 && <div style={styles.label}>Get Ready</div>}
     </div>
   );
 };
-

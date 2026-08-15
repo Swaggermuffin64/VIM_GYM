@@ -21,6 +21,17 @@ export interface Player {
   userId?: string;
 }
 
+/**
+ * A completed task attempt waiting for the games row to be created.
+ * gameId is filled in when the pending game session resolves.
+ */
+export interface PendingTaskAttempt {
+  userId: string;
+  taskHash: string;
+  playMode: string;
+  durationMs: number;
+}
+
 export interface GameRoom {
   id: string;
   players: Map<string, Player>;
@@ -33,6 +44,11 @@ export interface GameRoom {
   countdownStart?: number;
   /** games.id row for this race; undefined until created / when stats skipped. */
   dbGameId?: number;
+  /**
+   * Attempts completed while createGameSession is still in flight.
+   * Present only during that window; flushed (or dropped) when it resolves.
+   */
+  pendingAttempts?: PendingTaskAttempt[];
 }
 
 // Client → Server Events

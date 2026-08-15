@@ -14,6 +14,7 @@ vi.mock('../taskPool.js', () => ({
       codeSnippet: 'abc\ndef',
       targetPosition: { line: 2, col: 1 },
       targetOffset: 5,
+      contentHash: `hash-${i}`,
     }))
   ),
 }));
@@ -30,6 +31,7 @@ vi.mock('../db/leaderboard.js', () => ({
 }));
 
 import { RoomManager } from './roomManager.js';
+import { createGameSession, insertTaskAttempt } from './../db/stats.js';
 
 type Emitted = { event: string; data: unknown };
 
@@ -82,6 +84,26 @@ function makeFakeIo() {
     },
     socketsLeave: vi.fn(),
   };
+}
+
+/**
+ * Drives a private room from creation through ready-up and countdown to a
+ * racing state with two authenticated players. Returns the sockets and roomId.
+ */
+async function startAuthedRace(manager: RoomManager) {
+  const s1 = makeFakeSocket('p1');
+  const s2 = makeFakeSocket('p2');
+  s1.data.userId = 'user-1';
+  s2.data.userId = 'user-2';
+  const room = await manager.createRoom(s1 as never, 'Alice');
+  const roomId = room!.id;
+  manager.joinRoom(s2 as never, roomId, 'Bob');
+  await manager.playerReadyToPlay(s1 as never);
+  await manager.playerReadyToPlay(s2 as never);
+  // Countdown interval ticks 3, 2, 1, 0 then starts the race.
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(room!.state).toBe('racing');
+  return { s1, s2, roomId };
 }
 
 describe('RoomManager lifecycle', () => {
@@ -165,6 +187,50 @@ describe('RoomManager lifecycle', () => {
     // Room is either destroyed immediately or after its cleanup timer
     vi.runAllTimers();
     expect(manager.getRoom(roomId)).toBeUndefined();
+  });
+
+  it('attributes task attempts completed before the game session resolves to the new game', async () => {
+    // createGameSession resolves only when we say so, simulating DB latency
+    // between game:start and the games row existing.
+    let resolveSession!: (gameId: number) => void;
+    vi.mocked(createGameSession).mockImplementation(
+      () => new Promise((resolve) => (resolveSession = resolve))
+    );
+
+    const { s1, roomId } = await startAuthedRace(manager);
+
+    // Player completes the first task while createGameSession is in flight.
+    vi.advanceTimersByTime(200); // past MIN_TASK_COMPLETION_MS
+    manager.handleTaskComplete(s1 as never, { offset: 5 });
+
+    // Session creation finishes after the completion.
+    resolveSession(42);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(insertTaskAttempt).toHaveBeenCalledTimes(1);
+    expect(insertTaskAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gameId: 42,
+        userId: 'user-1',
+        taskHash: 'hash-0',
+      })
+    );
+    expect(manager.getRoom(roomId)!.dbGameId).toBe(42);
+  });
+
+  it('resetRoom clears dbGameId so rematch attempts are not written to the previous game', async () => {
+    const s1 = makeFakeSocket('p1');
+    const s2 = makeFakeSocket('p2');
+    const room = await manager.createRoom(s1 as never, 'Alice');
+    manager.joinRoom(s2 as never, room!.id, 'Bob');
+
+    // Simulate a finished race whose games row was persisted.
+    room!.state = 'finished';
+    room!.dbGameId = 7;
+
+    await manager.resetRoom(s1 as never);
+
+    expect(room!.dbGameId).toBeUndefined();
   });
 
   it('destroys a private room that never starts within the waiting timeout', async () => {

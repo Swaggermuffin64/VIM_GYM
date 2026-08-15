@@ -374,6 +374,9 @@ export class RoomManager {
         .map((t) => t.contentHash)
         .filter((h): h is string => typeof h === 'string');
       if (authedUserIds.length > 0 && taskHashes.length === playable.length) {
+        // Attempts completed before the games row exists are buffered here
+        // and flushed below, so a fast first completion is never lost.
+        room.pendingAttempts = [];
         void upsertTasksOnFirstUse(playable)
           .then(() =>
             createGameSession({
@@ -385,8 +388,18 @@ export class RoomManager {
             })
           )
           .then((gameId) => {
+            const buffered = room.pendingAttempts ?? [];
+            delete room.pendingAttempts;
             if (gameId !== null) {
               room.dbGameId = gameId;
+              for (const attempt of buffered) {
+                void insertTaskAttempt({
+                  ...attempt,
+                  gameId,
+                  keystrokeCount: null,
+                  keystrokes: null,
+                });
+              }
             } else {
               console.warn(
                 `[stats] game session not persisted for room ${roomId} (createGameSession returned null)`
@@ -526,21 +539,28 @@ export class RoomManager {
         ? Date.now() - player.taskStartedAt
         : null;
     if (
-      room.dbGameId !== undefined &&
       player.userId &&
       completedTask?.contentHash &&
       serverDurationMs !== null &&
       serverDurationMs > 0
     ) {
-      void insertTaskAttempt({
+      const attempt = {
         userId: player.userId,
         taskHash: completedTask.contentHash,
-        gameId: room.dbGameId,
         playMode: room.isPublic ? 'quick_play' : 'private_match',
         durationMs: serverDurationMs,
-        keystrokeCount: null,
-        keystrokes: null,
-      });
+      };
+      if (room.dbGameId !== undefined) {
+        void insertTaskAttempt({
+          ...attempt,
+          gameId: room.dbGameId,
+          keystrokeCount: null,
+          keystrokes: null,
+        });
+      } else if (room.pendingAttempts) {
+        // Game session creation is still in flight; flush happens in startRace.
+        room.pendingAttempts.push(attempt);
+      }
     }
 
     const playerId = player.id;
@@ -807,6 +827,10 @@ export class RoomManager {
     room.state = 'waiting';
     delete room.startTime;
     delete room.countdownStart;
+    // Forget the previous game's row so rematch attempts are never
+    // attributed to it; startRace creates a fresh session.
+    delete room.dbGameId;
+    delete room.pendingAttempts;
 
     console.log(`🔄 Room ${roomId} reset for new game`);
 

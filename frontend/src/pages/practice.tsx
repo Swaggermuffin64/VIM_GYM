@@ -11,8 +11,12 @@ import type { CodeMirrorV } from '@replit/codemirror-vim';
 import { Transaction } from '@codemirror/state';
 
 import type { PracticeSummary, Task, TaskSummary } from '../types/task';
-import type { LeaderboardRanks } from '../types/multiplayer';
 import { submitPracticeSession } from '../api/leaderboard';
+import type {
+  RaceSessionConfig,
+  RaceSessionData,
+  RaceCompletionInfo,
+} from '../racing/raceSessionConfig';
 import { submitTaskKeystrokes as postTaskKeystrokes } from '../api/keystrokes';
 import { useAuth } from '../contexts/AuthContext';
 import type {
@@ -1169,7 +1173,17 @@ interface PracticeLocationState {
   tasks?: Task[];
 }
 
-const PracticeEditor: React.FC = () => {
+export interface RaceSessionPageProps {
+  config: RaceSessionConfig;
+  initialSession?: RaceSessionData;
+  autoStart?: boolean;
+}
+
+export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
+  config,
+  initialSession,
+  autoStart,
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const locationState = location.state as PracticeLocationState | null;
@@ -1209,8 +1223,8 @@ const PracticeEditor: React.FC = () => {
     if (typeof window === 'undefined') return false;
     return canDockCheatSheetForWidth(window.innerWidth);
   });
-  const [leaderboardRanks, setLeaderboardRanks] =
-    useState<LeaderboardRanks | null>(null);
+  const [completionInfo, setCompletionInfo] =
+    useState<RaceCompletionInfo | null>(null);
 
   // Current task derived from state
   const currentTask = tasks[taskProgress] || null;
@@ -1267,17 +1281,17 @@ const PracticeEditor: React.FC = () => {
     if (!accessToken) return;
 
     const duration_ms = Date.now() - sessionStartTime;
-    void submitPracticeSession({
-      accessToken,
-      durationMs: duration_ms,
-      tasks: taskList,
-      gameId: statsGameId,
-    }).then((result) => {
-      if (result.status === 'recorded') {
-        setLeaderboardRanks(result.ranks);
-      }
-    });
-  }, [isSessionComplete, sessionStartTime, session, statsGameId]);
+    void config
+      .submitCompletion({
+        accessToken,
+        durationMs: duration_ms,
+        tasks: taskList,
+        gameId: statsGameId,
+      })
+      .then((result) => {
+        setCompletionInfo(result);
+      });
+  }, [isSessionComplete, sessionStartTime, session, statsGameId, config]);
 
   useEffect(
     () => () => {
@@ -1371,7 +1385,7 @@ const PracticeEditor: React.FC = () => {
       const events = snapshot?.events ?? taskKeystrokesRef.current;
 
       const payload: TaskKeystrokeSubmission = {
-        source: 'practice',
+        source: config.mode,
         taskId: task.id,
         taskType: task.type,
         startedAt,
@@ -1388,7 +1402,7 @@ const PracticeEditor: React.FC = () => {
         ...(task.contentHash ? { taskHash: task.contentHash } : {}),
       });
     },
-    [statsGameId, session]
+    [statsGameId, session, config]
   );
 
   const handleTaskKeyStroke = useCallback(
@@ -1527,39 +1541,29 @@ const PracticeEditor: React.FC = () => {
     taskKeystrokesRef.current = [];
     submittedTaskIdsRef.current.clear();
     leaderboardSessionSubmittedRef.current = false;
-    setLeaderboardRanks(null);
+    setCompletionInfo(null);
     setRecentKeys([]);
     setTaskSummaries([]);
     setSummaryTaskCompletion({});
     setSummaryTaskResetTokens({});
   }, []);
 
-  // Fetch a new practice session (state only — task setup handled by effect)
-  const fetchPracticeSession = useCallback(async () => {
+  // Fetch a new session (state only — task setup handled by effect)
+  const fetchSession = useCallback(async () => {
     if (isFetchingPracticeSessionRef.current) return;
     isFetchingPracticeSessionRef.current = true;
     setIsLoadingTasks(true);
     setLoadError(null);
     try {
-      const accessToken = session?.access_token;
-      const headers: HeadersInit = accessToken
-        ? { Authorization: `Bearer ${accessToken}` }
-        : {};
-      const response = await fetch(`${API_BASE}/api/task/practice`, {
-        headers,
-      });
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-      const data = (await response.json()) as PracticeSessionResponse;
+      const data = await config.fetchSession(session?.access_token);
 
       skipLeaderboardRef.current = false;
-      setStatsGameId(data.gameId ?? null);
+      setStatsGameId(data.gameId);
       setTasks(data.tasks);
-      setNumTasks(data.numTasks);
+      setNumTasks(data.tasks.length);
       resetPracticeRunState();
     } catch (error) {
-      console.error('Failed to fetch practice session:', error);
+      console.error('Failed to fetch session:', error);
       setLoadError(
         error instanceof Error ? error.message : 'Failed to load tasks'
       );
@@ -1567,12 +1571,12 @@ const PracticeEditor: React.FC = () => {
       isFetchingPracticeSessionRef.current = false;
       setIsLoadingTasks(false);
     }
-  }, [resetPracticeRunState, session]);
+  }, [config, resetPracticeRunState, session]);
 
   const restartSameTasks = useCallback(() => {
     const sameTasks = tasksRef.current;
     if (sameTasks.length === 0) {
-      void fetchPracticeSession();
+      void fetchSession();
       return;
     }
 
@@ -1583,7 +1587,7 @@ const PracticeEditor: React.FC = () => {
     setupTaskInEditor(sameTasks[0]!);
     setSessionStartTime(Date.now());
     editorRef.current?.view?.focus();
-  }, [fetchPracticeSession, resetPracticeRunState, setupTaskInEditor]);
+  }, [fetchSession, resetPracticeRunState, setupTaskInEditor]);
 
   // Load pre-supplied tasks (e.g. from multiplayer review) on mount.
   // Bypasses the Ready screen and starts practice immediately.
@@ -1604,20 +1608,40 @@ const PracticeEditor: React.FC = () => {
     setIsReady(true);
   }, [locationState, resetPracticeRunState]);
 
-  // Prefetch practice tasks on page load so Ready can start immediately.
+  // Load tasks from the initialSession prop (e.g. daily mode).
+  // Unlike locationState (which sets skipLeaderboardRef=true for replays),
+  // initialSession runs DO submit and carry the session's gameId.
+  const initialSessionLoadedRef = useRef(false);
   useEffect(() => {
+    if (initialSessionLoadedRef.current) return;
+    if (!initialSession || initialSession.tasks.length === 0) return;
+    initialSessionLoadedRef.current = true;
+
+    skipLeaderboardRef.current = false;
+    setStatsGameId(initialSession.gameId);
+    setTasks(initialSession.tasks);
+    setNumTasks(initialSession.tasks.length);
+    resetPracticeRunState();
+    if (autoStart) {
+      setIsReady(true);
+    }
+  }, [initialSession, autoStart, resetPracticeRunState]);
+
+  // Prefetch tasks on page load so Ready can start immediately.
+  useEffect(() => {
+    if (initialSession) return;
     const incoming = locationState?.tasks;
     if (incoming && incoming.length > 0) return;
     if (tasks.length > 0) return;
-    void fetchPracticeSession();
-  }, [locationState, tasks.length, fetchPracticeSession]);
+    void fetchSession();
+  }, [initialSession, locationState, tasks.length, fetchSession]);
 
   // Trigger initial fetch when user clicks Ready (only if no preloaded tasks)
   useEffect(() => {
     if (isReady && tasks.length === 0) {
-      fetchPracticeSession();
+      fetchSession();
     }
-  }, [isReady, tasks.length, fetchPracticeSession]);
+  }, [isReady, tasks.length, fetchSession]);
 
   // Set up the first task when tasks are loaded (or reloaded on restart).
   // Also starts the session timer — the editor view only exists after the
@@ -1968,10 +1992,8 @@ const PracticeEditor: React.FC = () => {
           <div style={styles.bgGlow1} />
           <div style={styles.bgGlow2} />
           <div style={styles.readyContainer}>
-            <h1 style={styles.readyTitle}>Practice Mode</h1>
-            <p style={styles.readySubtitle}>
-              Learn and Hone your Vim skills solo.
-            </p>
+            <h1 style={styles.readyTitle}>{config.title}</h1>
+            <p style={styles.readySubtitle}>{config.subtitle}</p>
 
             <div style={styles.readyCard}>
               <div style={styles.readyCardTitle}>What to expect</div>
@@ -2037,7 +2059,7 @@ const PracticeEditor: React.FC = () => {
                 </div>
                 <button
                   style={styles.readyButton}
-                  onClick={() => void fetchPracticeSession()}
+                  onClick={() => void fetchSession()}
                   disabled={isLoadingTasks}
                 >
                   {isLoadingTasks ? 'Loading...' : 'Retry'}
@@ -2176,6 +2198,10 @@ const PracticeEditor: React.FC = () => {
               </div>
             </div>
             {(() => {
+              const leaderboardRanks =
+                completionInfo?.kind === 'practice'
+                  ? completionInfo.ranks
+                  : null;
               if (!leaderboardRanks) return null;
               const badges: Array<{ label: string; rank: number }> = [];
               if (leaderboardRanks.weekly != null)
@@ -2224,13 +2250,21 @@ const PracticeEditor: React.FC = () => {
                 </div>
               );
             })()}
+            {config.renderCompletionExtras?.(completionInfo)}
             <div style={styles.completeButtons}>
-              <button style={styles.completeButton} onClick={restartSameTasks}>
-                Restart Same Tasks
-              </button>
-              <button style={styles.homeButton} onClick={fetchPracticeSession}>
-                Restart
-              </button>
+              {config.allowSameTasksReplay && (
+                <button
+                  style={styles.completeButton}
+                  onClick={restartSameTasks}
+                >
+                  Restart Same Tasks
+                </button>
+              )}
+              {config.allowNewTasks && (
+                <button style={styles.homeButton} onClick={fetchSession}>
+                  Restart
+                </button>
+              )}
               <button style={styles.homeButton} onClick={() => navigate('/')}>
                 Home
               </button>
@@ -2585,39 +2619,43 @@ const PracticeEditor: React.FC = () => {
 
                 <div style={styles.sidebarControls}>
                   <div style={styles.sidebarActionsRow}>
-                    <button
-                      style={{
-                        ...styles.sidebarControlButton,
-                        ...styles.sidebarActionBase,
-                        ...(isNewTasksHovered
-                          ? styles.sidebarActionNewTasks
-                          : {}),
-                      }}
-                      onClick={fetchPracticeSession}
-                      onMouseEnter={() => setIsNewTasksHovered(true)}
-                      onMouseLeave={() => setIsNewTasksHovered(false)}
-                    >
-                      <span style={styles.sidebarControlButtonLabel}>
-                        New Tasks
-                      </span>
-                    </button>
+                    {config.allowNewTasks && (
+                      <button
+                        style={{
+                          ...styles.sidebarControlButton,
+                          ...styles.sidebarActionBase,
+                          ...(isNewTasksHovered
+                            ? styles.sidebarActionNewTasks
+                            : {}),
+                        }}
+                        onClick={fetchSession}
+                        onMouseEnter={() => setIsNewTasksHovered(true)}
+                        onMouseLeave={() => setIsNewTasksHovered(false)}
+                      >
+                        <span style={styles.sidebarControlButtonLabel}>
+                          New Tasks
+                        </span>
+                      </button>
+                    )}
 
-                    <button
-                      style={{
-                        ...styles.sidebarControlButton,
-                        ...styles.sidebarActionBase,
-                        ...(isSameTasksHovered
-                          ? styles.sidebarActionSameTasks
-                          : {}),
-                      }}
-                      onClick={restartSameTasks}
-                      onMouseEnter={() => setIsSameTasksHovered(true)}
-                      onMouseLeave={() => setIsSameTasksHovered(false)}
-                    >
-                      <span style={styles.sidebarControlButtonLabel}>
-                        Same Tasks
-                      </span>
-                    </button>
+                    {config.allowSameTasksReplay && (
+                      <button
+                        style={{
+                          ...styles.sidebarControlButton,
+                          ...styles.sidebarActionBase,
+                          ...(isSameTasksHovered
+                            ? styles.sidebarActionSameTasks
+                            : {}),
+                        }}
+                        onClick={restartSameTasks}
+                        onMouseEnter={() => setIsSameTasksHovered(true)}
+                        onMouseLeave={() => setIsSameTasksHovered(false)}
+                      >
+                        <span style={styles.sidebarControlButtonLabel}>
+                          Same Tasks
+                        </span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2628,5 +2666,44 @@ const PracticeEditor: React.FC = () => {
     </div>
   );
 };
+
+/**
+ * Practice mode = the race engine with random tasks and global-leaderboard
+ * submission. This wrapper is the /practice and /vim-editor route component.
+ */
+const practiceConfig: RaceSessionConfig = {
+  mode: 'practice',
+  title: 'Practice Mode',
+  subtitle: 'Learn and Hone your Vim skills solo.',
+  fetchSession: async (accessToken) => {
+    const headers: HeadersInit = accessToken
+      ? { Authorization: `Bearer ${accessToken}` }
+      : {};
+    const response = await fetch(`${API_BASE}/api/task/practice`, { headers });
+    if (!response.ok) {
+      throw new Error(`Server responded with ${response.status}`);
+    }
+    const data = (await response.json()) as PracticeSessionResponse;
+    return { tasks: data.tasks, gameId: data.gameId ?? null };
+  },
+  submitCompletion: async ({ accessToken, durationMs, tasks, gameId }) => {
+    if (!accessToken) return null;
+    const result = await submitPracticeSession({
+      accessToken,
+      durationMs,
+      tasks,
+      gameId,
+    });
+    return result.status === 'recorded'
+      ? { kind: 'practice', ranks: result.ranks }
+      : null;
+  },
+  allowNewTasks: true,
+  allowSameTasksReplay: true,
+};
+
+const PracticeEditor: React.FC = () => (
+  <RaceSessionPage config={practiceConfig} />
+);
 
 export default PracticeEditor;

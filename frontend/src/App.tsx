@@ -10,6 +10,7 @@ import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfService from './pages/terms';
 import ProfilePage from './pages/profile';
+import DailyRacePage from './pages/daily';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
 import './App.css';
@@ -322,6 +323,50 @@ function PlayHome() {
                 </div>
               </div>
             </Link>
+
+            {/* Race of the Day */}
+            <Link to="/daily" style={playStyles.cardLink}>
+              <div
+                style={playStyles.card}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform =
+                    'translateY(-6px) scale(1.02)';
+                  e.currentTarget.style.borderColor = colors.warning;
+                  e.currentTarget.style.boxShadow = `0 12px 40px ${colors.warning}30, inset 0 1px 0 rgba(255,255,255,0.1)`;
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow)
+                    glow.style.background = `linear-gradient(90deg, transparent, ${colors.warning}, transparent)`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.borderColor = colors.border;
+                  e.currentTarget.style.boxShadow = 'none';
+                  const glow = e.currentTarget.querySelector(
+                    '.card-glow'
+                  ) as HTMLElement;
+                  if (glow) glow.style.background = 'transparent';
+                }}
+              >
+                <div className="card-glow" style={playStyles.cardGlow} />
+                <div style={playStyles.cardTitle}>Race of the Day</div>
+                <div style={playStyles.cardDescription}>
+                  One shared task set per day. Three attempts. Settle it on the
+                  daily leaderboard.
+                </div>
+                <div
+                  style={{
+                    ...playStyles.badge,
+                    background: `${colors.warning}15`,
+                    color: colors.warning,
+                    border: `1px solid ${colors.warning}40`,
+                  }}
+                >
+                  Daily
+                </div>
+              </div>
+            </Link>
           </div>
 
           <div style={playStyles.leaderboardWrap}>
@@ -366,6 +411,14 @@ function App() {
           element={
             <AuthGuard>
               <PracticeEditor />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/daily"
+          element={
+            <AuthGuard>
+              <DailyRacePage />
             </AuthGuard>
           }
         />

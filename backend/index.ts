@@ -329,7 +329,7 @@ fastify.post<{
   } = request.body;
   let { gameId, taskHash } = request.body;
 
-  if (source !== 'practice' && source !== 'multiplayer') {
+  if (source !== 'practice' && source !== 'multiplayer' && source !== 'daily') {
     return { success: false, error: 'Invalid source' };
   }
 
@@ -432,14 +432,14 @@ fastify.post<{
     if (user) {
       const compacted = compactKeystrokes(eventsResult.value!);
       const count = eventsResult.value!.length;
-      if (source === 'practice') {
+      if (source === 'practice' || source === 'daily') {
         const durationMs = completedAt - startedAt;
         if (durationMs > 0) {
           void insertTaskAttempt({
             userId: user.id,
             taskHash,
             gameId,
-            playMode: 'practice',
+            playMode: source,
             durationMs,
             keystrokeCount: count,
             keystrokes: compacted,

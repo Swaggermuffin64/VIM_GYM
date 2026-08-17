@@ -170,7 +170,7 @@ export async function registerDailyRoutes(
       // Server-side timing validation (same validator as practice mode).
       const timing = validatePracticeSubmissionTiming({
         durationMs: duration_ms,
-        taskCount: 10,
+        taskCount: gameSession.taskCount,
         serverStartedAt: gameSession.startedAt.getTime(),
         now: Date.now(),
         alreadyFinished: gameSession.finishedAt !== null,
@@ -255,12 +255,12 @@ export async function registerDailyRoutes(
       return {
         success: true,
         race_date: raceDate,
-        entries: entries.map((e, index) => ({
+        entries: entries.map((e) => ({
           user_id: e.userId,
           display_name: e.displayName,
           avatar_url: e.avatarUrl,
           best_ms: e.bestMs,
-          rank: index + 1,
+          rank: e.rank,
         })),
       };
     }

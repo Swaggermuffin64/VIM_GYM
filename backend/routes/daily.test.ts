@@ -98,6 +98,7 @@ describe('POST /api/daily/attempt/complete', () => {
     vi.mocked(daily.getDailyGameForUser).mockResolvedValue({
       startedAt: new Date(Date.now() - 10_000), // server says ~10s elapsed
       finishedAt: null,
+      taskCount: 10,
     });
     const app = await buildServer();
     const res = await app.inject({
@@ -117,6 +118,7 @@ describe('POST /api/daily/attempt/complete', () => {
     vi.mocked(daily.getDailyGameForUser).mockResolvedValue({
       startedAt: new Date(Date.now() - 65_000),
       finishedAt: null,
+      taskCount: 10,
     });
     vi.mocked(daily.completeDailyAttempt).mockResolvedValue({
       attemptNumber: 1,

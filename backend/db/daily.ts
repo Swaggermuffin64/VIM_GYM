@@ -250,14 +250,20 @@ export async function attachGameToDailyAttempt(params: {
 /**
  * Looks up a daily game session that belongs to the given user, for
  * server-side timing validation. Same contract as getPracticeGameForUser
- * (db/stats.ts) but filters on play_mode = 'daily'.
+ * (db/stats.ts) but filters on play_mode = 'daily'. Also returns the
+ * game's task count so timing validation uses the actual number of tasks
+ * rather than a hardcoded constant.
  *
  * Returns null when no matching game exists, or when no pool is configured.
  */
 export async function getDailyGameForUser(
   gameId: number,
   userId: string
-): Promise<{ startedAt: Date; finishedAt: Date | null } | null> {
+): Promise<{
+  startedAt: Date;
+  finishedAt: Date | null;
+  taskCount: number;
+} | null> {
   const pool = getPool();
   if (!pool) {
     logSkip('getDailyGameForUser');
@@ -267,8 +273,9 @@ export async function getDailyGameForUser(
     const res = await pool.query<{
       started_at: Date;
       finished_at: Date | null;
+      task_count: string | null;
     }>(
-      `SELECT g.started_at, g.finished_at
+      `SELECT g.started_at, g.finished_at, array_length(g.task_hashes, 1) AS task_count
          FROM games g
          JOIN game_players gp ON gp.game_id = g.id
         WHERE g.id = $1 AND gp.user_id = $2 AND g.play_mode = 'daily'`,
@@ -276,7 +283,13 @@ export async function getDailyGameForUser(
     );
     const row = res.rows[0];
     if (!row) return null;
-    return { startedAt: row.started_at, finishedAt: row.finished_at };
+    return {
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      // Spec prescribes 10-task daily composition; fall back to 10 only if
+      // task_hashes is NULL (should not happen for valid game rows).
+      taskCount: row.task_count !== null ? Number(row.task_count) : 10,
+    };
   } catch (err) {
     logError('getDailyGameForUser', err);
     return null;
@@ -331,8 +344,9 @@ export async function completeDailyAttempt(params: {
 
 /**
  * Returns the top finishers for a given race date, ordered by best time.
- * Each entry includes the user's display name and avatar URL from the
- * profiles table. Returns an empty array on no pool or error.
+ * Each entry includes the user's display name, avatar URL from the
+ * profiles table, and a competition rank (ties share the same rank via
+ * SQL RANK()). Returns an empty array on no pool or error.
  *
  * Called by routes/daily.ts and routes/share.ts for the leaderboard view.
  */
@@ -345,6 +359,7 @@ export async function queryDailyLeaderboard(
     displayName: string;
     avatarUrl: string | null;
     bestMs: number;
+    rank: number;
   }>
 > {
   const pool = getPool();
@@ -358,11 +373,17 @@ export async function queryDailyLeaderboard(
       display_name: string;
       avatar_url: string | null;
       best_ms: string;
+      rank: string;
     }>(
-      `SELECT da.user_id, p.display_name, p.avatar_url, MIN(da.duration_ms) AS best_ms
-         FROM daily_attempts da JOIN profiles p ON p.id = da.user_id
-        WHERE da.race_date = $1 AND da.duration_ms IS NOT NULL
-        GROUP BY da.user_id, p.display_name, p.avatar_url
+      `SELECT user_id, display_name, avatar_url, best_ms,
+              RANK() OVER (ORDER BY best_ms ASC) AS rank
+         FROM (
+           SELECT da.user_id, p.display_name, p.avatar_url,
+                  MIN(da.duration_ms) AS best_ms
+             FROM daily_attempts da JOIN profiles p ON p.id = da.user_id
+            WHERE da.race_date = $1 AND da.duration_ms IS NOT NULL
+            GROUP BY da.user_id, p.display_name, p.avatar_url
+         ) sub
         ORDER BY best_ms ASC
         LIMIT $2`,
       [raceDate, limit]
@@ -372,6 +393,7 @@ export async function queryDailyLeaderboard(
       displayName: r.display_name,
       avatarUrl: r.avatar_url,
       bestMs: Number(r.best_ms),
+      rank: Number(r.rank),
     }));
   } catch (err) {
     logError('queryDailyLeaderboard', err);

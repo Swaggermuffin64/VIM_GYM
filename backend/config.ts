@@ -45,3 +45,11 @@ if (SUPABASE_JWT_SECRET && !SUPABASE_URL) {
  */
 export const HEALTH_METRICS_TOKEN =
   process.env.HEALTH_METRICS_TOKEN?.trim() || undefined;
+
+/**
+ * Public origin that share URLs are minted under. The Vercel frontend rewrites
+ * `/s/*` from this origin to the backend's share endpoint, so the links look
+ * like they belong to the main app domain.
+ */
+export const SHARE_LINK_BASE_URL =
+  process.env.SHARE_LINK_BASE_URL?.trim() || 'https://vimgym.app';

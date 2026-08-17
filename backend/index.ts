@@ -61,6 +61,7 @@ import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
 import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
 import { registerDailyRoutes } from './routes/daily.js';
+import { registerShareRoutes } from './routes/share.js';
 import { isAuthorizedForHealthMetrics } from './health/healthMetrics.js';
 import {
   validatePlayerName,
@@ -834,6 +835,9 @@ fastify.get('/api/task/practice', async (request) => {
 
 // Daily race routes (Race of the Day)
 await fastify.register(registerDailyRoutes);
+
+// Public share unfurl page and challenge endpoint (unauthenticated)
+await fastify.register(registerShareRoutes);
 
 // Memory-aware health check for Fly.io auto-restart
 const MEMORY_LIMIT_MB = 200;

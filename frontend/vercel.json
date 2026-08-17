@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/s/:slug",
+      "destination": "https://vim-racing-server.fly.dev/s/:slug"
+    }
+  ]
+}

@@ -1,14 +1,20 @@
-import React from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
+import { fetchChallenge, type ChallengeInfo } from '../api/daily';
+import {
+  stashChallengeSlug,
+  consumePostAuthDestination,
+} from '../lib/challengeRedirect';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: '100vh',
     background: '#000000',
     display: 'flex',
+    flexDirection: 'column' as const,
     alignItems: 'center',
     justifyContent: 'center',
     fontFamily: '"JetBrains Mono", monospace',
@@ -190,12 +196,56 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textPrimary,
     textDecoration: 'underline',
   },
+  // Challenge taunt banner sits above the login card to hook users arriving
+  // from a daily-race share link.
+  tauntBanner: {
+    width: '100%',
+    maxWidth: '860px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '12px',
+    padding: '20px 28px',
+    marginBottom: '16px',
+    background: colors.bgDark,
+    position: 'relative' as const,
+    zIndex: 1,
+    textAlign: 'center' as const,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  tauntHeadline: {
+    fontSize: '16px',
+    color: colors.textPrimary,
+    margin: '0 0 6px',
+    lineHeight: 1.5,
+  },
+  tauntDetail: {
+    fontSize: '13px',
+    color: colors.textSecondary,
+    margin: 0,
+    lineHeight: 1.5,
+  },
 };
 
+/**
+ * Login page. When the URL contains a `?challenge=<slug>` query param, the
+ * page stashes the slug in sessionStorage (before the async fetch resolves,
+ * since OAuth can redirect at any time) and fetches the challenger's info to
+ * render a taunt banner above the sign-in card.
+ */
 export default function Login() {
   const { session } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [challenge, setChallenge] = useState<ChallengeInfo | null>(null);
 
-  if (session) return <Navigate to="/" replace />;
+  useEffect(() => {
+    const slug = searchParams.get('challenge');
+    if (!slug || !/^[0-9A-Za-z]{10}$/.test(slug)) return;
+
+    // Stash BEFORE the async fetch -- OAuth redirect can fire any time
+    stashChallengeSlug(slug);
+    fetchChallenge(slug).then(setChallenge);
+  }, [searchParams]);
+
+  if (session) return <Navigate to={consumePostAuthDestination()} replace />;
 
   const signIn = (provider: 'github' | 'google') => {
     supabase.auth.signInWithOAuth({
@@ -208,6 +258,20 @@ export default function Login() {
     <div style={styles.container}>
       <div style={styles.bgGlow1} aria-hidden="true" />
       <div style={styles.bgGlow2} aria-hidden="true" />
+
+      {challenge && (
+        <div style={styles.tauntBanner} role="status">
+          <p style={styles.tauntHeadline}>
+            <strong>{challenge.displayName}</strong> thinks they&#39;re better
+            than you. <em>(at vim.)</em>
+          </p>
+          <p style={styles.tauntDetail}>
+            They placed #{challenge.rank} of {challenge.totalRacers} in
+            today&#39;s daily race. Sign in and put them in their place.
+          </p>
+        </div>
+      )}
+
       <div className="login-card" style={styles.card}>
         {/* Left — branding */}
         <div className="login-card-left" style={styles.leftPanel}>

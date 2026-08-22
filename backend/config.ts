@@ -47,6 +47,13 @@ export const HEALTH_METRICS_TOKEN =
   process.env.HEALTH_METRICS_TOKEN?.trim() || undefined;
 
 /**
+ * When 'true', the backend eagerly creates today's daily race at startup.
+ * Set only in the production fly.toml: local dev shares the production
+ * database, and a dev restart must never pick the day's task set.
+ */
+export const DAILY_EAGER_CREATE = process.env.DAILY_EAGER_CREATE === 'true';
+
+/**
  * Public origin that share URLs are minted under. The Vercel frontend rewrites
  * `/s/*` from this origin to the backend's share endpoint, so the links look
  * like they belong to the main app domain.

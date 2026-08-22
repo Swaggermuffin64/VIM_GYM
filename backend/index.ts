@@ -24,7 +24,13 @@ import type {
   SocketData,
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
-import { BACKEND_PORT, CORS_ORIGINS, HEALTH_METRICS_TOKEN } from './config.js';
+import {
+  BACKEND_PORT,
+  CORS_ORIGINS,
+  DAILY_EAGER_CREATE,
+  HEALTH_METRICS_TOKEN,
+} from './config.js';
+import { eagerlyCreateTodaysDailyRace } from './daily/eagerDailyRaceCreation.js';
 import { dbHealthCheck } from './db/pool.js';
 import {
   insertSessionLeaderboardRow,
@@ -908,6 +914,11 @@ await Promise.race([
 
 // Start Fastify first, then attach Socket.IO
 await fastify.listen({ port: BACKEND_PORT, host: '0.0.0.0' });
+
+// The task cache is ready (awaited above), so the daily-restart at 0:00 UTC
+// makes this the creator of each day's race. Fire-and-forget: lazy creation
+// in routes/daily.ts covers any failure.
+void eagerlyCreateTodaysDailyRace(DAILY_EAGER_CREATE);
 
 // Now attach Socket.IO to the Fastify server
 const io = new Server<

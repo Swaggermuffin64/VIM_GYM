@@ -2,7 +2,9 @@ name: Daily Restart
 
 on:
   schedule:
-    - cron: '0 8 * * *' # 8:00 AM UTC daily
+    # Midnight UTC, right at the daily-race rollover: the restarted backend
+    # eagerly creates the new day's race on boot (DAILY_EAGER_CREATE in fly.toml).
+    - cron: '0 0 * * *'
 
   workflow_dispatch: # allow manual trigger from GitHub UI
 

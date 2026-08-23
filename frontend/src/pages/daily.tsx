@@ -262,7 +262,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   backArrow: {
     padding: 0,
-    fontSize: '26px',
+    // The arrow glyph sits small in its em box; oversizing the font makes
+    // its visual height match the 20px date text beside it.
+    fontSize: '34px',
+    fontWeight: 800,
     lineHeight: 1,
     background: 'transparent',
     border: 'none',

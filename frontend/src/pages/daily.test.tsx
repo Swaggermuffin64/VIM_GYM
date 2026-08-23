@@ -265,6 +265,91 @@ describe('DailyRacePage', () => {
     expect(screen.queryByTestId('race-session')).toBeNull();
   });
 
+  // Flex (share) button on the pre-race screen.
+  it('hides the flex button before any finished attempt', async () => {
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
+
+    expect(screen.queryByText(/Flex on people/i)).toBeNull();
+  });
+
+  it('shows the flex button once a time is on the board, and copies the share link on click', async () => {
+    mockFetchDailyRace.mockResolvedValue({
+      status: 'ok',
+      info: makeInfo({
+        attempts: [{ attemptNumber: 1, durationMs: 41200 }],
+        attemptsRemaining: 2,
+        bestMs: 41200,
+      }),
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const flexBtn = await screen.findByText(/Flex on people/i);
+
+    await act(async () => {
+      flexBtn.click();
+    });
+
+    expect(mockCreateDailyShareLink).toHaveBeenCalledWith('tok');
+    expect(writeText).toHaveBeenCalledWith('https://vim.gym/c/abc');
+    expect(await screen.findByText(/Link copied/i)).toBeTruthy();
+  });
+
+  it('keeps the flex button available when out of attempts', async () => {
+    mockFetchDailyRace.mockResolvedValue({
+      status: 'ok',
+      info: makeInfo({
+        attempts: [
+          { attemptNumber: 1, durationMs: 41200 },
+          { attemptNumber: 2, durationMs: 40000 },
+          { attemptNumber: 3, durationMs: 42000 },
+        ],
+        attemptsRemaining: 0,
+        bestMs: 40000,
+      }),
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText(/Come back tomorrow/i)).toBeTruthy();
+
+    expect(screen.getByText(/Flex on people/i)).toBeTruthy();
+  });
+
+  // Leaderboard rail header shows the racer count.
+  it('shows the racer count in the leaderboard header', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue([
+      {
+        rank: 1,
+        userId: 'other-1',
+        displayName: 'speedster',
+        avatarUrl: null,
+        bestMs: 3000,
+      },
+      {
+        rank: 2,
+        userId: 'me-123',
+        displayName: 'testuser',
+        avatarUrl: null,
+        bestMs: 5000,
+      },
+    ]);
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
+    expect(screen.getByText(/2 racers/i)).toBeTruthy();
+  });
+
   // 6. Leaderboard renders entries with the signed-in user's row highlighted.
   it('renders leaderboard with signed-in user row highlighted', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue([

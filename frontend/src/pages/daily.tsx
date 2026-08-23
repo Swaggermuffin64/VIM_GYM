@@ -123,38 +123,58 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
   container: {
-    maxWidth: '640px',
+    maxWidth: '1040px',
     width: '100%',
     margin: '0 auto',
     padding: '48px 32px',
     position: 'relative',
     zIndex: 1,
   },
+  // Split-stage layout: race card left, leaderboard rail right.
+  split: {
+    display: 'grid',
+    gridTemplateColumns: '1.4fr 1fr',
+    gap: '28px',
+    alignItems: 'stretch',
+  },
+  stage: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    gap: '18px',
+    padding: '24px 0',
+  },
   dateHeader: {
-    fontSize: '14px',
+    fontSize: '13px',
     color: colors.textMuted,
     fontFamily: '"JetBrains Mono", monospace',
     textTransform: 'uppercase',
-    letterSpacing: '1.5px',
-    marginBottom: '8px',
-    textAlign: 'center',
+    letterSpacing: '2px',
   },
   title: {
-    fontSize: '36px',
+    fontSize: '42px',
     fontWeight: 800,
     color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-    letterSpacing: '-1px',
-    marginBottom: '32px',
-    textAlign: 'center',
+    letterSpacing: '-1.5px',
+    lineHeight: 1.1,
     textShadow: `0 0 20px ${colors.primaryGlow}`,
   },
-  attemptDots: {
+  metaRow: {
     display: 'flex',
-    gap: '10px',
-    justifyContent: 'center',
-    marginBottom: '20px',
-    fontSize: '22px',
+    alignItems: 'center',
+    gap: '16px',
+    flexWrap: 'wrap',
+  },
+  metaText: {
+    fontSize: '13px',
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  attemptDots: {
+    display: 'inline-flex',
+    gap: '8px',
+    fontSize: '18px',
     fontFamily: '"JetBrains Mono", monospace',
   },
   dotUsed: {
@@ -164,14 +184,39 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textMuted,
   },
   bestTime: {
-    fontSize: '15px',
-    color: colors.primaryLight,
+    fontSize: '13px',
+    color: colors.successLight,
     fontFamily: '"JetBrains Mono", monospace',
-    textAlign: 'center',
-    marginBottom: '20px',
+  },
+  buttonRow: {
+    display: 'flex',
+    gap: '12px',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  subLine: {
+    fontSize: '12px',
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  flexButton: {
+    padding: '16px 26px',
+    fontSize: '15px',
+    fontWeight: 700,
+    letterSpacing: '0.5px',
+    color: colors.secondaryLight,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+    borderRadius: '10px',
+    // Gradient border: dark body painted over a magenta→amber border layer.
+    background: `linear-gradient(${colors.bgCard}, ${colors.bgCard}) padding-box, linear-gradient(135deg, ${colors.secondary}, ${colors.warning}) border-box`,
+    border: '2px solid transparent',
+    boxShadow: `0 0 22px ${colors.secondaryGlow}`,
+    position: 'relative',
+    overflow: 'hidden',
+    transition: 'all 0.2s ease',
   },
   startButton: {
-    width: '100%',
     padding: '18px 24px',
     fontSize: '17px',
     fontWeight: 600,
@@ -184,22 +229,17 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
     letterSpacing: '0.5px',
     boxShadow: `0 0 20px ${colors.primaryGlow}`,
-    marginBottom: '12px',
   },
   disabledMessage: {
     fontSize: '18px',
     fontWeight: 600,
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
-    textAlign: 'center',
-    marginBottom: '8px',
   },
   countdown: {
     fontSize: '14px',
     color: colors.textMuted,
     fontFamily: '"JetBrains Mono", monospace',
-    textAlign: 'center',
-    marginBottom: '24px',
   },
   countdownTime: {
     color: colors.warning,
@@ -208,9 +248,9 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '2px',
   },
   backButton: {
-    width: '100%',
-    padding: '16px 24px',
-    fontSize: '15px',
+    width: 'fit-content',
+    padding: '10px 22px',
+    fontSize: '13px',
     fontWeight: 500,
     background: 'transparent',
     border: `1px solid ${colors.border}`,
@@ -220,19 +260,34 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
     transition: 'all 0.2s ease',
   },
-  // Leaderboard
-  leaderboardSection: {
-    marginTop: '32px',
+  // Leaderboard rail (right column)
+  rail: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.border}`,
     borderRadius: '12px',
     padding: '20px',
+    maxHeight: '520px',
+    overflowY: 'auto',
+    alignSelf: 'start',
+    width: '100%',
+  },
+  railHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    borderBottom: `1px solid ${colors.border}`,
+    paddingBottom: '12px',
+    marginBottom: '10px',
+  },
+  railCount: {
+    fontSize: '12px',
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
   },
   leaderboardTitle: {
     fontSize: '13px',
     fontWeight: 700,
-    color: colors.textMuted,
-    marginBottom: '16px',
+    color: colors.secondaryLight,
     textTransform: 'uppercase',
     letterSpacing: '1.5px',
     fontFamily: '"JetBrains Mono", monospace',
@@ -574,49 +629,74 @@ function PreRaceScreen({
   const outOfAttempts = info.attemptsRemaining === 0;
 
   return (
-    <>
-      <div style={styles.dateHeader}>{info.raceDate}</div>
-      <div style={styles.title}>Race of the Day</div>
+    <div className="daily-split" style={styles.split}>
+      {/* Left: the race stage */}
+      <div style={styles.stage}>
+        <div style={styles.dateHeader}>{info.raceDate} — UTC daily</div>
+        <div style={styles.title}>Race of the Day</div>
 
-      {/* Attempt dots */}
-      <div
-        style={styles.attemptDots}
-        aria-label={`${usedCount} of ${totalSlots} attempts used`}
-      >
-        {Array.from({ length: totalSlots }, (_, i) => (
-          <span key={i} style={i < usedCount ? styles.dotUsed : styles.dotFree}>
-            {i < usedCount ? '●' : '○'}
+        {/* Attempts + best time meta row */}
+        <div style={styles.metaRow}>
+          <span
+            style={styles.attemptDots}
+            aria-label={`${usedCount} of ${totalSlots} attempts used`}
+          >
+            {Array.from({ length: totalSlots }, (_, i) => (
+              <span
+                key={i}
+                style={i < usedCount ? styles.dotUsed : styles.dotFree}
+              >
+                {i < usedCount ? '●' : '○'}
+              </span>
+            ))}
           </span>
-        ))}
+          <span style={styles.metaText}>
+            {usedCount} of {totalSlots} attempts used
+          </span>
+          {info.bestMs != null && (
+            <span style={styles.bestTime}>best {formatTime(info.bestMs)}</span>
+          )}
+        </div>
+
+        {/* Out-of-attempts message and countdown */}
+        {outOfAttempts && (
+          <>
+            <div style={styles.disabledMessage}>Come back tomorrow</div>
+            <div style={styles.countdown}>
+              <span>New race in </span>
+              <span style={styles.countdownTime}>{countdown}</span>
+            </div>
+          </>
+        )}
+
+        {/* Actions: start (while attempts remain) + flex (once a time exists) */}
+        <div style={styles.buttonRow}>
+          {!outOfAttempts && (
+            <button style={styles.startButton} onClick={onStart}>
+              Start attempt {usedCount + 1} of {totalSlots}
+            </button>
+          )}
+          {info.bestMs != null && <FlexShareButton />}
+        </div>
+
+        <div style={styles.subLine}>
+          {info.tasks.length} tasks · same set for everyone · resets at midnight
+          UTC
+        </div>
+
+        <button style={styles.backButton} onClick={onBack}>
+          Back
+        </button>
       </div>
 
-      {/* Best time so far */}
-      {info.bestMs != null && (
-        <div style={styles.bestTime}>Best: {formatTime(info.bestMs)}</div>
-      )}
-
-      {/* Start button or out-of-attempts message */}
-      {outOfAttempts ? (
-        <>
-          <div style={styles.disabledMessage}>Come back tomorrow</div>
-          <div style={styles.countdown}>
-            <span>New race in </span>
-            <span style={styles.countdownTime}>{countdown}</span>
-          </div>
-        </>
-      ) : (
-        <button style={styles.startButton} onClick={onStart}>
-          Start attempt {usedCount + 1} of {totalSlots}
-        </button>
-      )}
-
-      <button style={styles.backButton} onClick={onBack}>
-        Back
-      </button>
-
-      {/* Leaderboard */}
-      <div style={styles.leaderboardSection}>
-        <div style={styles.leaderboardTitle}>Today&apos;s Leaderboard</div>
+      {/* Right: leaderboard rail */}
+      <aside style={styles.rail}>
+        <div style={styles.railHead}>
+          <span style={styles.leaderboardTitle}>Today&apos;s board</span>
+          <span style={styles.railCount}>
+            {leaderboard.length} racer{leaderboard.length === 1 ? '' : 's'}
+          </span>
+        </div>
         {leaderboard.length === 0 ? (
           <div style={styles.leaderboardEmpty}>No entries yet</div>
         ) : (
@@ -640,8 +720,50 @@ function PreRaceScreen({
             );
           })
         )}
-      </div>
-    </>
+      </aside>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Flex (share) button
+// ---------------------------------------------------------------------------
+
+/**
+ * The pre-race share button: mints (or fetches) today's share link and
+ * copies it to the clipboard. Rendered once the user has a finished time.
+ * Styled as the anti-CTA: dark body, magenta/amber gradient border.
+ */
+function FlexShareButton() {
+  const { session } = useAuth();
+  const [label, setLabel] = useState('Flex on people ⚑');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleFlex = async () => {
+    if (!session?.access_token) return;
+    const result = await createDailyShareLink(session.access_token);
+    if (result.status === 'ok') {
+      void navigator.clipboard.writeText(result.url);
+      setLabel('Link copied. Go ruin a friendship.');
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setLabel('Flex on people ⚑'), 3000);
+    }
+  };
+
+  return (
+    <button
+      className="daily-flex-btn"
+      style={styles.flexButton}
+      onClick={handleFlex}
+    >
+      {label}
+    </button>
   );
 }
 

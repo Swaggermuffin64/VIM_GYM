@@ -77,6 +77,51 @@ code {
   }
 }
 
+/* Daily page: stack the race stage and leaderboard rail when the viewport
+   is too narrow for side-by-side. Mobile <=768px is covered by the overlay;
+   this handles the narrow-window band above it. !important beats the grid's
+   inline styles. */
+@media (max-width: 900px) {
+  .daily-split {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Flex button sheen: a highlight sweeps across every ~3s. The gradient
+   border itself is inline (daily.tsx); only the pseudo-element lives here. */
+.daily-flex-btn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 40%;
+  background: linear-gradient(
+    105deg,
+    transparent,
+    rgba(244, 114, 182, 0.25),
+    transparent
+  );
+  animation: daily-flex-sheen 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes daily-flex-sheen {
+  0%,
+  55% {
+    left: -60%;
+  }
+  100% {
+    left: 120%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daily-flex-btn::after {
+    animation: none;
+  }
+}
+
 /* Mobile overlay */
 #mobile-overlay {
   display: none;

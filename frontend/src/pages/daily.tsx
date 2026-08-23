@@ -255,9 +255,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '18px',
     letterSpacing: '2px',
   },
+  // Baseline alignment: the oversized arrow glyph and the date share a text
+  // baseline, which lines them up better than box-centering.
   dateRow: {
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'baseline',
     gap: '14px',
   },
   backArrow: {

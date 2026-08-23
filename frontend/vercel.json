@@ -3,6 +3,10 @@
     {
       "source": "/s/:slug",
       "destination": "https://vim-racing-server.fly.dev/s/:slug"
+    },
+    {
+      "source": "/s/:slug/og.png",
+      "destination": "https://vim-racing-server.fly.dev/s/:slug/og.png"
     }
   ]
 }

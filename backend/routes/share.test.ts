@@ -72,6 +72,70 @@ describe('GET /s/:slug', () => {
   });
 });
 
+describe('GET /s/:slug og:image tags', () => {
+  it('references the dynamic card image with large-card treatment', async () => {
+    vi.mocked(daily.getShareInfo).mockResolvedValue({
+      userId: 'u1',
+      displayName: 'Jackson',
+      raceDate: '2026-08-16',
+    });
+    vi.mocked(daily.queryDailyPlacing).mockResolvedValue({
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+    });
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/s/a1B2c3D4e5' });
+
+    expect(res.body).toContain('/s/a1B2c3D4e5/og.png');
+    expect(res.body).toContain('og:image:width" content="1200"');
+    expect(res.body).toContain('og:image:height" content="630"');
+    expect(res.body).toContain('summary_large_image');
+    expect(res.body).toContain('name="description"');
+    expect(res.body).toContain('og:locale');
+  });
+});
+
+describe('GET /s/:slug/og.png', () => {
+  it('serves a rendered PNG card for a valid slug', async () => {
+    vi.mocked(daily.getShareInfo).mockResolvedValue({
+      userId: 'u1',
+      displayName: 'Jackson',
+      raceDate: '2026-08-16',
+    });
+    vi.mocked(daily.queryDailyPlacing).mockResolvedValue({
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+    });
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/s/a1B2c3D4e5/og.png',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe('image/png');
+    expect(res.rawPayload.subarray(0, 4)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47])
+    );
+  });
+
+  it('404s on malformed and unknown slugs', async () => {
+    vi.mocked(daily.getShareInfo).mockResolvedValue(null);
+    const app = await buildServer();
+
+    const bad = await app.inject({ method: 'GET', url: '/s/nope!/og.png' });
+    expect(bad.statusCode).toBe(404);
+
+    const unknown = await app.inject({
+      method: 'GET',
+      url: '/s/a1B2c3D4e5/og.png',
+    });
+    expect(unknown.statusCode).toBe(404);
+  });
+});
+
 describe('GET /api/challenge/:slug', () => {
   it('returns only name, placing, and date', async () => {
     vi.mocked(daily.getShareInfo).mockResolvedValue({

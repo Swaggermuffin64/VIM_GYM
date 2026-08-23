@@ -14,6 +14,7 @@
 import type { FastifyInstance } from 'fastify';
 import { getShareInfo, queryDailyPlacing } from '../db/daily.js';
 import { SHARE_LINK_BASE_URL } from '../config.js';
+import { buildShareCardSvg, renderShareCardPng } from '../share/ogImage.js';
 
 /** Regex for valid share slugs: exactly 10 base62 characters. */
 const SLUG_PATTERN = /^[0-9A-Za-z]{10}$/;
@@ -104,18 +105,25 @@ export async function registerShareRoutes(
       const title = `${name} placed #${rank} of ${total} in today's VIMGYM daily`;
       const description = `${name} thinks they're better than you. (at vim.) Race today's daily and prove them wrong.`;
       const target = `${SHARE_LINK_BASE_URL}/login?challenge=${slug}`;
+      const imageUrl = `${SHARE_LINK_BASE_URL}/s/${slug}/og.png`;
 
       const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}">
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="${escapeHtml(`${SHARE_LINK_BASE_URL}/s/${slug}`)}">
 <meta property="og:site_name" content="VIMGYM">
-<meta name="twitter:card" content="summary">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="${escapeHtml(imageUrl)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${escapeHtml(imageUrl)}">
 <meta http-equiv="refresh" content="0;url=${escapeHtml(target)}">
 </head>
 <body>
@@ -125,6 +133,45 @@ export async function registerShareRoutes(
 </html>`;
 
       return reply.type('text/html; charset=utf-8').send(html);
+    }
+  );
+
+  /**
+   * GET /s/:slug/og.png — dynamic share-card image.
+   *
+   * The og:image referenced by the unfurl page above: the sharer's name,
+   * placing, and best time rendered onto a branded 1200x630 PNG. Cached
+   * briefly since a better attempt later in the day changes the placing.
+   */
+  fastify.get<{ Params: { slug: string } }>(
+    '/s/:slug/og.png',
+    async (request, reply) => {
+      const { slug } = request.params;
+
+      if (!SLUG_PATTERN.test(slug)) {
+        return reply.status(404).send();
+      }
+
+      const info = await getShareInfo(slug);
+      if (!info) return reply.status(404).send();
+
+      const placing = await queryDailyPlacing(info.userId, info.raceDate);
+      if (!placing) return reply.status(404).send();
+
+      const png = await renderShareCardPng(
+        buildShareCardSvg({
+          displayName: info.displayName,
+          rank: placing.rank,
+          totalRacers: placing.totalRacers,
+          bestMs: placing.bestMs,
+          raceDate: info.raceDate,
+        })
+      );
+
+      return reply
+        .type('image/png')
+        .header('Cache-Control', 'public, max-age=300')
+        .send(png);
     }
   );
 

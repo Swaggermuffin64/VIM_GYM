@@ -21,6 +21,10 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
+# Fonts for the share-card SVG rasterization (share/ogImage.ts): librsvg
+# renders text via fontconfig, and the bare Alpine image ships no fonts.
+RUN apk add --no-cache fontconfig ttf-dejavu
+
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001

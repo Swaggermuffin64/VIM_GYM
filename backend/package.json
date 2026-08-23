@@ -26,6 +26,7 @@
     "obscenity": "^0.4.6",
     "pg": "^8.13.1",
     "piscina": "^5.1.4",
+    "sharp": "^0.35.3",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {

@@ -146,11 +146,11 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '24px 0',
   },
   dateHeader: {
-    fontSize: '13px',
-    color: colors.textMuted,
+    fontSize: '18px',
+    fontWeight: 700,
+    color: colors.primaryLight,
     fontFamily: '"JetBrains Mono", monospace',
-    textTransform: 'uppercase',
-    letterSpacing: '2px',
+    letterSpacing: '3px',
   },
   title: {
     fontSize: '42px',
@@ -633,7 +633,7 @@ function PreRaceScreen({
     <div className="daily-split" style={styles.split}>
       {/* Left: the race stage */}
       <div style={styles.stage}>
-        <div style={styles.dateHeader}>{info.raceDate} — UTC daily</div>
+        <div style={styles.dateHeader}>{info.raceDate}</div>
         <div style={styles.title}>Race of the Day</div>
 
         {/* Attempts + best time meta row */}

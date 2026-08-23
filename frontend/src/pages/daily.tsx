@@ -120,6 +120,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
     position: 'relative',
   },
   container: {
@@ -268,7 +269,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '20px',
     maxHeight: '520px',
     overflowY: 'auto',
-    alignSelf: 'start',
+    alignSelf: 'center',
     width: '100%',
   },
   railHead: {

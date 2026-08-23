@@ -255,14 +255,18 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '18px',
     letterSpacing: '2px',
   },
-  backButton: {
-    width: 'fit-content',
-    padding: '10px 22px',
-    fontSize: '13px',
-    fontWeight: 500,
+  dateRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+  },
+  backArrow: {
+    padding: '4px 10px',
+    fontSize: '18px',
+    lineHeight: 1,
     background: 'transparent',
     border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
+    borderRadius: '8px',
     color: colors.textMuted,
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
@@ -640,7 +644,12 @@ function PreRaceScreen({
     <div className="daily-split" style={styles.split}>
       {/* Left: the race stage */}
       <div style={styles.stage}>
-        <div style={styles.dateHeader}>{info.raceDate}</div>
+        <div style={styles.dateRow}>
+          <button style={styles.backArrow} onClick={onBack} aria-label="Back">
+            ←
+          </button>
+          <span style={styles.dateHeader}>{info.raceDate}</span>
+        </div>
         <div style={styles.title}>Race of the Day</div>
 
         {/* Attempts + best time meta row */}
@@ -691,10 +700,6 @@ function PreRaceScreen({
           {info.tasks.length} tasks · same set for everyone · resets at midnight
           UTC
         </div>
-
-        <button style={styles.backButton} onClick={onBack}>
-          Back
-        </button>
       </div>
 
       {/* Right: leaderboard rail */}

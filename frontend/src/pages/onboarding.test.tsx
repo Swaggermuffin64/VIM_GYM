@@ -171,6 +171,44 @@ describe('onboarding completion', () => {
     await waitFor(() => expect(screen.getByText('DAILY')).toBeTruthy());
   });
 
+  it('shows the taken-name error and stays on onboarding on a 409', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/user/me')) {
+        return jsonResponse({
+          success: true,
+          profile: {
+            id: 'u1',
+            display_name: 'placeholder',
+            avatar_url: null,
+            is_premium: false,
+            has_completed_onboarding: false,
+          },
+        });
+      }
+      if (
+        String(url).endsWith('/api/user/profile') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse(
+          { success: false, error: 'That name is taken — try another' },
+          409
+        );
+      }
+      throw new Error(`unexpected fetch: ${String(url)}`);
+    });
+
+    renderApp();
+    const input = await screen.findByRole('textbox');
+    fireEvent.change(input, { target: { value: 'speedy' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() =>
+      expect(screen.getByText(/That name is taken/i)).toBeTruthy()
+    );
+    // Still on onboarding, not navigated away.
+    expect(screen.getByRole('textbox')).toBeTruthy();
+  });
+
   it('shows the server error and stays on onboarding when the save fails', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (String(url).endsWith('/api/user/me')) {

@@ -201,16 +201,22 @@ fastify.post<{
       .send({ success: false, error: avatarResult.error });
   }
 
-  const profile = await upsertProfile(user.id, {
+  const result = await upsertProfile(user.id, {
     display_name: nameResult.value!,
     avatar_url: avatarResult.value,
   });
 
-  if (!profile) {
+  if (result.status === 'name_taken') {
+    return reply
+      .status(409)
+      .send({ success: false, error: 'That name is taken — try another' });
+  }
+  if (result.status === 'error') {
     return reply
       .status(500)
       .send({ success: false, error: 'Failed to update profile' });
   }
+  const profile = result.profile;
 
   invalidateCachedDisplayName(user.id);
 

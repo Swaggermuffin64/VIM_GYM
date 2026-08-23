@@ -258,14 +258,11 @@ const styles: Record<string, React.CSSProperties> = {
   backArrow: {
     padding: 0,
     width: 'fit-content',
-    fontSize: '34px',
-    fontWeight: 800,
-    lineHeight: 1,
+    display: 'flex',
     background: 'transparent',
     border: 'none',
     color: colors.textPrimary,
     cursor: 'pointer',
-    fontFamily: '"JetBrains Mono", monospace',
     transition: 'all 0.2s ease',
   },
   // Leaderboard rail (right column)
@@ -641,7 +638,21 @@ function PreRaceScreen({
       {/* Left: the race stage */}
       <div style={styles.stage}>
         <button style={styles.backArrow} onClick={onBack} aria-label="Back">
-          ←
+          <svg
+            width="34"
+            height="26"
+            viewBox="0 0 34 26"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M14 3 L4 13 L14 23 M4 13 H31"
+              stroke="currentColor"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
         <div style={styles.dateHeader}>{info.raceDate}</div>
         <div style={styles.title}>Race of the Day</div>

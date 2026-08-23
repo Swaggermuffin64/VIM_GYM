@@ -107,7 +107,11 @@ beforeEach(() => {
     attemptNumber: 1,
     gameId: 42,
   });
-  mockFetchDailyLeaderboard.mockResolvedValue([]);
+  mockFetchDailyLeaderboard.mockResolvedValue({
+    entries: [],
+    neighborhood: null,
+    totalRacers: 0,
+  });
   mockCompleteDailyAttempt.mockResolvedValue({
     status: 'ok',
     placing: { rank: 1, totalRacers: 5, bestMs: 5000, attemptsRemaining: 2 },
@@ -329,58 +333,108 @@ describe('DailyRacePage', () => {
     ).toBeTruthy();
   });
 
-  // Leaderboard rail header shows the racer count.
-  it('shows the racer count in the leaderboard header', async () => {
-    mockFetchDailyLeaderboard.mockResolvedValue([
-      {
-        rank: 1,
-        userId: 'other-1',
-        displayName: 'speedster',
-        avatarUrl: null,
-        bestMs: 3000,
-      },
-      {
-        rank: 2,
-        userId: 'me-123',
-        displayName: 'testuser',
-        avatarUrl: null,
-        bestMs: 5000,
-      },
-    ]);
+  // Leaderboard rail header shows the true field size, not the row count.
+  it('shows the total racer count in the leaderboard header', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 312,
+      neighborhood: null,
+      entries: [
+        {
+          rank: 1,
+          userId: 'other-1',
+          displayName: 'speedster',
+          avatarUrl: null,
+          bestMs: 3000,
+        },
+        {
+          rank: 2,
+          userId: 'me-123',
+          displayName: 'testuser',
+          avatarUrl: null,
+          bestMs: 5000,
+        },
+      ],
+    });
 
     await act(async () => {
       renderDaily();
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(screen.getByText(/2 racers/i)).toBeTruthy();
+    expect(screen.getByText(/312 racers/i)).toBeTruthy();
+  });
+
+  // Pinned neighborhood: divider + user's rank±1 rows below the top list.
+  it('renders the divider and pinned neighborhood when the user is outside the top', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 312,
+      entries: [
+        {
+          rank: 1,
+          userId: 'other-1',
+          displayName: 'speedster',
+          avatarUrl: null,
+          bestMs: 3000,
+        },
+      ],
+      neighborhood: [
+        {
+          rank: 46,
+          userId: 'other-46',
+          displayName: 'yank_bank',
+          avatarUrl: null,
+          bestMs: 57900,
+        },
+        {
+          rank: 47,
+          userId: 'me-123',
+          displayName: 'testuser',
+          avatarUrl: null,
+          bestMs: 58700,
+        },
+      ],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
+    expect(screen.getByText('· · ·')).toBeTruthy();
+    expect(screen.getByText('yank_bank')).toBeTruthy();
+    const ownRow = screen.getByText('testuser').closest('[aria-current]');
+    expect(ownRow).not.toBeNull();
   });
 
   // 6. Leaderboard renders entries with the signed-in user's row highlighted.
   it('renders leaderboard with signed-in user row highlighted', async () => {
-    mockFetchDailyLeaderboard.mockResolvedValue([
-      {
-        rank: 1,
-        userId: 'other-1',
-        displayName: 'speedster',
-        avatarUrl: null,
-        bestMs: 3000,
-      },
-      {
-        rank: 2,
-        userId: 'me-123',
-        displayName: 'testuser',
-        avatarUrl: null,
-        bestMs: 5000,
-      },
-      {
-        rank: 3,
-        userId: 'other-2',
-        displayName: 'slowpoke',
-        avatarUrl: null,
-        bestMs: 8000,
-      },
-    ]);
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 3,
+      neighborhood: null,
+      entries: [
+        {
+          rank: 1,
+          userId: 'other-1',
+          displayName: 'speedster',
+          avatarUrl: null,
+          bestMs: 3000,
+        },
+        {
+          rank: 2,
+          userId: 'me-123',
+          displayName: 'testuser',
+          avatarUrl: null,
+          bestMs: 5000,
+        },
+        {
+          rank: 3,
+          userId: 'other-2',
+          displayName: 'slowpoke',
+          avatarUrl: null,
+          bestMs: 8000,
+        },
+      ],
+    });
 
     await act(async () => {
       renderDaily();

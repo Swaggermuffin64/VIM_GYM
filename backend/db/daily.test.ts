@@ -9,6 +9,8 @@ import {
   getDailyGameForUser,
   completeDailyAttempt,
   queryDailyLeaderboard,
+  queryDailyNeighborhood,
+  countDailyRacers,
   queryDailyPlacing,
   getOrCreateShareLink,
   getShareInfo,
@@ -50,6 +52,10 @@ describe('daily db functions without DATABASE_URL', () => {
       completeDailyAttempt({ userId: uid, gameId: 1, durationMs: 30_000 })
     ).resolves.toBeNull();
     await expect(queryDailyLeaderboard('2026-08-16', 30)).resolves.toEqual([]);
+    await expect(queryDailyNeighborhood(uid, '2026-08-16')).resolves.toEqual(
+      []
+    );
+    await expect(countDailyRacers('2026-08-16')).resolves.toBe(0);
     await expect(queryDailyPlacing(uid, '2026-08-16')).resolves.toBeNull();
     await expect(getOrCreateShareLink(uid, '2026-08-16')).resolves.toBeNull();
     await expect(getShareInfo('abc123XYZ0')).resolves.toBeNull();

@@ -25,7 +25,11 @@ import {
   fetchDailyLeaderboard,
   createDailyShareLink,
 } from '../api/daily';
-import type { DailyRaceInfo, DailyLeaderboardEntry } from '../api/daily';
+import type {
+  DailyRaceInfo,
+  DailyLeaderboardEntry,
+  DailyLeaderboardData,
+} from '../api/daily';
 import type {
   RaceSessionConfig,
   RaceCompletionInfo,
@@ -289,6 +293,15 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textMuted,
     fontFamily: '"JetBrains Mono", monospace',
   },
+  railDivider: {
+    textAlign: 'center',
+    color: colors.textMuted,
+    fontSize: '13px',
+    letterSpacing: '4px',
+    padding: '4px 0',
+    userSelect: 'none',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
   leaderboardTitle: {
     fontSize: '13px',
     fontWeight: 700,
@@ -425,7 +438,11 @@ export default function DailyRacePage() {
   const navigate = useNavigate();
   const { session, user } = useAuth();
   const [phase, setPhase] = useState<Phase>({ name: 'loading' });
-  const [leaderboard, setLeaderboard] = useState<DailyLeaderboardEntry[]>([]);
+  const [leaderboard, setLeaderboard] = useState<DailyLeaderboardData>({
+    entries: [],
+    neighborhood: null,
+    totalRacers: 0,
+  });
   const [countdown, setCountdown] = useState('');
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -454,9 +471,13 @@ export default function DailyRacePage() {
 
   // ------- Fetch leaderboard when on preRace -------
 
+  // Top 8 keeps the rail height fixed; the pinned neighborhood covers
+  // anyone ranked below that.
   useEffect(() => {
     if (phase.name !== 'preRace' || !session?.access_token) return;
-    void fetchDailyLeaderboard(session.access_token).then(setLeaderboard);
+    void fetchDailyLeaderboard(session.access_token, undefined, 8).then(
+      setLeaderboard
+    );
   }, [phase.name, session]);
 
   // ------- Countdown timer for "out of attempts" -------
@@ -623,7 +644,7 @@ function PreRaceScreen({
   onBack,
 }: {
   info: DailyRaceInfo;
-  leaderboard: DailyLeaderboardEntry[];
+  leaderboard: DailyLeaderboardData;
   countdown: string;
   userId: string | null;
   onStart: () => void;
@@ -712,33 +733,66 @@ function PreRaceScreen({
         <div style={styles.railHead}>
           <span style={styles.leaderboardTitle}>Today&apos;s board</span>
           <span style={styles.railCount}>
-            {leaderboard.length} racer{leaderboard.length === 1 ? '' : 's'}
+            {leaderboard.totalRacers} racer
+            {leaderboard.totalRacers === 1 ? '' : 's'}
           </span>
         </div>
-        {leaderboard.length === 0 ? (
+        {leaderboard.entries.length === 0 ? (
           <div style={styles.leaderboardEmpty}>No entries yet</div>
         ) : (
-          leaderboard.map((entry) => {
-            const isOwn = entry.userId === userId;
-            return (
-              <div
+          <>
+            {leaderboard.entries.map((entry) => (
+              <LeaderboardRow
                 key={entry.userId}
-                style={{
-                  ...styles.leaderboardRow,
-                  ...(isOwn ? styles.leaderboardRowOwn : {}),
-                }}
-                aria-current={isOwn ? 'true' : undefined}
-              >
-                <span style={styles.leaderboardRank}>#{entry.rank}</span>
-                <span style={styles.leaderboardName}>{entry.displayName}</span>
-                <span style={styles.leaderboardTime}>
-                  {formatTime(entry.bestMs)}
-                </span>
-              </div>
-            );
-          })
+                entry={entry}
+                userId={userId}
+              />
+            ))}
+            {leaderboard.neighborhood && (
+              <>
+                <div style={styles.railDivider} aria-hidden="true">
+                  · · ·
+                </div>
+                {leaderboard.neighborhood.map((entry) => (
+                  <LeaderboardRow
+                    key={entry.userId}
+                    entry={entry}
+                    userId={userId}
+                  />
+                ))}
+              </>
+            )}
+          </>
         )}
       </aside>
+    </div>
+  );
+}
+
+/**
+ * A single board row: rank, name, time. The signed-in user's row is
+ * highlighted and marked aria-current. Shared by the top list and the
+ * pinned neighborhood.
+ */
+function LeaderboardRow({
+  entry,
+  userId,
+}: {
+  entry: DailyLeaderboardEntry;
+  userId: string | null;
+}) {
+  const isOwn = entry.userId === userId;
+  return (
+    <div
+      style={{
+        ...styles.leaderboardRow,
+        ...(isOwn ? styles.leaderboardRowOwn : {}),
+      }}
+      aria-current={isOwn ? 'true' : undefined}
+    >
+      <span style={styles.leaderboardRank}>#{entry.rank}</span>
+      <span style={styles.leaderboardName}>{entry.displayName}</span>
+      <span style={styles.leaderboardTime}>{formatTime(entry.bestMs)}</span>
     </div>
   );
 }

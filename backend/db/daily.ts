@@ -402,6 +402,100 @@ export async function queryDailyLeaderboard(
 }
 
 /**
+ * Returns the leaderboard rows whose rank is within +-1 of the given user's
+ * rank for a race date: their "neighborhood" (the racer directly above, the
+ * user, the racer directly below). Rank ties can widen the window slightly,
+ * so results are capped at 5 rows. Returns [] when the user has no finished
+ * attempt, or on no pool/error.
+ *
+ * Called by routes/daily.ts so a mid-pack user still appears on the board
+ * when they fall outside the top-N entries.
+ */
+export async function queryDailyNeighborhood(
+  userId: string,
+  raceDate: string
+): Promise<
+  Array<{
+    userId: string;
+    displayName: string;
+    avatarUrl: string | null;
+    bestMs: number;
+    rank: number;
+  }>
+> {
+  const pool = getPool();
+  if (!pool) {
+    logSkip('queryDailyNeighborhood');
+    return [];
+  }
+  try {
+    const res = await pool.query<{
+      user_id: string;
+      display_name: string;
+      avatar_url: string | null;
+      best_ms: string;
+      rank: string;
+    }>(
+      `WITH ranked AS (
+        SELECT user_id, display_name, avatar_url, best_ms,
+               RANK() OVER (ORDER BY best_ms ASC) AS rank
+          FROM (
+            SELECT da.user_id, p.display_name, p.avatar_url,
+                   MIN(da.duration_ms) AS best_ms
+              FROM daily_attempts da JOIN profiles p ON p.id = da.user_id
+             WHERE da.race_date = $1 AND da.duration_ms IS NOT NULL
+             GROUP BY da.user_id, p.display_name, p.avatar_url
+          ) sub
+      )
+      SELECT user_id, display_name, avatar_url, best_ms, rank
+        FROM ranked
+       WHERE rank BETWEEN
+               (SELECT rank FROM ranked WHERE user_id = $2) - 1
+           AND (SELECT rank FROM ranked WHERE user_id = $2) + 1
+       ORDER BY rank ASC, best_ms ASC
+       LIMIT 5`,
+      [raceDate, userId]
+    );
+    return res.rows.map((r) => ({
+      userId: r.user_id,
+      displayName: r.display_name,
+      avatarUrl: r.avatar_url,
+      bestMs: Number(r.best_ms),
+      rank: Number(r.rank),
+    }));
+  } catch (err) {
+    logError('queryDailyNeighborhood', err);
+    return [];
+  }
+}
+
+/**
+ * Returns the number of users with at least one finished attempt for a race
+ * date. Used for the "N racers" board header; the fetched top-N row count
+ * understates the field once it exceeds the display limit.
+ * Returns 0 on no pool/error.
+ */
+export async function countDailyRacers(raceDate: string): Promise<number> {
+  const pool = getPool();
+  if (!pool) {
+    logSkip('countDailyRacers');
+    return 0;
+  }
+  try {
+    const res = await pool.query<{ racers: string }>(
+      `SELECT COUNT(DISTINCT user_id) AS racers
+         FROM daily_attempts
+        WHERE race_date = $1 AND duration_ms IS NOT NULL`,
+      [raceDate]
+    );
+    return Number(res.rows[0]?.racers ?? 0);
+  } catch (err) {
+    logError('countDailyRacers', err);
+    return 0;
+  }
+}
+
+/**
  * Returns the user's rank, total number of racers, and personal best time
  * for a given race date. Returns null when the user has no finished attempt,
  * or on no pool/error.

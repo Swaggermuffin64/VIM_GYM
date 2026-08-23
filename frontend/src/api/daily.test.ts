@@ -224,21 +224,22 @@ describe('fetchChallenge', () => {
 });
 
 describe('fetchDailyLeaderboard', () => {
-  it('returns [] on HTTP 500', async () => {
+  it('returns an empty board on HTTP 500', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ success: false, error: 'internal' }, 500)
     );
 
     const result = await fetchDailyLeaderboard('tok');
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ entries: [], neighborhood: null, totalRacers: 0 });
   });
 
-  it('maps snake_case entries to DailyLeaderboardEntry[]', async () => {
+  it('maps snake_case entries, neighborhood, and total_racers', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({
         success: true,
         race_date: '2026-08-16',
+        total_racers: 312,
         entries: [
           {
             user_id: 'u1',
@@ -248,20 +249,52 @@ describe('fetchDailyLeaderboard', () => {
             rank: 1,
           },
         ],
+        neighborhood: [
+          {
+            user_id: 'me',
+            display_name: 'You',
+            avatar_url: null,
+            best_ms: 9000,
+            rank: 47,
+          },
+        ],
       })
     );
 
     const result = await fetchDailyLeaderboard('tok', '2026-08-16');
 
-    expect(result).toEqual([
-      {
-        rank: 1,
-        userId: 'u1',
-        displayName: 'Bob',
-        avatarUrl: 'https://img.example.com/bob.png',
-        bestMs: 2500,
-      },
-    ]);
+    expect(result).toEqual({
+      totalRacers: 312,
+      entries: [
+        {
+          rank: 1,
+          userId: 'u1',
+          displayName: 'Bob',
+          avatarUrl: 'https://img.example.com/bob.png',
+          bestMs: 2500,
+        },
+      ],
+      neighborhood: [
+        {
+          rank: 47,
+          userId: 'me',
+          displayName: 'You',
+          avatarUrl: null,
+          bestMs: 9000,
+        },
+      ],
+    });
+  });
+
+  it('passes the row limit as a query param', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, entries: [], total_racers: 0 })
+    );
+
+    await fetchDailyLeaderboard('tok', undefined, 8);
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('limit=8');
   });
 });
 

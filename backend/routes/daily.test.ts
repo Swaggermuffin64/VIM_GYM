@@ -11,6 +11,8 @@ vi.mock('../db/daily.js', () => ({
   getDailyGameForUser: vi.fn(),
   completeDailyAttempt: vi.fn(),
   queryDailyLeaderboard: vi.fn(),
+  queryDailyNeighborhood: vi.fn(),
+  countDailyRacers: vi.fn(),
   queryDailyPlacing: vi.fn(),
   getOrCreateShareLink: vi.fn(),
   getShareInfo: vi.fn(),
@@ -169,6 +171,96 @@ describe('POST /api/daily/share', () => {
     const res = await app.inject({ method: 'POST', url: '/api/daily/share' });
     expect(res.statusCode).toBe(200);
     expect(res.json().url).toMatch(/\/s\/a1B2c3D4e5$/);
+  });
+});
+
+describe('GET /api/daily/leaderboard', () => {
+  const TOP_ENTRY = {
+    userId: 'other-1',
+    displayName: 'speedy',
+    avatarUrl: null,
+    bestMs: 34800,
+    rank: 1,
+  };
+  const NEIGHBORS = [
+    {
+      userId: 'other-46',
+      displayName: 'yank_bank',
+      avatarUrl: null,
+      bestMs: 57900,
+      rank: 46,
+    },
+    {
+      userId: 'user-1',
+      displayName: 'me',
+      avatarUrl: null,
+      bestMs: 58700,
+      rank: 47,
+    },
+  ];
+
+  it('includes total_racers and the neighborhood when the user is outside the top entries', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(312);
+    vi.mocked(daily.queryDailyNeighborhood).mockResolvedValue(NEIGHBORS);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total_racers).toBe(312);
+    expect(body.neighborhood).toEqual([
+      {
+        user_id: 'other-46',
+        display_name: 'yank_bank',
+        avatar_url: null,
+        best_ms: 57900,
+        rank: 46,
+      },
+      {
+        user_id: 'user-1',
+        display_name: 'me',
+        avatar_url: null,
+        best_ms: 58700,
+        rank: 47,
+      },
+    ]);
+  });
+
+  it('returns a null neighborhood when the user already appears in the top entries', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([
+      { ...TOP_ENTRY, userId: 'user-1' },
+    ]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(5);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().neighborhood).toBeNull();
+    expect(daily.queryDailyNeighborhood).not.toHaveBeenCalled();
+  });
+
+  it('returns a null neighborhood when the user has no finished attempt', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(312);
+    vi.mocked(daily.queryDailyNeighborhood).mockResolvedValue([]);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().neighborhood).toBeNull();
   });
 });
 

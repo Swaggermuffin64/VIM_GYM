@@ -27,6 +27,8 @@ import {
   getDailyGameForUser,
   completeDailyAttempt,
   queryDailyLeaderboard,
+  queryDailyNeighborhood,
+  countDailyRacers,
   queryDailyPlacing,
   getOrCreateShareLink,
 } from '../db/daily.js';
@@ -251,17 +253,29 @@ export async function registerDailyRoutes(
       );
 
       const entries = await queryDailyLeaderboard(raceDate, limit);
+      const totalRacers = await countDailyRacers(raceDate);
+
+      // The user's rank+-1 rows, so a mid-pack racer still sees themself
+      // (and their rival) when they fall outside the top entries.
+      const userInTop = entries.some((e) => e.userId === user.id);
+      const neighbors = userInTop
+        ? []
+        : await queryDailyNeighborhood(user.id, raceDate);
+
+      const toWire = (e: (typeof entries)[number]) => ({
+        user_id: e.userId,
+        display_name: e.displayName,
+        avatar_url: e.avatarUrl,
+        best_ms: e.bestMs,
+        rank: e.rank,
+      });
 
       return {
         success: true,
         race_date: raceDate,
-        entries: entries.map((e) => ({
-          user_id: e.userId,
-          display_name: e.displayName,
-          avatar_url: e.avatarUrl,
-          best_ms: e.bestMs,
-          rank: e.rank,
-        })),
+        total_racers: totalRacers,
+        entries: entries.map(toWire),
+        neighborhood: neighbors.length > 0 ? neighbors.map(toWire) : null,
       };
     }
   );

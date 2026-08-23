@@ -224,13 +224,42 @@ export async function completeDailyAttempt(params: {
  * Fetch the daily leaderboard for a given date (defaults to today).
  * Returns an empty array on any error.
  */
+export interface DailyLeaderboardData {
+  entries: DailyLeaderboardEntry[];
+  /** The user's rank±1 rows when they fall outside `entries`, else null. */
+  neighborhood: DailyLeaderboardEntry[] | null;
+  /** Total finishers today — `entries` is only the top slice. */
+  totalRacers: number;
+}
+
+const EMPTY_LEADERBOARD: DailyLeaderboardData = {
+  entries: [],
+  neighborhood: null,
+  totalRacers: 0,
+};
+
+function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((e: Record<string, unknown>) => ({
+    rank: e.rank as number,
+    userId: e.user_id as string,
+    displayName: e.display_name as string,
+    avatarUrl: (e.avatar_url as string | null) ?? null,
+    bestMs: e.best_ms as number,
+  }));
+}
+
 export async function fetchDailyLeaderboard(
   accessToken: string,
-  date?: string
-): Promise<DailyLeaderboardEntry[]> {
+  date?: string,
+  limit?: number
+): Promise<DailyLeaderboardData> {
   try {
-    const params = date ? `?date=${encodeURIComponent(date)}` : '';
-    const res = await fetch(`${API_BASE}/api/daily/leaderboard${params}`, {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (limit !== undefined) params.set('limit', String(limit));
+    const query = params.size > 0 ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_BASE}/api/daily/leaderboard${query}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
@@ -242,22 +271,22 @@ export async function fetchDailyLeaderboard(
         res.status,
         body
       );
-      return [];
+      return EMPTY_LEADERBOARD;
     }
 
     const b = body as Record<string, unknown>;
-    const rawEntries = Array.isArray(b.entries) ? b.entries : [];
+    const neighborhood = Array.isArray(b.neighborhood)
+      ? mapLeaderboardEntries(b.neighborhood)
+      : null;
 
-    return rawEntries.map((e: Record<string, unknown>) => ({
-      rank: e.rank as number,
-      userId: e.user_id as string,
-      displayName: e.display_name as string,
-      avatarUrl: (e.avatar_url as string | null) ?? null,
-      bestMs: e.best_ms as number,
-    }));
+    return {
+      entries: mapLeaderboardEntries(b.entries),
+      neighborhood,
+      totalRacers: typeof b.total_racers === 'number' ? b.total_racers : 0,
+    };
   } catch (err) {
     console.error('[daily] fetchDailyLeaderboard network error:', err);
-    return [];
+    return EMPTY_LEADERBOARD;
   }
 }
 

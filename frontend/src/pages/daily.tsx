@@ -201,9 +201,10 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
     alignItems: 'center',
   },
+  // Matches metaText ("N of 3 attempts used") for a consistent caption tier.
   subLine: {
-    fontSize: '12px',
-    color: colors.textMuted,
+    fontSize: '13px',
+    color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
   flexButton: {
@@ -264,6 +265,114 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'all 0.2s ease',
   },
+  // Share modal
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0, 0, 0, 0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '20px',
+  },
+  modalCard: {
+    width: 'min(480px, 100%)',
+    background: colors.bgCard,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '14px',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    boxShadow: `0 24px 60px rgba(0, 0, 0, 0.6), 0 0 30px ${colors.secondaryGlow}`,
+  },
+  modalHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: '17px',
+    fontWeight: 800,
+    color: colors.textPrimary,
+    fontFamily: '"JetBrains Mono", monospace',
+    letterSpacing: '-0.5px',
+  },
+  modalClose: {
+    padding: '4px',
+    fontSize: '15px',
+    background: 'transparent',
+    border: 'none',
+    color: colors.textMuted,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  linkRow: {
+    display: 'flex',
+    gap: '8px',
+  },
+  linkInput: {
+    flex: 1,
+    minWidth: 0,
+    padding: '10px 12px',
+    fontSize: '13px',
+    fontFamily: '"JetBrains Mono", monospace',
+    color: colors.textPrimary,
+    background: colors.bgDark,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+  },
+  copyButton: {
+    padding: '10px 18px',
+    fontSize: '13px',
+    fontWeight: 700,
+    color: colors.bgDark,
+    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  previewLabel: {
+    fontSize: '12px',
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  previewCard: {
+    border: `1px solid ${colors.border}`,
+    borderLeft: `3px solid ${colors.secondary}`,
+    borderRadius: '8px',
+    padding: '14px',
+    background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  previewTitle: {
+    fontSize: '14px',
+    fontWeight: 700,
+    color: colors.textPrimary,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  previewDesc: {
+    fontSize: '12.5px',
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  previewHost: {
+    fontSize: '11px',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  modalCaption: {
+    margin: 0,
+    fontSize: '12px',
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
   // Leaderboard rail (right column)
   rail: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
@@ -288,19 +397,19 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textMuted,
     fontFamily: '"JetBrains Mono", monospace',
   },
+  // Left inset matches the rows' 12px padding so the dots sit under the ranks.
   railDivider: {
-    textAlign: 'center',
+    textAlign: 'left',
     color: colors.textMuted,
     fontSize: '13px',
-    letterSpacing: '4px',
-    padding: '4px 0',
+    padding: '4px 12px',
     userSelect: 'none',
     fontFamily: '"JetBrains Mono", monospace',
   },
   leaderboardTitle: {
     fontSize: '13px',
     fontWeight: 700,
-    color: colors.secondaryLight,
+    color: colors.textPrimary,
     textTransform: 'uppercase',
     letterSpacing: '1.5px',
     fontFamily: '"JetBrains Mono", monospace',
@@ -649,6 +758,15 @@ function PreRaceScreen({
   const totalSlots = usedCount + info.attemptsRemaining;
   const outOfAttempts = info.attemptsRemaining === 0;
 
+  // The user's own placing (from either board section) for the share modal.
+  const ownEntry = [
+    ...leaderboard.entries,
+    ...(leaderboard.neighborhood ?? []),
+  ].find((e) => e.userId === userId);
+  const ownPlacing = ownEntry
+    ? { rank: ownEntry.rank, totalRacers: leaderboard.totalRacers }
+    : null;
+
   return (
     <div className="daily-split" style={styles.split}>
       {/* Left: the race stage */}
@@ -714,7 +832,7 @@ function PreRaceScreen({
               Start attempt {usedCount + 1} of {totalSlots}
             </button>
           )}
-          {info.bestMs != null && <FlexShareButton />}
+          {info.bestMs != null && <FlexShareButton placing={ownPlacing} />}
         </div>
 
         <div style={styles.subLine}>
@@ -726,7 +844,7 @@ function PreRaceScreen({
       {/* Right: leaderboard rail */}
       <aside style={styles.rail}>
         <div style={styles.railHead}>
-          <span style={styles.leaderboardTitle}>Today&apos;s board</span>
+          <span style={styles.leaderboardTitle}>Leaderboard</span>
           <span style={styles.railCount}>
             {leaderboard.totalRacers} racer
             {leaderboard.totalRacers === 1 ? '' : 's'}
@@ -746,7 +864,7 @@ function PreRaceScreen({
             {leaderboard.neighborhood && (
               <>
                 <div style={styles.railDivider} aria-hidden="true">
-                  · · ·
+                  ···
                 </div>
                 {leaderboard.neighborhood.map((entry) => (
                   <LeaderboardRow
@@ -797,40 +915,138 @@ function LeaderboardRow({
 // ---------------------------------------------------------------------------
 
 /**
- * The pre-race share button: mints (or fetches) today's share link and
- * copies it to the clipboard. Rendered once the user has a finished time.
- * Styled as the anti-CTA: dark body, magenta/amber gradient border.
+ * The pre-race share button. Rendered once the user has a finished time;
+ * opens the share modal. Styled as the anti-CTA: dark body, magenta/amber
+ * gradient border.
  */
-function FlexShareButton() {
-  const { session } = useAuth();
+function FlexShareButton({
+  placing,
+}: {
+  placing: { rank: number; totalRacers: number } | null;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="daily-flex-btn"
+        style={styles.flexButton}
+        onClick={() => setOpen(true)}
+      >
+        Flex on people
+      </button>
+      {open && (
+        <FlexShareModal placing={placing} onClose={() => setOpen(false)} />
+      )}
+    </>
+  );
+}
+
+/**
+ * Share modal: mints (or fetches) today's share link on open, offers a
+ * copy row, and previews the rich unfurl card that Slack/Discord/iMessage
+ * render from the link's OG tags (see backend/routes/share.ts).
+ */
+function FlexShareModal({
+  placing,
+  onClose,
+}: {
+  placing: { rank: number; totalRacers: number } | null;
+  onClose: () => void;
+}) {
+  const { session, profile } = useAuth();
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    if (!session?.access_token) return;
+    void createDailyShareLink(session.access_token).then((result) => {
+      if (cancelled) return;
+      if (result.status === 'ok') setUrl(result.url);
+      else setFailed(true);
+    });
     return () => {
+      cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [session]);
 
-  const handleFlex = async () => {
-    if (!session?.access_token) return;
-    const result = await createDailyShareLink(session.access_token);
-    if (result.status === 'ok') {
-      void navigator.clipboard.writeText(result.url);
-      setCopied(true);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCopied(false), 3000);
-    }
+  const handleCopy = () => {
+    if (!url) return;
+    void navigator.clipboard.writeText(url);
+    setCopied(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setCopied(false), 2500);
   };
 
+  const name = profile?.display_name ?? 'You';
+  const rankLine = placing
+    ? `#${placing.rank} of ${placing.totalRacers}`
+    : 'their rank';
+
   return (
-    <button
-      className="daily-flex-btn"
-      style={styles.flexButton}
-      onClick={handleFlex}
-    >
-      {copied ? 'Link copied. Go ruin a friendship.' : 'Flex on people'}
-    </button>
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Share your result"
+        style={styles.modalCard}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={styles.modalHead}>
+          <span style={styles.modalTitle}>Flex on people</span>
+          <button
+            style={styles.modalClose}
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style={styles.linkRow}>
+          <input
+            style={styles.linkInput}
+            readOnly
+            value={
+              failed
+                ? 'Could not create link — try again'
+                : (url ?? 'Minting your link…')
+            }
+            onFocus={(e) => e.currentTarget.select()}
+            aria-label="Share link"
+          />
+          <button
+            style={styles.copyButton}
+            onClick={handleCopy}
+            disabled={!url}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+
+        <div style={styles.previewLabel}>
+          How it unfurls in Slack, Discord, or iMessage:
+        </div>
+        <div style={styles.previewCard}>
+          <div style={styles.previewTitle}>
+            {name} placed {rankLine} in today&apos;s VIMGYM daily
+          </div>
+          <div style={styles.previewDesc}>
+            {name} thinks they&apos;re better than you. (at vim.) Race
+            today&apos;s daily and prove them wrong.
+          </div>
+          <div style={styles.previewHost}>vimgym.app</div>
+        </div>
+
+        <p style={styles.modalCaption}>
+          Anyone who opens it sees your taunt on the sign-in page and gets
+          dropped straight into today&apos;s race.
+        </p>
+      </div>
+    </div>
   );
 }
 

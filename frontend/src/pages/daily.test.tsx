@@ -281,7 +281,39 @@ describe('DailyRacePage', () => {
     ).toBeNull();
   });
 
-  it('shows the flex button once a time is on the board, and copies the share link on click', async () => {
+  it('opens the share modal with the link and an unfurl preview on flex click', async () => {
+    mockFetchDailyRace.mockResolvedValue({
+      status: 'ok',
+      info: makeInfo({
+        attempts: [{ attemptNumber: 1, durationMs: 41200 }],
+        attemptsRemaining: 2,
+        bestMs: 41200,
+      }),
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const flexBtn = await screen.findByRole('button', {
+      name: /Flex on people/i,
+    });
+
+    await act(async () => {
+      flexBtn.click();
+    });
+
+    // Modal minted the link on open and shows it.
+    expect(mockCreateDailyShareLink).toHaveBeenCalledWith('tok');
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toBeTruthy();
+    expect(
+      (await screen.findByDisplayValue('https://vim.gym/c/abc')) as unknown
+    ).toBeTruthy();
+    // Explains the rich unfurl.
+    expect(screen.getByText(/unfurls/i)).toBeTruthy();
+  });
+
+  it('copies the link from the modal and confirms', async () => {
     mockFetchDailyRace.mockResolvedValue({
       status: 'ok',
       info: makeInfo({
@@ -299,14 +331,46 @@ describe('DailyRacePage', () => {
     const flexBtn = await screen.findByRole('button', {
       name: /Flex on people/i,
     });
-
     await act(async () => {
       flexBtn.click();
     });
+    const copyBtn = await screen.findByRole('button', { name: /^Copy$/i });
 
-    expect(mockCreateDailyShareLink).toHaveBeenCalledWith('tok');
+    await act(async () => {
+      copyBtn.click();
+    });
+
     expect(writeText).toHaveBeenCalledWith('https://vim.gym/c/abc');
-    expect(await screen.findByText(/Link copied/i)).toBeTruthy();
+    expect(await screen.findByText(/Copied/i)).toBeTruthy();
+  });
+
+  it('closes the share modal with its close button', async () => {
+    mockFetchDailyRace.mockResolvedValue({
+      status: 'ok',
+      info: makeInfo({
+        attempts: [{ attemptNumber: 1, durationMs: 41200 }],
+        attemptsRemaining: 2,
+        bestMs: 41200,
+      }),
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const flexBtn = await screen.findByRole('button', {
+      name: /Flex on people/i,
+    });
+    await act(async () => {
+      flexBtn.click();
+    });
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+
+    const closeBtn = screen.getByRole('button', { name: /close/i });
+    await act(async () => {
+      closeBtn.click();
+    });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('keeps the flex button available when out of attempts', async () => {
@@ -400,7 +464,7 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(screen.getByText('· · ·')).toBeTruthy();
+    expect(screen.getByText('···')).toBeTruthy();
     expect(screen.getByText('yank_bank')).toBeTruthy();
     const ownRow = screen.getByText('testuser').closest('[aria-current]');
     expect(ownRow).not.toBeNull();

@@ -788,8 +788,8 @@ function PreRaceScreen({
             />
           </svg>
         </button>
-        <div style={styles.dateHeader}>{info.raceDate}</div>
         <div style={styles.title}>Race of the Day</div>
+        <div style={styles.dateHeader}>{info.raceDate}</div>
 
         {/* Attempts + best time meta row */}
         <div style={styles.metaRow}>

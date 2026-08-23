@@ -783,7 +783,7 @@ function FlexShareButton() {
         'Link copied. Go ruin a friendship.'
       ) : (
         <>
-          <span style={styles.flexUnderline}>Flex</span> on people
+          <span style={styles.flexUnderline}>Flex on people</span>
         </>
       )}
     </button>

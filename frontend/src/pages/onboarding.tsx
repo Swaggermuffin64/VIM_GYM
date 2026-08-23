@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, type Profile } from '../contexts/AuthContext';
 import { colors } from '../theme';
-import { consumePostAuthDestination } from '../lib/challengeRedirect';
+import { postAuthDestination } from '../lib/challengeRedirect';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -110,7 +110,7 @@ export default function Onboarding() {
         if (data.profile) {
           applyProfileUpdate(data.profile);
         }
-        navigate(consumePostAuthDestination());
+        navigate(postAuthDestination());
       }
     } catch {
       setError('Network error');

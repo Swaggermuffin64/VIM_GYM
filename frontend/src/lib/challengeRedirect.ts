@@ -38,18 +38,22 @@ export function peekChallengeSlug(): string | null {
 }
 
 /**
- * Returns '/daily' and clears the stash if a challenge slug is pending,
- * otherwise returns '/'.
+ * Returns '/daily' if a challenge slug is pending, otherwise '/'.
+ *
+ * Never clears the stash: the journey can take several hops (login →
+ * onboarding → /daily for new users, or / → /daily via AuthGuard for
+ * existing ones), and every hop needs to see the slug. The daily page
+ * clears it on arrival via clearChallengeSlug.
  */
-export function consumePostAuthDestination(): string {
+export function postAuthDestination(): string {
+  return peekChallengeSlug() ? '/daily' : '/';
+}
+
+/** Remove the stashed slug. Called by the daily page once the user arrives. */
+export function clearChallengeSlug(): void {
   try {
-    const slug = sessionStorage.getItem(CHALLENGE_SLUG_KEY);
-    if (slug) {
-      sessionStorage.removeItem(CHALLENGE_SLUG_KEY);
-      return '/daily';
-    }
+    sessionStorage.removeItem(CHALLENGE_SLUG_KEY);
   } catch {
-    // sessionStorage unavailable -- fall through to '/'
+    // sessionStorage unavailable -- nothing to clear
   }
-  return '/';
 }

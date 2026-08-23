@@ -32,6 +32,7 @@ import type {
 } from '../racing/raceSessionConfig';
 import { RaceSessionPage } from './practice';
 import { SiteBanner } from '../components/SiteBanner';
+import { clearChallengeSlug } from '../lib/challengeRedirect';
 
 // ---------------------------------------------------------------------------
 // Phase state machine
@@ -367,6 +368,12 @@ export default function DailyRacePage() {
   const [leaderboard, setLeaderboard] = useState<DailyLeaderboardEntry[]>([]);
   const [countdown, setCountdown] = useState('');
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // This page is the destination of the challenge-share journey; clear the
+  // stashed slug so it can't redirect future navigation in this tab.
+  useEffect(() => {
+    clearChallengeSlug();
+  }, []);
 
   // ------- Fetch daily race info -------
 

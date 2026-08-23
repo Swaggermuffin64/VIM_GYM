@@ -239,5 +239,8 @@ describe('Login page challenge taunt', () => {
     });
 
     expect(screen.getByTestId('daily-page')).toBeDefined();
+    // The stash must survive this hop: a new user gets bounced from /daily
+    // to onboarding by AuthGuard, and onboarding still needs the slug.
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBe('a1B2c3D4e5');
   });
 });

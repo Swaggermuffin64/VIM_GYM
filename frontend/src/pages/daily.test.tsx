@@ -129,6 +129,19 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('DailyRacePage', () => {
+  // Reaching /daily is the end of the challenge-link journey, so this page
+  // is the single place the stashed slug is cleared.
+  it('clears the stashed challenge slug on mount', async () => {
+    sessionStorage.setItem('vimgym.challengeSlug', 'a1B2c3D4e5');
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
+
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBeNull();
+  });
+
   // 1. Pre-race screen shows attempt dots and correct start button label.
   it('shows attempt dots and "Start attempt 2 of 3" when one attempt used', async () => {
     mockFetchDailyRace.mockResolvedValue({

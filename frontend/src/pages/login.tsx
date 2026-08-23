@@ -6,7 +6,7 @@ import { colors } from '../theme';
 import { fetchChallenge, type ChallengeInfo } from '../api/daily';
 import {
   stashChallengeSlug,
-  consumePostAuthDestination,
+  postAuthDestination,
 } from '../lib/challengeRedirect';
 
 const styles: Record<string, React.CSSProperties> = {
@@ -245,7 +245,7 @@ export default function Login() {
     fetchChallenge(slug).then(setChallenge);
   }, [searchParams]);
 
-  if (session) return <Navigate to={consumePostAuthDestination()} replace />;
+  if (session) return <Navigate to={postAuthDestination()} replace />;
 
   const signIn = (provider: 'github' | 'google') => {
     supabase.auth.signInWithOAuth({

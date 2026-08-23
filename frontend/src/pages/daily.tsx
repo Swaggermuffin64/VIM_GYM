@@ -145,12 +145,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '18px',
     padding: '24px 0',
   },
+  // Same typographic treatment as the title, one step down in scale.
   dateHeader: {
-    fontSize: '18px',
-    fontWeight: 700,
+    fontSize: '20px',
+    fontWeight: 800,
     color: colors.primaryLight,
-    fontFamily: '"JetBrains Mono", monospace',
-    letterSpacing: '3px',
+    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    letterSpacing: '-0.5px',
+    textShadow: `0 0 20px ${colors.primaryGlow}`,
   },
   title: {
     fontSize: '42px',

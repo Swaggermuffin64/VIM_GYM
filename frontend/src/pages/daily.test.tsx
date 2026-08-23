@@ -272,7 +272,9 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
 
-    expect(screen.queryByText(/Flex on people/i)).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /Flex on people/i })
+    ).toBeNull();
   });
 
   it('shows the flex button once a time is on the board, and copies the share link on click', async () => {
@@ -290,7 +292,9 @@ describe('DailyRacePage', () => {
     await act(async () => {
       renderDaily();
     });
-    const flexBtn = await screen.findByText(/Flex on people/i);
+    const flexBtn = await screen.findByRole('button', {
+      name: /Flex on people/i,
+    });
 
     await act(async () => {
       flexBtn.click();
@@ -320,7 +324,9 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText(/Come back tomorrow/i)).toBeTruthy();
 
-    expect(screen.getByText(/Flex on people/i)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Flex on people/i })
+    ).toBeTruthy();
   });
 
   // Leaderboard rail header shows the racer count.

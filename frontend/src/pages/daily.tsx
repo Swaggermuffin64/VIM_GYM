@@ -149,7 +149,7 @@ const styles: Record<string, React.CSSProperties> = {
   dateHeader: {
     fontSize: '20px',
     fontWeight: 800,
-    color: colors.primaryLight,
+    color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", "Fira Code", monospace',
     letterSpacing: '-0.5px',
     textShadow: `0 0 20px ${colors.primaryGlow}`,
@@ -218,6 +218,11 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
     transition: 'all 0.2s ease',
+  },
+  flexUnderline: {
+    textDecoration: 'underline',
+    textDecorationThickness: '2px',
+    textUnderlineOffset: '4px',
   },
   startButton: {
     padding: '18px 24px',
@@ -739,7 +744,7 @@ function PreRaceScreen({
  */
 function FlexShareButton() {
   const { session } = useAuth();
-  const [label, setLabel] = useState('Flex on people ⚑');
+  const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -753,9 +758,9 @@ function FlexShareButton() {
     const result = await createDailyShareLink(session.access_token);
     if (result.status === 'ok') {
       void navigator.clipboard.writeText(result.url);
-      setLabel('Link copied. Go ruin a friendship.');
+      setCopied(true);
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setLabel('Flex on people ⚑'), 3000);
+      timerRef.current = setTimeout(() => setCopied(false), 3000);
     }
   };
 
@@ -765,7 +770,13 @@ function FlexShareButton() {
       style={styles.flexButton}
       onClick={handleFlex}
     >
-      {label}
+      {copied ? (
+        'Link copied. Go ruin a friendship.'
+      ) : (
+        <>
+          <span style={styles.flexUnderline}>Flex</span> on people
+        </>
+      )}
     </button>
   );
 }

@@ -255,17 +255,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '18px',
     letterSpacing: '2px',
   },
-  // Baseline alignment: the oversized arrow glyph and the date share a text
-  // baseline, which lines them up better than box-centering.
-  dateRow: {
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '14px',
-  },
   backArrow: {
     padding: 0,
-    // The arrow glyph sits small in its em box; oversizing the font makes
-    // its visual height match the 20px date text beside it.
+    width: 'fit-content',
     fontSize: '34px',
     fontWeight: 800,
     lineHeight: 1,
@@ -648,12 +640,10 @@ function PreRaceScreen({
     <div className="daily-split" style={styles.split}>
       {/* Left: the race stage */}
       <div style={styles.stage}>
-        <div style={styles.dateRow}>
-          <button style={styles.backArrow} onClick={onBack} aria-label="Back">
-            ←
-          </button>
-          <span style={styles.dateHeader}>{info.raceDate}</span>
-        </div>
+        <button style={styles.backArrow} onClick={onBack} aria-label="Back">
+          ←
+        </button>
+        <div style={styles.dateHeader}>{info.raceDate}</div>
         <div style={styles.title}>Race of the Day</div>
 
         {/* Attempts + best time meta row */}

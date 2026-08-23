@@ -137,12 +137,11 @@ export async function startDailyAttempt(
   accessToken: string
 ): Promise<StartAttemptResult> {
   try {
+    // No body, so no Content-Type: Fastify 400s (FST_ERR_CTP_EMPTY_JSON_BODY)
+    // on an application/json request with an empty body.
     const res = await fetch(`${API_BASE}/api/daily/attempt/start`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const body = safeParseJson(await res.text());
@@ -270,12 +269,10 @@ export async function createDailyShareLink(
   accessToken: string
 ): Promise<ShareLinkResult> {
   try {
+    // No body, so no Content-Type (see startDailyAttempt).
     const res = await fetch(`${API_BASE}/api/daily/share`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const body = safeParseJson(await res.text());

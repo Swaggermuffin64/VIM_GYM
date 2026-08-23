@@ -73,6 +73,19 @@ describe('fetchDailyRace', () => {
 });
 
 describe('startDailyAttempt', () => {
+  // Fastify rejects a Content-Type: application/json request with no body
+  // (FST_ERR_CTP_EMPTY_JSON_BODY, 400) before the route handler runs.
+  it('sends no Content-Type header since the request has no body', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+
+    await startDailyAttempt('tok');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+    expect(init.headers).not.toHaveProperty('Content-Type');
+  });
+
   it('maps a 403 out_of_attempts body to { status: "out_of_attempts" }', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({ success: false, error: 'out_of_attempts' }, 403)
@@ -253,6 +266,20 @@ describe('fetchDailyLeaderboard', () => {
 });
 
 describe('createDailyShareLink', () => {
+  // Same FST_ERR_CTP_EMPTY_JSON_BODY hazard as startDailyAttempt.
+  it('sends no Content-Type header since the request has no body', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, url: 'https://vimgym.app/s/abc' })
+    );
+
+    await createDailyShareLink('tok');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeUndefined();
+    expect(init.headers).not.toHaveProperty('Content-Type');
+  });
+
   it('returns ok with url on success', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({

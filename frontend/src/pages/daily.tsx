@@ -223,11 +223,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     transition: 'all 0.2s ease',
   },
-  flexUnderline: {
-    textDecoration: 'underline',
-    textDecorationThickness: '2px',
-    textUnderlineOffset: '4px',
-  },
   startButton: {
     padding: '18px 24px',
     fontSize: '17px',
@@ -834,13 +829,7 @@ function FlexShareButton() {
       style={styles.flexButton}
       onClick={handleFlex}
     >
-      {copied ? (
-        'Link copied. Go ruin a friendship.'
-      ) : (
-        <>
-          <span style={styles.flexUnderline}>Flex on people</span>
-        </>
-      )}
+      {copied ? 'Link copied. Go ruin a friendship.' : 'Flex on people'}
     </button>
   );
 }

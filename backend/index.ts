@@ -46,6 +46,7 @@ import {
 } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
+import { connectionRejectionError } from './rateLimit/connectionRejection.js';
 import {
   requireSupabaseAuth,
   tryResolveSupabaseUser,
@@ -890,8 +891,15 @@ fastify.get('/health', async (request, reply) => {
     // Rooms
     rooms: roomManager?.roomCount ?? 0,
     roomsByState: roomManager?.roomsByState ?? {},
-    // Connections
+    // Connections — `socketConnections` is the true engine count (including
+    // load-test sockets, which bypass the limiter); `limitedConnections` is what
+    // the ceiling is measured against.
     socketConnections: io.engine.clientsCount,
+    limitedConnections: connectionLimiter.getTotalConnections(),
+    maxTotalConnections: connectionLimiter.getMaxTotalConnections(),
+    maxConnectionsPerIp: connectionLimiter.getMaxConnectionsPerIp(),
+    trackedIps: connectionLimiter.getTrackedIpCount(),
+    capacityRejections: connectionLimiter.getCapacityRejectionCount(),
     // Process
     uptimeS: Math.round(process.uptime()),
     database,
@@ -979,18 +987,23 @@ io.use((socket, next) => {
 
   socket.data.isLoadTest = !!isLoadTest;
 
-  // Check and register connection (bypass for load tests)
-  if (!isLoadTest && !connectionLimiter.addConnection(ip, socket.id)) {
-    console.log(
-      `🚫 Connection limit exceeded for IP ${ip} (${connectionLimiter.getConnectionCount(ip)} connections)`
-    );
-    return next(
-      new Error('Too many connections from your IP. Please try again later.')
-    );
+  // Check and register connection (bypass for load tests, so a load test can
+  // measure the memory and event-loop cost of connections past the ceiling).
+  if (!isLoadTest) {
+    const admission = connectionLimiter.addConnection(ip, socket.id);
+    if (!admission.admitted) {
+      console.log(
+        `🚫 Connection rejected (${admission.reason}) for IP ${ip}: ` +
+          `${connectionLimiter.getConnectionCount(ip)}/${connectionLimiter.getMaxConnectionsPerIp()} for this IP, ` +
+          `${connectionLimiter.getTotalConnections()}/${connectionLimiter.getMaxTotalConnections()} total`
+      );
+      return next(connectionRejectionError(admission.reason));
+    }
   }
 
   console.log(
-    `📊 Connection from ${ip} (${connectionLimiter.getConnectionCount(ip)}/${10} for this IP)`
+    `📊 Connection from ${ip} (${connectionLimiter.getConnectionCount(ip)}/${connectionLimiter.getMaxConnectionsPerIp()} for this IP, ` +
+      `${connectionLimiter.getTotalConnections()}/${connectionLimiter.getMaxTotalConnections()} total)`
   );
   next();
 });

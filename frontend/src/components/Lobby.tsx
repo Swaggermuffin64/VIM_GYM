@@ -14,6 +14,8 @@ interface LobbyProps {
   onJoinRoom: (roomId: string, playerName: string) => void;
   onQuickMatch: (playerName: string) => void;
   onCancelQuickMatch?: () => void;
+  /** Retry the game-server handshake after it was refused (server full, etc). */
+  onRetryConnection?: () => void;
 }
 
 const colors = {
@@ -205,6 +207,18 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center' as const,
     fontSize: '14px',
   },
+  errorRetryButton: {
+    marginTop: '12px',
+    padding: '8px 18px',
+    fontSize: '13px',
+    fontWeight: 500,
+    background: 'transparent',
+    border: `1px solid ${colors.error}`,
+    borderRadius: '8px',
+    color: colors.error,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
   backButton: {
     width: '100%',
     padding: '14px 24px',
@@ -300,6 +314,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   onJoinRoom,
   onQuickMatch,
   onCancelQuickMatch,
+  onRetryConnection,
 }) => {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState('');
@@ -360,14 +375,21 @@ export const Lobby: React.FC<LobbyProps> = ({
   const isLoading = isConnecting;
   const canInteract = isConnected;
 
+  // The server refused the handshake and Socket.IO will not retry it, so the
+  // status must not keep claiming we are connecting.
+  const isConnectionRefused = !isConnected && !isConnecting && error !== null;
+
   const getStatusColor = () => {
-    if (isConnecting) return colors.warning;
     if (isConnected) return colors.success;
+    if (isConnectionRefused) return colors.error;
+    if (isConnecting) return colors.warning;
     return colors.textMuted;
   };
 
   const getStatusText = () => {
-    return isConnected ? 'Connected' : 'Connecting...';
+    if (isConnected) return 'Connected';
+    if (isConnectionRefused) return 'Not connected';
+    return 'Connecting...';
   };
 
   const getTitle = () => {
@@ -414,6 +436,22 @@ export const Lobby: React.FC<LobbyProps> = ({
     </div>
   ) : null;
 
+  // A refused handshake needs a way back: Socket.IO will not retry on its own.
+  const errorBanner = error ? (
+    <div style={styles.error}>
+      <div>{error}</div>
+      {isConnectionRefused && onRetryConnection && (
+        <button
+          type="button"
+          onClick={onRetryConnection}
+          style={styles.errorRetryButton}
+        >
+          Try again
+        </button>
+      )}
+    </div>
+  ) : null;
+
   // Quick Play flow
   if (initialMode === 'quick') {
     const isInQueue = queuePosition !== null;
@@ -446,7 +484,7 @@ export const Lobby: React.FC<LobbyProps> = ({
               </div>
             </div>
 
-            {error && <div style={styles.error}>{error}</div>}
+            {errorBanner}
 
             {/* Show queue status when in queue */}
             {isInQueue ? (
@@ -624,7 +662,7 @@ export const Lobby: React.FC<LobbyProps> = ({
               </div>
             </div>
 
-            {error && <div style={styles.error}>{error}</div>}
+            {errorBanner}
 
             <label style={styles.optionToggleRow}>
               <span style={styles.optionToggleLabel}>

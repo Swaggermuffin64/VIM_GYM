@@ -81,6 +81,15 @@ function deferSession() {
   return () => resolve({ data: { session: null } });
 }
 
+/** Invoke the handler the hook registered for an event on a fake socket. */
+function emitOnSocket(socket: FakeSocket, event: string, ...args: unknown[]) {
+  const registration = socket.on.mock.calls.find(([name]) => name === event);
+  if (!registration) {
+    throw new Error(`No handler registered for "${event}"`);
+  }
+  (registration[1] as (...a: unknown[]) => void)(...args);
+}
+
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -152,6 +161,53 @@ describe('useGameSocket connection lifecycle', () => {
       playerName: 'speedy',
       token: 'supa-token',
     });
+  });
+
+  it('surfaces a handshake rejection instead of sitting on "Connecting..."', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await flush();
+
+    // Socket.IO does not retry a middleware rejection, so if the hook stays
+    // silent here the lobby claims it is connecting forever.
+    act(() => {
+      emitOnSocket(createdSockets[0], 'connect_error', {
+        message: 'Server is at capacity. Please try again in a moment.',
+        data: { code: 'SERVER_AT_CAPACITY' },
+      });
+    });
+
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.isConnecting).toBe(false);
+    expect(result.current.error).toContain('full');
+  });
+
+  it('reconnects and clears the error when retryConnection is called', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await flush();
+
+    act(() => {
+      emitOnSocket(createdSockets[0], 'connect_error', {
+        message: 'Server is at capacity.',
+        data: { code: 'SERVER_AT_CAPACITY' },
+      });
+    });
+    expect(result.current.error).not.toBeNull();
+
+    await act(async () => {
+      result.current.retryConnection();
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(createdSockets).toHaveLength(2);
+    expect(result.current.error).toBeNull();
+
+    // A successful handshake on the retry leaves no stale error behind.
+    act(() => {
+      emitOnSocket(createdSockets[1], 'connect');
+    });
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBeNull();
   });
 
   it('joins the matched room on the new game socket after match:found', async () => {

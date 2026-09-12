@@ -25,7 +25,6 @@ import type {
 } from '../types/keystroke';
 import {
   formatKeyLabel as sharedFormatKeyLabel,
-  formatTaskTypeLabel as sharedFormatTaskTypeLabel,
   expandRecommendedSequence as sharedExpandRecommendedSequence,
   formatKeysForDisplay as sharedFormatKeysForDisplay,
   buildOptimalInfo,
@@ -52,7 +51,7 @@ import {
   VimRaceEditorHandle,
   editorColors as colors,
 } from '../components/VimRaceEditor';
-import { SummaryTaskSandbox } from '../components/SummaryTaskSandbox';
+import { SessionCompleteSummary } from '../components/SessionCompleteSummary';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const KEY_LOG_VISIBLE_KEYS = 5;
@@ -136,6 +135,14 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     minHeight: '100vh',
     background: `linear-gradient(180deg, ${colors.bgDark} 0%, #0f0f1a 100%)`,
+  },
+  // Same page shell, plus the containing block the results screen's ambient
+  // glows are positioned against (and clipped by).
+  summaryContainer: {
+    minHeight: '100vh',
+    background: `linear-gradient(180deg, ${colors.bgDark} 0%, #0f0f1a 100%)`,
+    position: 'relative' as const,
+    overflow: 'hidden' as const,
   },
   raceContainer: {
     padding: '24px',
@@ -623,26 +630,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     lineHeight: 1.6,
   },
-  sessionComplete: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'flex-start',
-    justifyContent: 'flex-start',
-    minHeight: 'calc(100vh - 180px)',
-    background: colors.bgCard,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '12px',
-    padding: '48px',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
-  },
-  completeTitle: {
-    fontSize: '38px',
-    fontWeight: 700,
-    color: colors.textPrimary,
-    marginBottom: '16px',
-    fontFamily: '"JetBrains Mono", monospace',
-    textShadow: `0 0 20px ${colors.primaryGlow}`,
-  },
   completeText: {
     fontSize: '18px',
     color: colors.textSecondary,
@@ -658,138 +645,6 @@ const styles: Record<string, React.CSSProperties> = {
     textShadow: `0 0 30px ${colors.primaryGlow}`,
     letterSpacing: '2px',
   },
-  completeButtons: {
-    display: 'flex',
-    gap: '16px',
-    marginTop: '32px',
-  },
-  summaryOverview: {
-    width: '100%',
-    marginTop: '22px',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
-    background: colors.bgCard,
-    padding: '16px 18px',
-  },
-  summaryOverviewLabelRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-    gap: '8px',
-    marginBottom: '8px',
-  },
-  summaryOverviewValueRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-    gap: '8px',
-  },
-  summaryOverviewLabel: {
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '13px',
-    letterSpacing: '0.8px',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-  },
-  summaryOverviewValue: {
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '24px',
-    fontWeight: 700,
-    color: colors.textPrimary,
-  },
-  completeButton: {
-    padding: '16px 36px',
-    fontSize: '19px',
-    fontWeight: 600,
-    color: colors.bgDark,
-    background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
-    border: 'none',
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontFamily: '"JetBrains Mono", monospace',
-    boxShadow: `0 0 20px ${colors.primaryGlow}`,
-  },
-  summaryList: {
-    width: '100%',
-    marginTop: '24px',
-    borderTop: `1px solid ${colors.border}90`,
-    paddingTop: '16px',
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr)',
-    gap: '16px',
-  },
-  summaryItem: {
-    position: 'relative',
-    border: `1px solid ${colors.border}`,
-    background: colors.bgCard,
-    borderRadius: '10px',
-    padding: '18px',
-    boxShadow: `0 6px 20px rgba(0, 0, 0, 0.25)`,
-  },
-  summaryItemComplete: {
-    border: `1px solid ${colors.success}60`,
-    boxShadow: `0 0 16px ${colors.success}25, inset 0 1px 0 rgba(255,255,255,0.05)`,
-  },
-  summaryCompleteCheck: {
-    position: 'absolute',
-    top: '12px',
-    right: '12px',
-    width: '24px',
-    height: '24px',
-    borderRadius: '999px',
-    border: `1px solid ${colors.success}90`,
-    background: `${colors.success}30`,
-    color: colors.successLight,
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '15px',
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  summaryItemBody: {
-    display: 'flex',
-    alignItems: 'stretch',
-    gap: '14px',
-    flexWrap: 'wrap' as const,
-  },
-  summaryAnalyticsColumn: {
-    flex: '1 1 360px',
-    minWidth: '320px',
-  },
-  summaryVerticalDivider: {
-    width: '1px',
-    alignSelf: 'stretch',
-    background: colors.border,
-  },
-  summarySnippetColumn: {
-    flex: '1 1 420px',
-    minWidth: '360px',
-    paddingLeft: '14px',
-  },
-  summaryItemHeader: {
-    display: 'flex',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    gap: '70px',
-    marginBottom: '8px',
-  },
-  summaryItemTitle: {
-    fontFamily: '"JetBrains Mono", monospace',
-    color: colors.textPrimary,
-    fontSize: '24px',
-    fontWeight: 600,
-  },
-  summaryTaskBadge: {
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '13px',
-    fontWeight: 700,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.8px',
-    padding: '7px 13px',
-    borderRadius: '999px',
-    border: `1px solid ${colors.primary}40`,
-    background: `${colors.primary}20`,
-    color: colors.primaryLight,
-  },
   summaryReplayTitle: {
     marginLeft: 'auto',
     fontFamily: '"JetBrains Mono", monospace',
@@ -804,115 +659,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '8px',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.8px',
-  },
-  summaryMetaRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-    gap: '10px',
-    marginBottom: '8px',
-  },
-  summaryMetaCard: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '4px',
-    border: `1px solid ${colors.border}`,
-    background: colors.bgCard,
-    borderRadius: '8px',
-    padding: '8px 10px',
-  },
-  summaryMetaCardApm: {
-    borderColor: `${colors.primary}60`,
-    background: `${colors.primary}16`,
-  },
-  summaryMetaCardDuration: {
-    borderColor: `${colors.secondary}60`,
-    background: `${colors.secondary}16`,
-  },
-  summaryMetaCardKeys: {
-    borderColor: `${colors.warning}60`,
-    background: `${colors.warning}16`,
-  },
-  summaryMetaLabel: {
-    color: '#cbd5e1',
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '12px',
-    letterSpacing: '0.8px',
-    textTransform: 'uppercase' as const,
-  },
-  summaryMetaValue: {
-    color: '#ffffff',
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '20px',
-    fontWeight: 700,
-  },
-  summaryKeys: {
-    border: '1px solid rgba(255, 255, 255, 0.35)',
-    background: '#000000',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    marginBottom: '10px',
-  },
-  summaryKeysLabel: {
-    color: '#cbd5e1',
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '13px',
-    letterSpacing: '0.8px',
-    textTransform: 'uppercase' as const,
-    marginBottom: '4px',
-  },
-  summaryKeysValue: {
-    color: '#ffffff',
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '22px',
-    lineHeight: 1.55,
-    fontWeight: 700,
-  },
-  summaryComparisonBox: {
-    width: '50%',
-    borderRadius: '8px',
-    padding: '10px 12px',
-    marginBottom: '10px',
-    border: '1px solid transparent',
-  },
-  summaryComparisonLabel: {
-    color: '#cbd5e1',
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '13px',
-    letterSpacing: '0.8px',
-    textTransform: 'uppercase' as const,
-    marginBottom: '4px',
-  },
-  summaryComparisonValue: {
-    color: '#ffffff',
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '20px',
-    lineHeight: 1.4,
-    fontWeight: 700,
-  },
-  summaryEmpty: {
-    color: colors.textMuted,
-    fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '16px',
-  },
-  summaryCodeBox: {
-    background: '#282c34',
-    border: '1px solid #3e4451',
-    borderRadius: '8px',
-    overflowX: 'auto' as const,
-    overflowY: 'hidden' as const,
-  },
-  summaryResetButton: {
-    padding: '10px 16px',
-    fontSize: '13px',
-    fontWeight: 600,
-    color: colors.secondary,
-    background: 'transparent',
-    border: `1px solid ${colors.secondary}`,
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontFamily: '"JetBrains Mono", monospace',
-    transition: 'all 0.2s ease',
-    marginTop: '8px',
   },
   summaryCodeRow: {
     display: 'flex',
@@ -964,18 +710,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryTokenFunction: {
     color: '#61afef',
-  },
-  homeButton: {
-    padding: '16px 36px',
-    fontSize: '19px',
-    fontWeight: 600,
-    color: colors.textSecondary,
-    background: 'transparent',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontFamily: '"JetBrains Mono", monospace',
-    transition: 'all 0.2s ease',
   },
   nextTaskHint: {
     fontSize: '14px',
@@ -1208,12 +942,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
   const [editorReadyTick, setEditorReadyTick] = useState(0);
   const [recentKeys, setRecentKeys] = useState<string[]>([]);
   const [taskSummaries, setTaskSummaries] = useState<TaskSummary[]>([]);
-  const [summaryTaskCompletion, setSummaryTaskCompletion] = useState<
-    Record<string, boolean>
-  >({});
-  const [summaryTaskResetTokens, setSummaryTaskResetTokens] = useState<
-    Record<string, number>
-  >({});
   const [showCheatSheet, setShowCheatSheet] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [blockedEditHint, setBlockedEditHint] = useState<string | null>(null);
@@ -1321,10 +1049,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
 
   const formatKeyLabel = useCallback((key: string): string | null => {
     return sharedFormatKeyLabel(key);
-  }, []);
-
-  const formatTaskTypeLabel = useCallback((taskType: Task['type']): string => {
-    return sharedFormatTaskTypeLabel(taskType);
   }, []);
 
   const expandRecommendedSequence = useCallback(
@@ -1544,8 +1268,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
     setCompletionInfo(null);
     setRecentKeys([]);
     setTaskSummaries([]);
-    setSummaryTaskCompletion({});
-    setSummaryTaskResetTokens({});
   }, []);
 
   // Fetch a new session (state only — task setup handled by effect)
@@ -1737,14 +1459,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
           ourSolutionKeyCount,
         },
       ]);
-      setSummaryTaskCompletion((prev) => ({
-        ...prev,
-        [completedTask.id]: false,
-      }));
-      setSummaryTaskResetTokens((prev) => ({
-        ...prev,
-        [completedTask.id]: 0,
-      }));
 
       void submitTaskKeystrokes(completedTask, {
         startedAt,
@@ -1929,39 +1643,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
     numTasks > 0
       ? ((taskProgress + (isTaskComplete ? 1 : 0)) / numTasks) * 100
       : 0;
-  const summaryAverages = useMemo(() => {
-    const count = taskSummaries.length;
-    if (count === 0) return null;
-
-    let totalDurationMs = 0;
-    let totalKeys = 0;
-    let totalKeysPerSecond = 0;
-    let totalDiscrepancy = 0;
-    let discrepancyCount = 0;
-
-    for (const summary of taskSummaries) {
-      totalDurationMs += summary.durationMs;
-      totalKeys += summary.keyCount;
-      totalKeysPerSecond +=
-        summary.durationMs > 0
-          ? summary.keyCount / (summary.durationMs / 1000)
-          : 0;
-      if (typeof summary.ourSolutionKeyCount === 'number') {
-        // +x means user's solution is x keys shorter than ours.
-        totalDiscrepancy += summary.ourSolutionKeyCount - summary.keyCount;
-        discrepancyCount += 1;
-      }
-    }
-
-    return {
-      keysPerSecond: totalKeysPerSecond / count,
-      durationMs: Math.round(totalDurationMs / count),
-      keys: Math.round(totalKeys / count),
-      discrepancy:
-        discrepancyCount > 0 ? totalDiscrepancy / discrepancyCount : null,
-    };
-  }, [taskSummaries]);
-
   const recentKeysDisplay = useMemo(() => {
     if (recentKeys.length === 0) return '';
     return recentKeys.slice(-KEY_LOG_VISIBLE_KEYS).join(' ');
@@ -2089,7 +1770,15 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
   }
 
   return (
-    <div style={styles.container}>
+    <div style={isSessionComplete ? styles.summaryContainer : styles.container}>
+      {/* The results screen is the only full-page view here, so it gets the
+          same ambient glows as the rest of the site instead of flat black. */}
+      {isSessionComplete && (
+        <>
+          <div style={styles.bgGlow1} />
+          <div style={styles.bgGlow2} />
+        </>
+      )}
       <div
         style={
           useDockedCheatSheet
@@ -2100,7 +1789,13 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
               }
             : {
                 ...styles.raceContainer,
-                ...(isSessionComplete ? { maxWidth: '1500px' } : {}),
+                ...(isSessionComplete
+                  ? {
+                      maxWidth: '1500px',
+                      position: 'relative' as const,
+                      zIndex: 1,
+                    }
+                  : {}),
                 marginLeft: 'auto',
                 marginRight: 'auto',
               }
@@ -2153,313 +1848,14 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
         )}
 
         {isSessionComplete ? (
-          <div style={styles.sessionComplete}>
-            <div style={styles.completeTitle}>Practice Summary</div>
-            <div style={styles.summaryOverview}>
-              <div style={styles.summaryOverviewLabelRow}>
-                <span style={styles.summaryOverviewLabel}>Total Time</span>
-                <span style={styles.summaryOverviewLabel}>Avg Keys/s</span>
-                <span style={styles.summaryOverviewLabel}>Avg Duration</span>
-                <span style={styles.summaryOverviewLabel}>Avg Keys</span>
-                <span style={styles.summaryOverviewLabel}>Avg Discrepancy</span>
-              </div>
-              <div style={styles.summaryOverviewValueRow}>
-                <span
-                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
-                >
-                  {formatTime(finalTime)}
-                </span>
-                <span
-                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
-                >
-                  {summaryAverages
-                    ? summaryAverages.keysPerSecond.toFixed(2)
-                    : '--'}
-                </span>
-                <span
-                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
-                >
-                  {summaryAverages
-                    ? formatTime(summaryAverages.durationMs)
-                    : '--'}
-                </span>
-                <span
-                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
-                >
-                  {summaryAverages?.keys ?? '--'}
-                </span>
-                <span
-                  style={{ ...styles.summaryOverviewValue, color: '#ffffff' }}
-                >
-                  {summaryAverages && summaryAverages.discrepancy !== null
-                    ? `${summaryAverages.discrepancy >= 0 ? '+' : ''}${summaryAverages.discrepancy.toFixed(1)}`
-                    : '--'}
-                </span>
-              </div>
-            </div>
-            {(() => {
-              const leaderboardRanks =
-                completionInfo?.kind === 'practice'
-                  ? completionInfo.ranks
-                  : null;
-              if (!leaderboardRanks) return null;
-              const badges: Array<{ label: string; rank: number }> = [];
-              if (leaderboardRanks.weekly != null)
-                badges.push({
-                  label: 'This Week',
-                  rank: leaderboardRanks.weekly,
-                });
-              if (leaderboardRanks.monthly != null)
-                badges.push({
-                  label: 'This Month',
-                  rank: leaderboardRanks.monthly,
-                });
-              if (leaderboardRanks.allTime != null)
-                badges.push({
-                  label: 'All Time',
-                  rank: leaderboardRanks.allTime,
-                });
-              if (badges.length === 0) return null;
-              return (
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '10px',
-                    flexWrap: 'wrap',
-                    marginTop: '14px',
-                  }}
-                >
-                  {badges.map((b) => (
-                    <span
-                      key={b.label}
-                      style={{
-                        fontSize: '14px',
-                        fontWeight: 700,
-                        padding: '6px 14px',
-                        borderRadius: '999px',
-                        background: `${colors.success}20`,
-                        border: `1px solid ${colors.success}60`,
-                        color: colors.successLight,
-                        fontFamily: '"JetBrains Mono", monospace',
-                        letterSpacing: '0.3px',
-                      }}
-                    >
-                      #{b.rank} {b.label}
-                    </span>
-                  ))}
-                </div>
-              );
-            })()}
-            {config.renderCompletionExtras?.(completionInfo)}
-            <div style={styles.completeButtons}>
-              {config.allowSameTasksReplay && (
-                <button
-                  style={styles.completeButton}
-                  onClick={restartSameTasks}
-                >
-                  Restart Same Tasks
-                </button>
-              )}
-              {config.allowNewTasks && (
-                <button style={styles.homeButton} onClick={fetchSession}>
-                  Restart
-                </button>
-              )}
-              <button style={styles.homeButton} onClick={() => navigate('/')}>
-                Home
-              </button>
-            </div>
-            <div style={styles.summaryList}>
-              {taskSummaries.length === 0 && (
-                <div style={{ ...styles.summaryEmpty, gridColumn: '1 / -1' }}>
-                  No task details recorded for this run.
-                </div>
-              )}
-              {taskSummaries.map((summary, index) => {
-                const keysPerSecond =
-                  summary.durationMs > 0
-                    ? (summary.keyCount / (summary.durationMs / 1000)).toFixed(
-                        2
-                      )
-                    : '0.00';
-                const isDeleteTask = summary.taskType === 'delete';
-                const hasComparison =
-                  typeof summary.ourSolutionKeyCount === 'number';
-                const userKeyCount = summary.keyCount;
-                const ourKeyCount = summary.ourSolutionKeyCount ?? 0;
-                const discrepancy = hasComparison
-                  ? ourKeyCount - userKeyCount
-                  : 0;
-                const positiveDiscrepancy = hasComparison && discrepancy > 0;
-                const negativeDiscrepancy = hasComparison && discrepancy < 0;
-                const comparisonStyle: React.CSSProperties = hasComparison
-                  ? positiveDiscrepancy
-                    ? {
-                        ...styles.summaryComparisonBox,
-                        border: '1px solid #22c55e60',
-                        background: '#22c55e20',
-                      }
-                    : negativeDiscrepancy
-                      ? {
-                          ...styles.summaryComparisonBox,
-                          border: '1px solid #ef444460',
-                          background: '#ef444420',
-                        }
-                      : {
-                          ...styles.summaryComparisonBox,
-                          border: `1px solid ${colors.textMuted}60`,
-                          background: `${colors.textMuted}20`,
-                        }
-                  : {
-                      ...styles.summaryComparisonBox,
-                      border: `1px solid ${colors.textMuted}60`,
-                      background: `${colors.textMuted}20`,
-                    };
-                const badgeStyle: React.CSSProperties = {
-                  ...styles.summaryTaskBadge,
-                  border: `1px solid ${isDeleteTask ? colors.secondary : colors.primary}40`,
-                  background: `${isDeleteTask ? colors.secondary : colors.primary}20`,
-                  color: isDeleteTask
-                    ? colors.secondaryLight
-                    : colors.primaryLight,
-                };
-                const isSummaryTaskComplete =
-                  summaryTaskCompletion[summary.taskId] === true;
-                return (
-                  <div
-                    key={summary.taskId}
-                    style={
-                      isSummaryTaskComplete
-                        ? {
-                            ...styles.summaryItem,
-                            ...styles.summaryItemComplete,
-                          }
-                        : styles.summaryItem
-                    }
-                  >
-                    {isSummaryTaskComplete && (
-                      <div style={styles.summaryCompleteCheck}>✓</div>
-                    )}
-                    <div style={styles.summaryItemHeader}>
-                      <span style={styles.summaryItemTitle}>
-                        Task {summary.taskIndex}
-                      </span>
-                      <span style={badgeStyle}>
-                        {formatTaskTypeLabel(summary.taskType)}
-                      </span>
-                    </div>
-                    <div style={styles.summaryItemBody}>
-                      <div style={styles.summaryAnalyticsColumn}>
-                        <div style={styles.summaryMetaRow}>
-                          <div
-                            style={{
-                              ...styles.summaryMetaCard,
-                              ...styles.summaryMetaCardApm,
-                            }}
-                          >
-                            <span style={styles.summaryMetaLabel}>Keys/s</span>
-                            <span style={styles.summaryMetaValue}>
-                              {keysPerSecond}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              ...styles.summaryMetaCard,
-                              ...styles.summaryMetaCardDuration,
-                            }}
-                          >
-                            <span style={styles.summaryMetaLabel}>
-                              Duration
-                            </span>
-                            <span style={styles.summaryMetaValue}>
-                              {formatTime(summary.durationMs)}
-                            </span>
-                          </div>
-                          <div
-                            style={{
-                              ...styles.summaryMetaCard,
-                              ...styles.summaryMetaCardKeys,
-                            }}
-                          >
-                            <span style={styles.summaryMetaLabel}>Keys</span>
-                            <span style={styles.summaryMetaValue}>
-                              {summary.keyCount}
-                            </span>
-                          </div>
-                        </div>
-                        <div style={styles.summaryKeys}>
-                          <div style={styles.summaryKeysLabel}>
-                            Your Solution
-                          </div>
-                          <div style={styles.summaryKeysValue}>
-                            {summary.keySequence || 'No key events recorded'}
-                          </div>
-                        </div>
-                        {typeof summary.ourSolutionKeyCount === 'number' && (
-                          <div style={styles.summaryKeys}>
-                            <div style={styles.summaryKeysLabel}>
-                              Our Solution
-                            </div>
-                            <div style={styles.summaryKeysValue}>
-                              {summary.optimalSequence
-                                ? summary.optimalSequence
-                                : 'No recommendation'}
-                            </div>
-                          </div>
-                        )}
-                        {typeof summary.ourSolutionKeyCount === 'number' && (
-                          <div style={comparisonStyle}>
-                            <div style={styles.summaryComparisonLabel}>
-                              Discrepancy
-                            </div>
-                            <div style={styles.summaryComparisonValue}>
-                              {hasComparison
-                                ? `${discrepancy >= 0 ? '+' : ''}${discrepancy}`
-                                : 'Comparison unavailable'}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div style={styles.summaryVerticalDivider} />
-                      <div style={styles.summarySnippetColumn}>
-                        <div style={styles.summaryCodeBox}>
-                          <SummaryTaskSandbox
-                            task={summary.task}
-                            resetToken={
-                              summaryTaskResetTokens[summary.taskId] ?? 0
-                            }
-                            autoFocusOnMount={index === 0}
-                            onCompletionChange={(isComplete) => {
-                              setSummaryTaskCompletion((prev) => ({
-                                ...prev,
-                                [summary.taskId]: isComplete,
-                              }));
-                            }}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          style={styles.summaryResetButton}
-                          onClick={() => {
-                            setSummaryTaskCompletion((prev) => ({
-                              ...prev,
-                              [summary.taskId]: false,
-                            }));
-                            setSummaryTaskResetTokens((prev) => ({
-                              ...prev,
-                              [summary.taskId]: (prev[summary.taskId] ?? 0) + 1,
-                            }));
-                          }}
-                        >
-                          Reset Task
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <SessionCompleteSummary
+            config={config}
+            completionInfo={completionInfo}
+            finalTimeMs={finalTime}
+            taskSummaries={taskSummaries}
+            onRestartSameTasks={restartSameTasks}
+            onRestartNewTasks={fetchSession}
+          />
         ) : (
           <>
             {/* Task Banner */}
@@ -2675,6 +2071,8 @@ const practiceConfig: RaceSessionConfig = {
   mode: 'practice',
   title: 'Practice Mode',
   subtitle: 'Learn and Hone your Vim skills solo.',
+  summaryTitle: 'Practice Summary',
+  showTaskBreakdown: true,
   fetchSession: async (accessToken) => {
     const headers: HeadersInit = accessToken
       ? { Authorization: `Bearer ${accessToken}` }

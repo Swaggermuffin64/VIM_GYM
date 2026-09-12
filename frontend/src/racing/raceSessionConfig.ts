@@ -31,6 +31,14 @@ export interface RaceSessionConfig {
   /** Ready-screen heading and subtitle. */
   title: string;
   subtitle: string;
+  /** Results-screen heading (e.g. "Practice Summary", "Race Summary"). */
+  summaryTitle: string;
+  /**
+   * Show the per-task breakdown (solutions, discrepancies, replay sandboxes)
+   * and the aggregate stats row on the results screen. False for daily, whose
+   * end screen is just the attempt times and the mode's completion extras.
+   */
+  showTaskBreakdown: boolean;
   /** Fetch tasks + gameId for a new run (practice prefetches on mount). */
   fetchSession(accessToken: string | undefined): Promise<RaceSessionData>;
   /** Submit the finished run; result feeds renderCompletionExtras. */
@@ -44,6 +52,13 @@ export interface RaceSessionConfig {
   allowNewTasks: boolean;
   /** Show the "Same Tasks" replay button (false for daily). */
   allowSameTasksReplay: boolean;
-  /** Extra results-overlay content (daily: placing + share + try-again). */
-  renderCompletionExtras?(info: RaceCompletionInfo | null): React.ReactNode;
+  /**
+   * Extra results-overlay content (daily: attempt times + share + back to
+   * leaderboard). Receives the run's total time so modes can list it alongside
+   * times they already knew about.
+   */
+  renderCompletionExtras?(
+    info: RaceCompletionInfo | null,
+    finalTimeMs: number
+  ): React.ReactNode;
 }

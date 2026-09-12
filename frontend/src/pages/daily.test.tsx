@@ -4,7 +4,7 @@
  * rollover/out-of-attempts edge cases, and leaderboard rendering.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, render, screen, act } from '@testing-library/react';
+import { cleanup, render, screen, act, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 
@@ -58,7 +58,9 @@ vi.mock('../api/daily', () => ({
 }));
 
 // Import after mocks are wired (top-level await, same pattern as profile.test.tsx).
-const DailyRacePage = (await import('./daily')).default;
+const dailyModule = await import('./daily');
+const DailyRacePage = dailyModule.default;
+const { DailyCompletionExtras } = dailyModule;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -165,8 +167,8 @@ describe('DailyRacePage', () => {
     expect(screen.getByLabelText('1 of 3 attempts used')).toBeTruthy();
   });
 
-  // 2. Out of attempts: start button replaced by "Come back tomorrow" + countdown.
-  it('shows "Come back tomorrow" and countdown when out of attempts', async () => {
+  // 2. Out of attempts: start button replaced by the countdown.
+  it('shows the countdown when out of attempts', async () => {
     mockFetchDailyRace.mockResolvedValue({
       status: 'ok',
       info: makeInfo({
@@ -182,9 +184,8 @@ describe('DailyRacePage', () => {
     await act(async () => {
       renderDaily();
     });
-    expect(await screen.findByText(/Come back tomorrow/i)).toBeTruthy();
     // Countdown label present.
-    expect(screen.getByText(/New race in/i)).toBeTruthy();
+    expect(await screen.findByText(/New race in/i)).toBeTruthy();
     // Start button should NOT appear.
     expect(screen.queryByRole('button', { name: /Start attempt/i })).toBeNull();
   });
@@ -237,7 +238,7 @@ describe('DailyRacePage', () => {
     expect(mockFetchDailyRace).toHaveBeenCalledTimes(2);
     // Should NOT mount race session.
     expect(screen.queryByTestId('race-session')).toBeNull();
-    expect(await screen.findByText(/Come back tomorrow/i)).toBeTruthy();
+    expect(await screen.findByText(/New race in/i)).toBeTruthy();
   });
 
   // 5. startDailyAttempt returning a different raceDate triggers refetch (UTC rollover).
@@ -302,8 +303,9 @@ describe('DailyRacePage', () => {
       flexBtn.click();
     });
 
-    // Modal minted the link on open and shows it.
-    expect(mockCreateDailyShareLink).toHaveBeenCalledWith('tok');
+    // Modal minted the link on open, pinned to the loaded race's date so a
+    // share clicked after a UTC rollover still shares the day that was raced.
+    expect(mockCreateDailyShareLink).toHaveBeenCalledWith('tok', RACE_DATE);
     const dialog = await screen.findByRole('dialog');
     expect(dialog).toBeTruthy();
     expect(
@@ -390,15 +392,15 @@ describe('DailyRacePage', () => {
     await act(async () => {
       renderDaily();
     });
-    expect(await screen.findByText(/Come back tomorrow/i)).toBeTruthy();
+    expect(await screen.findByText(/New race in/i)).toBeTruthy();
 
     expect(
       screen.getByRole('button', { name: /Flex on people/i })
     ).toBeTruthy();
   });
 
-  // Leaderboard rail header shows the true field size, not the row count.
-  it('shows the total racer count in the leaderboard header', async () => {
+  // The rail header is just the title now — no field-size count beside it.
+  it('does not show a racer count in the leaderboard header', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       neighborhood: null,
@@ -425,7 +427,7 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(screen.getByText(/312 racers/i)).toBeTruthy();
+    expect(screen.queryByText(/\d+ racers?/i)).toBeNull();
   });
 
   // Pinned neighborhood: divider + user's rank±1 rows below the top list.
@@ -512,5 +514,148 @@ describe('DailyRacePage', () => {
     const ownRow = screen.getByText('testuser').closest('[aria-current]');
     expect(ownRow).not.toBeNull();
     expect(ownRow!.getAttribute('aria-current')).toBe('true');
+  });
+});
+
+describe('DailyCompletionExtras', () => {
+  // Attempt 1 finished before this race; attempt 2 is the run that just ended.
+  const LOADED_ATTEMPTS = [{ attemptNumber: 1, durationMs: 41200 }];
+  const JUST_FINISHED = { attemptNumber: 2, durationMs: 38400 };
+
+  function renderExtras(
+    overrides: {
+      loadedAttempts?: Array<{
+        attemptNumber: number;
+        durationMs: number | null;
+      }>;
+      justFinished?: { attemptNumber: number; durationMs: number };
+      attemptsRemaining?: number;
+      onTryAgain?: () => void;
+    } = {}
+  ) {
+    return render(
+      <MemoryRouter>
+        <DailyCompletionExtras
+          completionInfo={{
+            kind: 'daily',
+            rank: 2,
+            totalRacers: 7,
+            bestMs: 38400,
+            attemptsRemaining: overrides.attemptsRemaining ?? 1,
+          }}
+          raceDate={RACE_DATE}
+          loadedAttempts={overrides.loadedAttempts ?? LOADED_ATTEMPTS}
+          justFinished={overrides.justFinished ?? JUST_FINISHED}
+          onTryAgain={overrides.onTryAgain ?? (() => {})}
+          onBackToLeaderboard={() => {}}
+        />
+      </MemoryRouter>
+    );
+  }
+
+  it("lists every finished attempt's time, including the run that just ended", () => {
+    renderExtras();
+    expect(screen.getByText('Attempt 1')).toBeTruthy();
+    expect(screen.getByText('41.2s')).toBeTruthy();
+    expect(screen.getByText('Attempt 2')).toBeTruthy();
+    expect(screen.getByText('38.4s')).toBeTruthy();
+  });
+
+  it('marks the attempt that just finished as current', () => {
+    renderExtras();
+    const currentRow = screen.getByText('Attempt 2').closest('[aria-current]');
+    expect(currentRow).not.toBeNull();
+    expect(currentRow!.getAttribute('aria-current')).toBe('true');
+    expect(screen.getByText('Attempt 1').closest('[aria-current]')).toBeNull();
+  });
+
+  it('skips attempts that were started but never finished', () => {
+    renderExtras({
+      loadedAttempts: [
+        { attemptNumber: 1, durationMs: null },
+        { attemptNumber: 2, durationMs: 41200 },
+      ],
+      justFinished: { attemptNumber: 3, durationMs: 38400 },
+    });
+    expect(screen.queryByText('Attempt 1')).toBeNull();
+    expect(screen.getByText('Attempt 2')).toBeTruthy();
+    expect(screen.getByText('Attempt 3')).toBeTruthy();
+  });
+
+  it('does not include the just-finished attempt twice', () => {
+    renderExtras({
+      loadedAttempts: [{ attemptNumber: 2, durationMs: 99900 }],
+      justFinished: JUST_FINISHED,
+    });
+    expect(screen.getAllByText('Attempt 2')).toHaveLength(1);
+    expect(screen.getByText('38.4s')).toBeTruthy();
+    expect(screen.queryByText('99.9s')).toBeNull();
+  });
+
+  // The screen is deliberately just attempts, try-again, flex, and back.
+  it('shows the try-again, flex, and back-to-leaderboard actions', () => {
+    renderExtras();
+    expect(
+      screen.getByRole('button', { name: 'Try again (1 left)' })
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Flex on people/i })
+    ).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Back to leaderboard/i })
+    ).toBeTruthy();
+    expect(screen.queryByText(/Share your time/i)).toBeNull();
+    expect(screen.queryByText(/#2 of 7/)).toBeNull();
+  });
+
+  it('hides try-again when no attempts are left', () => {
+    renderExtras({ attemptsRemaining: 0 });
+    expect(screen.queryByText(/Try again/i)).toBeNull();
+    expect(
+      screen.getByRole('button', { name: /Back to leaderboard/i })
+    ).toBeTruthy();
+  });
+
+  // Unraced slots keep the tile row balanced and show what's still available.
+  it('shows a placeholder tile for each remaining attempt', () => {
+    renderExtras({ attemptsRemaining: 2 });
+    expect(screen.getByText('Attempt 3')).toBeTruthy();
+    expect(screen.getByText('Attempt 4')).toBeTruthy();
+    expect(screen.queryByText('Attempt 5')).toBeNull();
+  });
+
+  it('shows no placeholder tiles when out of attempts', () => {
+    renderExtras({ attemptsRemaining: 0 });
+    expect(screen.getByText('Attempt 2')).toBeTruthy();
+    expect(screen.queryByText('Attempt 3')).toBeNull();
+  });
+
+  it('calls onTryAgain when try-again is clicked', () => {
+    const onTryAgain = vi.fn();
+    renderExtras({ attemptsRemaining: 2, onTryAgain });
+
+    screen.getByRole('button', { name: 'Try again (2 left)' }).click();
+
+    expect(onTryAgain).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the share modal with the link and the best time from today', async () => {
+    renderExtras();
+
+    await act(async () => {
+      screen.getByRole('button', { name: /Flex on people/i }).click();
+    });
+
+    expect(mockCreateDailyShareLink).toHaveBeenCalledWith('tok', RACE_DATE);
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      await screen.findByDisplayValue('https://vim.gym/c/abc')
+    ).toBeTruthy();
+    // Preview headline mirrors the backend og:title: name + best time.
+    expect(
+      within(dialog).getByText(
+        /finished the VIMGYM daily race in 38\.4 seconds/
+      )
+    ).toBeTruthy();
   });
 });

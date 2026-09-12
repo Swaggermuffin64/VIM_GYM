@@ -2,8 +2,8 @@
  * Race of the Day page (/daily).
  *
  * Owns the daily-specific chrome: pre-race screen (attempt dots, start
- * button, countdown, leaderboard panel) and the completion extras (placing,
- * share link, try-again). The actual racing UI is RaceSessionPage from
+ * button, countdown, leaderboard panel) and the completion extras (attempt
+ * times, try-again, share link). The actual racing UI is RaceSessionPage from
  * practice.tsx, mounted only after an attempt slot is claimed -- visiting
  * this page never burns an attempt; clicking Start does.
  */
@@ -37,6 +37,7 @@ import type {
 import { RaceSessionPage } from './practice';
 import { SiteBanner } from '../components/SiteBanner';
 import { clearChallengeSlug } from '../lib/challengeRedirect';
+import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 
 // ---------------------------------------------------------------------------
 // Phase state machine
@@ -60,29 +61,6 @@ type Phase =
 /** Format milliseconds as seconds with one decimal, e.g. "4.1s". */
 function formatTime(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
-}
-
-/**
- * Compute milliseconds until the next UTC midnight from the current instant.
- * Used for the "New race in" countdown.
- */
-function msUntilNextUtcMidnight(): number {
-  const now = new Date();
-  const tomorrow = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate() + 1
-  );
-  return Math.max(0, tomorrow - Date.now());
-}
-
-/** Format ms as HH:MM:SS for the countdown display. */
-function formatCountdown(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-  const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-  const s = String(totalSeconds % 60).padStart(2, '0');
-  return `${h}:${m}:${s}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +152,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   metaText: {
-    fontSize: '13px',
+    fontSize: '15px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
@@ -191,7 +169,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textMuted,
   },
   bestTime: {
-    fontSize: '13px',
+    fontSize: '15px',
     color: colors.successLight,
     fontFamily: '"JetBrains Mono", monospace',
   },
@@ -203,7 +181,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   // Matches metaText ("N of 3 attempts used") for a consistent caption tier.
   subLine: {
-    fontSize: '13px',
+    fontSize: '15px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
@@ -224,6 +202,11 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     transition: 'all 0.2s ease',
   },
+  // Results-screen variant: rounded to match the pill it sits next to.
+  flexButtonPill: {
+    borderRadius: '999px',
+    padding: '16px 30px',
+  },
   startButton: {
     padding: '18px 24px',
     fontSize: '17px',
@@ -237,12 +220,6 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s ease',
     letterSpacing: '0.5px',
     boxShadow: `0 0 20px ${colors.primaryGlow}`,
-  },
-  disabledMessage: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: colors.textSecondary,
-    fontFamily: '"JetBrains Mono", monospace',
   },
   countdown: {
     fontSize: '14px',
@@ -367,12 +344,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '1px',
     fontFamily: '"JetBrains Mono", monospace',
   },
-  modalCaption: {
-    margin: 0,
-    fontSize: '12px',
-    color: colors.textMuted,
-    fontFamily: '"JetBrains Mono", monospace',
-  },
   // Leaderboard rail (right column)
   rail: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
@@ -392,11 +363,6 @@ const styles: Record<string, React.CSSProperties> = {
     paddingBottom: '12px',
     marginBottom: '10px',
   },
-  railCount: {
-    fontSize: '12px',
-    color: colors.textMuted,
-    fontFamily: '"JetBrains Mono", monospace',
-  },
   // Left inset matches the rows' 12px padding so the dots sit under the ranks.
   railDivider: {
     textAlign: 'left',
@@ -407,7 +373,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
   },
   leaderboardTitle: {
-    fontSize: '13px',
+    fontSize: '15px',
     fontWeight: 700,
     color: colors.textPrimary,
     textTransform: 'uppercase',
@@ -451,79 +417,111 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center',
     padding: '16px 0',
   },
-  // Completion extras
+  // Completion extras.
+  //
+  // Three tiers, each a different shape so nothing reads as a row of
+  // identical bars: the attempt times are upright tiles side by side, the
+  // actions are wide pills below them, and the way out is bare text.
   extrasContainer: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
+    alignItems: 'center',
+    gap: '28px',
     width: '100%',
-    marginTop: '16px',
+    marginTop: '8px',
   },
-  placingLine: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: colors.primaryLight,
-    fontFamily: '"JetBrains Mono", monospace',
-    textAlign: 'center',
+  attemptGrid: {
+    display: 'grid',
+    gap: '14px',
+    width: '100%',
   },
-  shareBlock: {
-    background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
+  attemptTile: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    padding: '22px 12px',
+    borderRadius: '14px',
     border: `1px solid ${colors.border}`,
-    borderRadius: '12px',
-    padding: '20px',
-    textAlign: 'center',
-  },
-  shareTitle: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: colors.textSecondary,
+    background: `${colors.bgDark}80`,
     fontFamily: '"JetBrains Mono", monospace',
-    marginBottom: '12px',
   },
-  shareButton: {
-    padding: '12px 24px',
-    fontSize: '14px',
+  // The attempt that just finished, so the fresh time is findable at a glance.
+  attemptTileCurrent: {
+    border: `1px solid ${colors.primary}`,
+    background: `${colors.primary}18`,
+    boxShadow: `0 0 22px ${colors.primaryGlow}`,
+  },
+  // A slot still available today: outlined, not filled in.
+  attemptTileOpen: {
+    border: `1px dashed ${colors.border}`,
+    background: 'transparent',
+  },
+  attemptLabel: {
+    color: colors.textMuted,
+    fontSize: '12px',
     fontWeight: 600,
+    letterSpacing: '1px',
+    textTransform: 'uppercase',
+  },
+  attemptTime: {
+    color: colors.textSecondary,
+    fontWeight: 700,
+    fontSize: '26px',
+    lineHeight: 1,
+  },
+  attemptTimeCurrent: {
+    color: colors.primaryLight,
+  },
+  attemptTimeOpen: {
+    color: colors.textMuted,
+    opacity: 0.5,
+  },
+  actionRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '14px',
+    flexWrap: 'wrap',
+  },
+  tryAgainPill: {
+    padding: '16px 30px',
+    fontSize: '15px',
+    fontWeight: 700,
+    letterSpacing: '0.5px',
     color: colors.bgDark,
     background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
-    border: 'none',
-    borderRadius: '8px',
+    border: '2px solid transparent',
+    borderRadius: '999px',
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
+    boxShadow: `0 0 22px ${colors.primaryGlow}`,
     transition: 'all 0.2s ease',
   },
-  tryAgainButton: {
-    width: '100%',
-    padding: '14px 24px',
-    fontSize: '15px',
-    fontWeight: 600,
-    color: colors.primaryLight,
-    background: `${colors.primary}20`,
-    border: `1px solid ${colors.primary}55`,
-    borderRadius: '10px',
-    cursor: 'pointer',
-    fontFamily: '"JetBrains Mono", monospace',
-    transition: 'all 0.2s ease',
-  },
-  leaderboardButton: {
-    width: '100%',
-    padding: '14px 24px',
-    fontSize: '15px',
+  leaderboardLink: {
+    padding: '4px 8px',
+    fontSize: '14px',
     fontWeight: 500,
     background: 'transparent',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
+    border: 'none',
     color: colors.textMuted,
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
     transition: 'all 0.2s ease',
   },
-  loadingText: {
-    fontSize: '16px',
-    color: colors.textSecondary,
-    fontFamily: '"JetBrains Mono", monospace',
-    textAlign: 'center',
+  loadingWrapper: {
+    display: 'flex',
+    justifyContent: 'center',
     padding: '64px 0',
+  },
+  loadingSpinner: {
+    width: '36px',
+    height: '36px',
+    border: `3px solid ${colors.border}`,
+    borderTopColor: colors.primary,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
   },
   errorText: {
     fontSize: '16px',
@@ -547,8 +545,11 @@ export default function DailyRacePage() {
     neighborhood: null,
     totalRacers: 0,
   });
-  const [countdown, setCountdown] = useState('');
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Only counts while the user is out of attempts — that's the one state where
+  // "when does the next race start" is the question on their mind.
+  const countdown = useUtcMidnightCountdown(
+    phase.name === 'preRace' && phase.info.attemptsRemaining === 0
+  );
 
   // This page is the destination of the challenge-share journey; clear the
   // stashed slug so it can't redirect future navigation in this tab.
@@ -584,59 +585,61 @@ export default function DailyRacePage() {
     );
   }, [phase.name, session]);
 
-  // ------- Countdown timer for "out of attempts" -------
+  // ------- Start attempt handlers -------
 
-  useEffect(() => {
-    if (phase.name !== 'preRace' || phase.info.attemptsRemaining > 0) {
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-        countdownRef.current = null;
+  /**
+   * Claim an attempt slot from the server and drop into the race, carrying the
+   * given race info along for the ride. Falls back to a full reload when the
+   * server disagrees with what we loaded (attempts spent elsewhere, or a UTC
+   * date rollover mid-session).
+   */
+  const beginAttempt = useCallback(
+    async (info: DailyRaceInfo) => {
+      if (!session?.access_token) return;
+
+      const result = await startDailyAttempt(session.access_token);
+
+      if (result.status === 'out_of_attempts') {
+        // Race condition: used all attempts in another tab/device.
+        void loadInfo();
+        return;
       }
-      return;
-    }
-
-    const tick = () => setCountdown(formatCountdown(msUntilNextUtcMidnight()));
-    tick();
-    countdownRef.current = setInterval(tick, 1000);
-    return () => {
-      if (countdownRef.current) {
-        clearInterval(countdownRef.current);
-        countdownRef.current = null;
+      if (result.status === 'error') {
+        setPhase({ name: 'error', message: 'Failed to start attempt.' });
+        return;
       }
-    };
-  }, [phase]);
 
-  // ------- Start attempt handler -------
+      // UTC rollover: server returned a different date than what we loaded.
+      if (result.raceDate !== info.raceDate) {
+        void loadInfo();
+        return;
+      }
 
-  const handleStart = useCallback(async () => {
-    if (phase.name !== 'preRace' || !session?.access_token) return;
-    const info = phase.info;
+      setPhase({
+        name: 'racing',
+        info,
+        gameId: result.gameId,
+        attemptNumber: result.attemptNumber,
+      });
+    },
+    [session, loadInfo]
+  );
 
-    const result = await startDailyAttempt(session.access_token);
+  const handleStart = useCallback(() => {
+    if (phase.name !== 'preRace') return;
+    void beginAttempt(phase.info);
+  }, [phase, beginAttempt]);
 
-    if (result.status === 'out_of_attempts') {
-      // Race condition: used all attempts in another tab/device.
-      void loadInfo();
-      return;
-    }
-    if (result.status === 'error') {
-      setPhase({ name: 'error', message: 'Failed to start attempt.' });
-      return;
-    }
-
-    // UTC rollover: server returned a different date than what we loaded.
-    if (result.raceDate !== info.raceDate) {
-      void loadInfo();
-      return;
-    }
-
-    setPhase({
-      name: 'racing',
-      info,
-      gameId: result.gameId,
-      attemptNumber: result.attemptNumber,
-    });
-  }, [phase, session, loadInfo]);
+  /**
+   * Retry straight from the results screen. Re-reads the race info first so the
+   * next summary's attempt list includes the run that just finished, but starts
+   * the attempt regardless if that read fails.
+   */
+  const handleTryAgain = useCallback(async () => {
+    if (phase.name !== 'racing' || !session?.access_token) return;
+    const refreshed = await fetchDailyRace(session.access_token);
+    await beginAttempt(refreshed.status === 'ok' ? refreshed.info : phase.info);
+  }, [phase, session, beginAttempt]);
 
   // ------- Return to pre-race (after completion extras) -------
 
@@ -648,12 +651,14 @@ export default function DailyRacePage() {
 
   const dailyConfig: RaceSessionConfig | null = useMemo(() => {
     if (phase.name !== 'racing') return null;
-    const { info, gameId } = phase;
+    const { info, gameId, attemptNumber } = phase;
 
     return {
       mode: 'daily',
       title: 'Race of the Day',
       subtitle: info.raceDate,
+      summaryTitle: 'Race Summary',
+      showTaskBreakdown: false,
       fetchSession: async () => ({ tasks: info.tasks, gameId }),
       submitCompletion: async ({ accessToken, durationMs }) => {
         if (gameId == null || !accessToken) return null;
@@ -673,18 +678,23 @@ export default function DailyRacePage() {
       },
       allowNewTasks: false,
       allowSameTasksReplay: false,
-      renderCompletionExtras: (completionInfo: RaceCompletionInfo | null) => {
+      renderCompletionExtras: (
+        completionInfo: RaceCompletionInfo | null,
+        finalTimeMs: number
+      ) => {
         return (
           <DailyCompletionExtras
             completionInfo={completionInfo}
-            accessToken={session?.access_token}
-            onTryAgain={returnToPreRace}
+            raceDate={info.raceDate}
+            loadedAttempts={info.attempts}
+            justFinished={{ attemptNumber, durationMs: finalTimeMs }}
+            onTryAgain={handleTryAgain}
             onBackToLeaderboard={returnToPreRace}
           />
         );
       },
     };
-  }, [phase, session, returnToPreRace]);
+  }, [phase, handleTryAgain, returnToPreRace]);
 
   // ------- Render -------
 
@@ -708,7 +718,10 @@ export default function DailyRacePage() {
         <div style={styles.bgGlow2} />
         <div style={styles.container}>
           {phase.name === 'loading' && (
-            <div style={styles.loadingText}>Loading today&apos;s race...</div>
+            <div style={styles.loadingWrapper}>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <div style={styles.loadingSpinner} />
+            </div>
           )}
 
           {phase.name === 'error' && (
@@ -757,15 +770,6 @@ function PreRaceScreen({
   const usedCount = info.attempts.length;
   const totalSlots = usedCount + info.attemptsRemaining;
   const outOfAttempts = info.attemptsRemaining === 0;
-
-  // The user's own placing (from either board section) for the share modal.
-  const ownEntry = [
-    ...leaderboard.entries,
-    ...(leaderboard.neighborhood ?? []),
-  ].find((e) => e.userId === userId);
-  const ownPlacing = ownEntry
-    ? { rank: ownEntry.rank, totalRacers: leaderboard.totalRacers }
-    : null;
 
   return (
     <div className="daily-split" style={styles.split}>
@@ -817,7 +821,6 @@ function PreRaceScreen({
         {/* Out-of-attempts message and countdown */}
         {outOfAttempts && (
           <>
-            <div style={styles.disabledMessage}>Come back tomorrow</div>
             <div style={styles.countdown}>
               <span>New race in </span>
               <span style={styles.countdownTime}>{countdown}</span>
@@ -832,7 +835,9 @@ function PreRaceScreen({
               Start attempt {usedCount + 1} of {totalSlots}
             </button>
           )}
-          {info.bestMs != null && <FlexShareButton placing={ownPlacing} />}
+          {info.bestMs != null && (
+            <FlexShareButton bestMs={info.bestMs} raceDate={info.raceDate} />
+          )}
         </div>
 
         <div style={styles.subLine}>
@@ -845,10 +850,6 @@ function PreRaceScreen({
       <aside style={styles.rail}>
         <div style={styles.railHead}>
           <span style={styles.leaderboardTitle}>Leaderboard</span>
-          <span style={styles.railCount}>
-            {leaderboard.totalRacers} racer
-            {leaderboard.totalRacers === 1 ? '' : 's'}
-          </span>
         </div>
         {leaderboard.entries.length === 0 ? (
           <div style={styles.leaderboardEmpty}>No entries yet</div>
@@ -915,27 +916,42 @@ function LeaderboardRow({
 // ---------------------------------------------------------------------------
 
 /**
- * The pre-race share button. Rendered once the user has a finished time;
- * opens the share modal. Styled as the anti-CTA: dark body, magenta/amber
- * gradient border.
+ * The share button, on both the pre-race screen and the results screen.
+ * Rendered once the user has a finished time; opens the share modal. Styled as
+ * the anti-CTA: dark body, magenta/amber gradient border. `pill` rounds it off
+ * for the results screen, where it sits in a row of pills rather than beside
+ * the squared-off start button.
  */
 function FlexShareButton({
-  placing,
+  bestMs,
+  raceDate,
+  pill = false,
 }: {
-  placing: { rank: number; totalRacers: number } | null;
+  bestMs: number | null;
+  /** The date of the race being shared, from the loaded DailyRaceInfo. */
+  raceDate: string;
+  pill?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <button
         className="daily-flex-btn"
-        style={styles.flexButton}
+        style={
+          pill
+            ? { ...styles.flexButton, ...styles.flexButtonPill }
+            : styles.flexButton
+        }
         onClick={() => setOpen(true)}
       >
         Flex on people
       </button>
       {open && (
-        <FlexShareModal placing={placing} onClose={() => setOpen(false)} />
+        <FlexShareModal
+          bestMs={bestMs}
+          raceDate={raceDate}
+          onClose={() => setOpen(false)}
+        />
       )}
     </>
   );
@@ -947,10 +963,13 @@ function FlexShareButton({
  * render from the link's OG tags (see backend/routes/share.ts).
  */
 function FlexShareModal({
-  placing,
+  bestMs,
+  raceDate,
   onClose,
 }: {
-  placing: { rank: number; totalRacers: number } | null;
+  bestMs: number | null;
+  /** Pins the minted link to the raced day, even across a UTC rollover. */
+  raceDate: string;
   onClose: () => void;
 }) {
   const { session, profile } = useAuth();
@@ -962,7 +981,7 @@ function FlexShareModal({
   useEffect(() => {
     let cancelled = false;
     if (!session?.access_token) return;
-    void createDailyShareLink(session.access_token).then((result) => {
+    void createDailyShareLink(session.access_token, raceDate).then((result) => {
       if (cancelled) return;
       if (result.status === 'ok') setUrl(result.url);
       else setFailed(true);
@@ -971,7 +990,7 @@ function FlexShareModal({
       cancelled = true;
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [session]);
+  }, [session, raceDate]);
 
   const handleCopy = () => {
     if (!url) return;
@@ -982,9 +1001,10 @@ function FlexShareModal({
   };
 
   const name = profile?.display_name ?? 'You';
-  const rankLine = placing
-    ? `#${placing.rank} of ${placing.totalRacers}`
-    : 'their rank';
+  // Mirrors the og:title the backend serves for this link (routes/share.ts):
+  // seconds with one decimal, e.g. "38.4 seconds".
+  const timeLine =
+    bestMs != null ? `${(bestMs / 1000).toFixed(1)} seconds` : 'record time';
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
@@ -1032,19 +1052,14 @@ function FlexShareModal({
         </div>
         <div style={styles.previewCard}>
           <div style={styles.previewTitle}>
-            {name} placed {rankLine} in today&apos;s VIMGYM daily
+            {name} finished the VIMGYM daily race in {timeLine}
           </div>
           <div style={styles.previewDesc}>
-            {name} thinks they&apos;re better than you. (at vim.) Race
+            {name} thinks they&apos;re better than you (at vim). Race
             today&apos;s daily and prove them wrong.
           </div>
           <div style={styles.previewHost}>vimgym.app</div>
         </div>
-
-        <p style={styles.modalCaption}>
-          Anyone who opens it sees your taunt on the sign-in page and gets
-          dropped straight into today&apos;s race.
-        </p>
       </div>
     </div>
   );
@@ -1054,68 +1069,121 @@ function FlexShareModal({
 // Completion extras sub-component
 // ---------------------------------------------------------------------------
 
+/** One finished daily attempt: its slot number and how long it took. */
+type FinishedAttempt = { attemptNumber: number; durationMs: number };
+
 /**
- * Extra UI rendered inside the race-session completion overlay for daily mode:
- * placing, share button, try-again, and back-to-leaderboard.
+ * Merge the attempt that just finished into the attempt list the page loaded
+ * before the race, dropping unfinished attempts and sorting by slot so the
+ * summary reads top-to-bottom in the order they were raced.
  */
-function DailyCompletionExtras({
+function finishedAttemptsIncluding(
+  loadedAttempts: DailyRaceInfo['attempts'],
+  justFinished: FinishedAttempt
+): FinishedAttempt[] {
+  const merged = loadedAttempts
+    .filter(
+      (a): a is FinishedAttempt =>
+        a.durationMs != null && a.attemptNumber !== justFinished.attemptNumber
+    )
+    .concat(justFinished);
+  return merged.sort((a, b) => a.attemptNumber - b.attemptNumber);
+}
+
+/**
+ * Extra UI rendered inside the race-session completion overlay for daily mode.
+ * Deliberately minimal: today's attempt times, then try-again (while slots
+ * remain), the flex (share) button shared with the pre-race screen, and a way
+ * back to the leaderboard.
+ */
+export function DailyCompletionExtras({
   completionInfo,
-  accessToken,
+  raceDate,
+  loadedAttempts,
+  justFinished,
   onTryAgain,
   onBackToLeaderboard,
 }: {
   completionInfo: RaceCompletionInfo | null;
-  accessToken: string | undefined;
+  /** The date of the race that was just finished, for the share link. */
+  raceDate: string;
+  loadedAttempts: DailyRaceInfo['attempts'];
+  justFinished: FinishedAttempt;
   onTryAgain: () => void;
   onBackToLeaderboard: () => void;
 }) {
-  const [shareLabel, setShareLabel] = useState('Share your time');
-  const shareTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
-    };
-  }, []);
-
   if (!completionInfo || completionInfo.kind !== 'daily') return null;
 
-  const { rank, totalRacers, attemptsRemaining } = completionInfo;
+  const { bestMs, attemptsRemaining } = completionInfo;
+  const attempts = finishedAttemptsIncluding(loadedAttempts, justFinished);
 
-  const handleShare = async () => {
-    if (!accessToken) return;
-    const result = await createDailyShareLink(accessToken);
-    if (result.status === 'ok') {
-      void navigator.clipboard.writeText(result.url);
-      setShareLabel('Link copied. Time to ruin a friendship.');
-      if (shareTimerRef.current) clearTimeout(shareTimerRef.current);
-      shareTimerRef.current = setTimeout(
-        () => setShareLabel('Share your time'),
-        3000
-      );
-    }
-  };
+  // Unraced slots keep the tile row balanced and show what's still available;
+  // they continue numbering from the last attempt actually raced.
+  const lastAttemptNumber = attempts[attempts.length - 1].attemptNumber;
+  const openSlots = Array.from(
+    { length: attemptsRemaining },
+    (_, i) => lastAttemptNumber + 1 + i
+  );
 
   return (
     <div style={styles.extrasContainer}>
-      <div style={styles.placingLine}>
-        #{rank} of {totalRacers} today
+      <div
+        style={{
+          ...styles.attemptGrid,
+          gridTemplateColumns: `repeat(${attempts.length + openSlots.length}, minmax(0, 1fr))`,
+        }}
+      >
+        {attempts.map((attempt) => {
+          const isJustFinished =
+            attempt.attemptNumber === justFinished.attemptNumber;
+          return (
+            <div
+              key={attempt.attemptNumber}
+              style={
+                isJustFinished
+                  ? { ...styles.attemptTile, ...styles.attemptTileCurrent }
+                  : styles.attemptTile
+              }
+              aria-current={isJustFinished ? 'true' : undefined}
+            >
+              <span style={styles.attemptLabel}>
+                Attempt {attempt.attemptNumber}
+              </span>
+              <span
+                style={
+                  isJustFinished
+                    ? { ...styles.attemptTime, ...styles.attemptTimeCurrent }
+                    : styles.attemptTime
+                }
+              >
+                {formatTime(attempt.durationMs)}
+              </span>
+            </div>
+          );
+        })}
+        {openSlots.map((slotNumber) => (
+          <div
+            key={slotNumber}
+            style={{ ...styles.attemptTile, ...styles.attemptTileOpen }}
+          >
+            <span style={styles.attemptLabel}>Attempt {slotNumber}</span>
+            <span style={{ ...styles.attemptTime, ...styles.attemptTimeOpen }}>
+              --
+            </span>
+          </div>
+        ))}
       </div>
 
-      <div style={styles.shareBlock}>
-        <div style={styles.shareTitle}>Challenge your friends</div>
-        <button style={styles.shareButton} onClick={handleShare}>
-          {shareLabel}
-        </button>
+      <div style={styles.actionRow}>
+        {attemptsRemaining > 0 && (
+          <button style={styles.tryAgainPill} onClick={onTryAgain}>
+            Try again ({attemptsRemaining} left)
+          </button>
+        )}
+        <FlexShareButton bestMs={bestMs} raceDate={raceDate} pill />
       </div>
 
-      {attemptsRemaining > 0 && (
-        <button style={styles.tryAgainButton} onClick={onTryAgain}>
-          Try again ({attemptsRemaining} left)
-        </button>
-      )}
-
-      <button style={styles.leaderboardButton} onClick={onBackToLeaderboard}>
+      <button style={styles.leaderboardLink} onClick={onBackToLeaderboard}>
         Back to leaderboard
       </button>
     </div>

@@ -30,7 +30,7 @@ import {
   DAILY_EAGER_CREATE,
   HEALTH_METRICS_TOKEN,
 } from './config.js';
-import { eagerlyCreateTodaysDailyRace } from './daily/eagerDailyRaceCreation.js';
+import { startDailyRolloverScheduler } from './daily/dailyRolloverScheduler.js';
 import { dbHealthCheck } from './db/pool.js';
 import {
   insertSessionLeaderboardRow,
@@ -929,10 +929,10 @@ await Promise.race([
 // Start Fastify first, then attach Socket.IO
 await fastify.listen({ port: BACKEND_PORT, host: '0.0.0.0' });
 
-// The task cache is ready (awaited above), so the daily-restart at 0:00 UTC
-// makes this the creator of each day's race. Fire-and-forget: lazy creation
-// in routes/daily.ts covers any failure.
-void eagerlyCreateTodaysDailyRace(DAILY_EAGER_CREATE);
+// The task cache is ready (awaited above). The scheduler creates today's race
+// now and each following day's race just after UTC midnight, independent of
+// restarts. Lazy creation in routes/daily.ts covers any failure.
+startDailyRolloverScheduler(DAILY_EAGER_CREATE);
 
 // Now attach Socket.IO to the Fastify server
 const io = new Server<

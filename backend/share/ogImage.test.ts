@@ -11,25 +11,26 @@ const PARAMS = {
 };
 
 describe('buildShareCardSvg', () => {
-  it('renders the name, placing, time, and date at OG card size', () => {
+  it('renders the taunt, the time to beat, and the wordmark at OG card size', () => {
     const svg = buildShareCardSvg(PARAMS);
 
     expect(svg).toContain('width="1200"');
     expect(svg).toContain('height="630"');
-    expect(svg).toContain('stinkyhat');
-    expect(svg).toContain('#2 of 14');
-    expect(svg).toContain('41.2s');
-    expect(svg).toContain('2026-08-23');
+    expect(svg).toContain('RACE ME IN');
+    expect(svg).toContain('VIM BTW');
+    expect(svg).toContain('Beat my time: 41.2 seconds.');
+    expect(svg).toContain('VIM_GYM');
   });
 
-  it('escapes a hostile display name', () => {
+  it('interpolates no user-controlled text, so a hostile name cannot reach the SVG', () => {
     const svg = buildShareCardSvg({
       ...PARAMS,
       displayName: '<script>alert(1)</script>',
     });
 
     expect(svg).not.toContain('<script>');
-    expect(svg).toContain('&lt;script&gt;');
+    expect(svg).not.toContain('alert(1)');
+    expect(svg).not.toContain('stinkyhat');
   });
 });
 

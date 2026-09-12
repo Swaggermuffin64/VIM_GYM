@@ -14,19 +14,9 @@
  */
 import sharp from 'sharp';
 
-/** Escape &, <, >, ", ' for safe interpolation into SVG text nodes. */
-function escapeXml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/** Format milliseconds as seconds with one decimal, e.g. "41.2s". */
-function formatTime(ms: number): string {
-  return `${(ms / 1000).toFixed(1)}s`;
+/** Format milliseconds as seconds with one decimal, e.g. "41.2". */
+function formatSeconds(ms: number): string {
+  return (ms / 1000).toFixed(1);
 }
 
 export interface ShareCardParams {
@@ -37,12 +27,14 @@ export interface ShareCardParams {
   raceDate: string;
 }
 
-/** Compose the 1200x630 share-card SVG. Pure; safe for hostile names. */
+/** Compose the 1200x630 share-card SVG. Pure; no user text is interpolated. */
 export function buildShareCardSvg(params: ShareCardParams): string {
-  const name = escapeXml(params.displayName);
-  const placing = `#${params.rank} of ${params.totalRacers}`;
-  const time = formatTime(params.bestMs);
+  const seconds = formatSeconds(params.bestMs);
   const mono = 'DejaVu Sans Mono, Menlo, monospace';
+  // Matches the SiteBanner wordmark: JetBrains Mono, bold, textPrimary white.
+  // "JetBrains Mono NL" is the no-ligatures variant some installs register as.
+  const logoMono =
+    'JetBrains Mono, JetBrains Mono NL, DejaVu Sans Mono, monospace';
 
   return `<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -65,15 +57,11 @@ export function buildShareCardSvg(params: ShareCardParams): string {
   <rect width="1200" height="630" fill="url(#glowMagenta)"/>
   <rect x="6" y="6" width="1188" height="618" fill="none" stroke="#334155" stroke-width="2" rx="18"/>
 
-  <text x="90" y="120" font-family="${mono}" font-size="34" font-weight="bold" letter-spacing="6" fill="#22d3ee">VIM_GYM</text>
-  <text x="1110" y="120" text-anchor="end" font-family="${mono}" font-size="26" fill="#64748b">${escapeXml(params.raceDate)}</text>
+  <text x="90" y="222" font-family="${mono}" font-size="150" font-weight="bold" fill="#f1f5f9">RACE ME IN</text>
+  <text x="90" y="382" font-family="${mono}" font-size="150" font-weight="bold" fill="#f1f5f9">VIM BTW</text>
+  <text x="90" y="502" font-family="${mono}" font-size="56" font-weight="bold" fill="#f1f5f9">Beat my time: ${seconds} seconds.</text>
 
-  <text x="90" y="280" font-family="${mono}" font-size="72" font-weight="bold" fill="#f1f5f9">${name}</text>
-  <text x="90" y="380" font-family="${mono}" font-size="52" fill="#fbbf24">placed ${placing}</text>
-  <text x="90" y="452" font-family="${mono}" font-size="40" fill="#34d399">${time} on today&#39;s race</text>
-
-  <text x="90" y="540" font-family="${mono}" font-size="28" fill="#94a3b8">They think they&#39;re better than you. (at vim.)</text>
-  <text x="90" y="582" font-family="${mono}" font-size="24" fill="#64748b">vimgym.app — race of the day</text>
+  <text x="1110" y="588" text-anchor="end" font-family="${logoMono}" font-size="40" font-weight="bold" fill="#f1f5f9">VIM_GYM</text>
 </svg>`;
 }
 

@@ -163,10 +163,11 @@ export async function getDailyAttempts(
  * Claims the next attempt slot (1-3) for the user on `raceDate`. The
  * INSERT..SELECT computes MAX+1 and the HAVING clause enforces the cap in the
  * same statement; a concurrent duplicate hits the UNIQUE constraint, inserts
- * nothing, and the single retry recomputes. Abandoned slots (never completed)
- * still count -- that is what makes closing the tab burn the attempt.
+ * nothing, and the single retry recomputes.
  *
- * Called by routes/daily.ts when the user starts a new daily attempt.
+ * Called by routes/daily.ts when the user starts a daily attempt and has no
+ * abandoned (claimed-but-unraced) slot to reuse; the route checks for one
+ * first, so closing the tab or losing the start response never burns a slot.
  */
 export async function claimDailyAttempt(
   userId: string,

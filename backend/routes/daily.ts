@@ -56,24 +56,27 @@ export async function registerDailyRoutes(
         .send({ success: false, error: 'daily_unavailable' });
     }
 
+    // Unfinished rows are claimed-but-never-raced slots (double click, lost
+    // response, closed tab). The start route reuses them, so they are neither
+    // shown to the client nor counted against the cap.
     const attempts = await getDailyAttempts(user.id, raceDate);
-    const finishedDurations = attempts
-      .map((a) => a.durationMs)
-      .filter((d): d is number => d !== null);
+    const finished = attempts.filter((a) => a.durationMs !== null);
     const bestMs =
-      finishedDurations.length > 0 ? Math.min(...finishedDurations) : null;
+      finished.length > 0
+        ? Math.min(...finished.map((a) => a.durationMs as number))
+        : null;
 
     return {
       success: true,
       race_date: raceDate,
       tasks: race.tasks,
       num_tasks: race.tasks.length,
-      attempts: attempts.map((a) => ({
+      attempts: finished.map((a) => ({
         attempt_number: a.attemptNumber,
         duration_ms: a.durationMs,
         completed_at: a.completedAt,
       })),
-      attempts_remaining: MAX_DAILY_ATTEMPTS - attempts.length,
+      attempts_remaining: MAX_DAILY_ATTEMPTS - finished.length,
       best_ms: bestMs,
     };
   });
@@ -95,14 +98,30 @@ export async function registerDailyRoutes(
         .send({ success: false, error: 'daily_unavailable' });
     }
 
-    const claim = await claimDailyAttempt(user.id, raceDate);
-    if (claim.status === 'out_of_attempts') {
-      return reply
-        .status(403)
-        .send({ success: false, error: 'out_of_attempts' });
-    }
-    if (claim.status === 'error') {
-      return reply.status(500).send({ success: false, error: 'claim_failed' });
+    // Reuse a claimed-but-unraced slot (double click, lost response, closed
+    // tab) before burning a fresh one. The day's tasks are public via
+    // GET /api/daily before any claim, so an abandoned slot grants no preview
+    // advantage; attaching a fresh game session below restarts the timing
+    // window, which only widens the server-side duration check.
+    const attempts = await getDailyAttempts(user.id, raceDate);
+    const unfinished = attempts.find((a) => a.durationMs === null);
+
+    let attemptNumber: number;
+    if (unfinished) {
+      attemptNumber = unfinished.attemptNumber;
+    } else {
+      const claim = await claimDailyAttempt(user.id, raceDate);
+      if (claim.status === 'out_of_attempts') {
+        return reply
+          .status(403)
+          .send({ success: false, error: 'out_of_attempts' });
+      }
+      if (claim.status === 'error') {
+        return reply
+          .status(500)
+          .send({ success: false, error: 'claim_failed' });
+      }
+      attemptNumber = claim.attemptNumber;
     }
 
     const gameId = await createGameSession({
@@ -116,7 +135,7 @@ export async function registerDailyRoutes(
       await attachGameToDailyAttempt({
         userId: user.id,
         raceDate,
-        attemptNumber: claim.attemptNumber,
+        attemptNumber,
         gameId,
       });
     }
@@ -124,7 +143,7 @@ export async function registerDailyRoutes(
     return {
       success: true,
       race_date: raceDate,
-      attempt_number: claim.attemptNumber,
+      attempt_number: attemptNumber,
       game_id: gameId,
       start_time: Date.now(),
     };
@@ -208,9 +227,14 @@ export async function registerDailyRoutes(
         ],
       });
 
-      // Fetch placing and remaining attempts for the response.
+      // Fetch placing and remaining attempts for the response. As in
+      // GET /api/daily, unfinished slots are reusable, so only finished
+      // attempts count against the cap.
       const placing = await queryDailyPlacing(user.id, completed.raceDate);
       const attempts = await getDailyAttempts(user.id, completed.raceDate);
+      const finishedCount = attempts.filter(
+        (a) => a.durationMs !== null
+      ).length;
 
       return {
         success: true,
@@ -218,7 +242,7 @@ export async function registerDailyRoutes(
         best_ms: placing?.bestMs ?? Math.round(duration_ms),
         rank: placing?.rank ?? 1,
         total_racers: placing?.totalRacers ?? 1,
-        attempts_remaining: MAX_DAILY_ATTEMPTS - attempts.length,
+        attempts_remaining: MAX_DAILY_ATTEMPTS - finishedCount,
       };
     }
   );
@@ -283,30 +307,50 @@ export async function registerDailyRoutes(
   // -------------------------------------------------------------------------
   // POST /api/daily/share — generate or retrieve a shareable result link
   // -------------------------------------------------------------------------
-  fastify.post('/api/daily/share', async (request, reply) => {
-    const user = await requireSupabaseAuth(request, reply);
-    if (!user) return;
+  fastify.post<{ Body: { race_date?: unknown } | null }>(
+    '/api/daily/share',
+    async (request, reply) => {
+      const user = await requireSupabaseAuth(request, reply);
+      if (!user) return;
 
-    const raceDate = utcDateKey(new Date());
+      // The client passes the race_date it is sharing so a race finished just
+      // after UTC midnight still shares against the day it was raced on.
+      // Omitting it falls back to today (older clients, direct API use).
+      const dateParam = request.body?.race_date;
+      let raceDate: string;
+      if (dateParam !== undefined) {
+        if (
+          typeof dateParam !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+        ) {
+          return reply
+            .status(400)
+            .send({ success: false, error: 'invalid_date_format' });
+        }
+        raceDate = dateParam;
+      } else {
+        raceDate = utcDateKey(new Date());
+      }
 
-    const placing = await queryDailyPlacing(user.id, raceDate);
-    if (!placing) {
-      return reply
-        .status(403)
-        .send({ success: false, error: 'no_finished_attempt' });
+      const placing = await queryDailyPlacing(user.id, raceDate);
+      if (!placing) {
+        return reply
+          .status(403)
+          .send({ success: false, error: 'no_finished_attempt' });
+      }
+
+      const slug = await getOrCreateShareLink(user.id, raceDate);
+      if (!slug) {
+        return reply
+          .status(500)
+          .send({ success: false, error: 'share_link_failed' });
+      }
+
+      return {
+        success: true,
+        slug,
+        url: `${SHARE_LINK_BASE_URL}/s/${slug}`,
+      };
     }
-
-    const slug = await getOrCreateShareLink(user.id, raceDate);
-    if (!slug) {
-      return reply
-        .status(500)
-        .send({ success: false, error: 'share_link_failed' });
-    }
-
-    return {
-      success: true,
-      slug,
-      url: `${SHARE_LINK_BASE_URL}/s/${slug}`,
-    };
-  });
+  );
 }

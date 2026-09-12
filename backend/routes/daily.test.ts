@@ -39,9 +39,67 @@ async function buildServer() {
   return app;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // Most tests are for users with no prior attempts today; individual tests
+  // override with their own attempt history.
+  vi.mocked(daily.getDailyAttempts).mockResolvedValue([]);
+});
+
+describe('GET /api/daily', () => {
+  it('hides unfinished attempts and does not count them against the cap', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+    // Slot 1 was claimed but never raced (lost response / closed tab);
+    // slot 2 finished. Only the finished run should be visible or counted.
+    vi.mocked(daily.getDailyAttempts).mockResolvedValue([
+      { attemptNumber: 1, durationMs: null, completedAt: null },
+      { attemptNumber: 2, durationMs: 19_800, completedAt: new Date() },
+    ]);
+
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/api/daily' });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.attempts).toEqual([
+      expect.objectContaining({ attempt_number: 2, duration_ms: 19_800 }),
+    ]);
+    expect(body.attempts_remaining).toBe(2);
+    expect(body.best_ms).toBe(19_800);
+  });
+});
 
 describe('POST /api/daily/attempt/start', () => {
+  it('reuses a claimed-but-unraced slot instead of burning a new one', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+    vi.mocked(daily.getDailyAttempts).mockResolvedValue([
+      { attemptNumber: 1, durationMs: null, completedAt: null },
+      { attemptNumber: 2, durationMs: 19_800, completedAt: new Date() },
+    ]);
+    vi.mocked(stats.createGameSession).mockResolvedValue(88);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/attempt/start',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ success: true, attempt_number: 1 });
+    // The abandoned slot is recycled, so no fresh slot is claimed and the
+    // new game session (fresh timing window) is attached to it.
+    expect(daily.claimDailyAttempt).not.toHaveBeenCalled();
+    expect(daily.attachGameToDailyAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ attemptNumber: 1, gameId: 88 })
+    );
+  });
+
   it('claims a slot, creates a daily game session, and returns both ids', async () => {
     vi.mocked(daily.claimDailyAttempt).mockResolvedValue({
       status: 'claimed',
@@ -131,8 +189,10 @@ describe('POST /api/daily/attempt/complete', () => {
       totalRacers: 212,
       bestMs: 60_000,
     });
+    // The abandoned slot 1 must not count against the remaining attempts.
     vi.mocked(daily.getDailyAttempts).mockResolvedValue([
-      { attemptNumber: 1, durationMs: 60_000, completedAt: new Date() },
+      { attemptNumber: 1, durationMs: null, completedAt: null },
+      { attemptNumber: 2, durationMs: 60_000, completedAt: new Date() },
     ]);
     const app = await buildServer();
     const res = await app.inject({
@@ -171,6 +231,43 @@ describe('POST /api/daily/share', () => {
     const res = await app.inject({ method: 'POST', url: '/api/daily/share' });
     expect(res.statusCode).toBe(200);
     expect(res.json().url).toMatch(/\/s\/a1B2c3D4e5$/);
+  });
+
+  // A race finished at 23:59 can be shared at 00:01: the client passes the
+  // race_date it is sharing instead of the server assuming "today".
+  it('shares the explicitly requested race_date (midnight straddle)', async () => {
+    vi.mocked(daily.queryDailyPlacing).mockResolvedValue({
+      rank: 1,
+      totalRacers: 5,
+      bestMs: 42_000,
+    });
+    vi.mocked(daily.getOrCreateShareLink).mockResolvedValue('a1B2c3D4e5');
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/share',
+      payload: { race_date: '2026-08-15' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(daily.queryDailyPlacing).toHaveBeenCalledWith(
+      expect.any(String),
+      '2026-08-15'
+    );
+    expect(daily.getOrCreateShareLink).toHaveBeenCalledWith(
+      expect.any(String),
+      '2026-08-15'
+    );
+  });
+
+  it('rejects a malformed race_date', async () => {
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/share',
+      payload: { race_date: 'yesterday' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_date_format');
   });
 });
 

@@ -53,10 +53,16 @@ function playModeLabel(mode: string): string {
   }
 }
 
+/**
+ * Load leaderboard rows for the given slice. `enabled` lets a caller that
+ * starts collapsed defer the request until the section is actually opened,
+ * so a hidden board costs nothing on page load.
+ */
 function useLeaderboardData(
   limit: number,
   filter: PlayModeFilter,
-  timeRange: TimeRange = 'all_time'
+  timeRange: TimeRange = 'all_time',
+  enabled: boolean = true
 ) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,8 +101,9 @@ function useLeaderboardData(
   }, [limit, filter, timeRange]);
 
   useEffect(() => {
+    if (!enabled) return;
     void load();
-  }, [load]);
+  }, [load, enabled]);
 
   return { entries, loading, error, databaseConfigured };
 }
@@ -560,12 +567,25 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
 /*  Inline leaderboard (home page)                                    */
 /* ------------------------------------------------------------------ */
 
-export function LeaderboardTable({ style }: { style?: React.CSSProperties }) {
-  const [open, setOpen] = useState(true);
+/**
+ * Collapsible top-5 leaderboard for the home page. Starts open unless
+ * `defaultOpen` says otherwise; while collapsed it shows just its header bar
+ * and doesn't fetch.
+ */
+export function LeaderboardTable({
+  style,
+  defaultOpen = true,
+}: {
+  style?: React.CSSProperties;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [modalOpen, setModalOpen] = useState(false);
   const { entries, loading, error, databaseConfigured } = useLeaderboardData(
     5,
-    'all'
+    'all',
+    'all_time',
+    open
   );
   const { loadingReplay, handleReplay } = useReplay();
 

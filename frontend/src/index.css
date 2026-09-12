@@ -85,6 +85,11 @@ code {
   .daily-split {
     grid-template-columns: 1fr !important;
   }
+
+  /* Home page: same treatment for the daily panel / mode-rows split. */
+  .home-split {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* Flex button sheen: a highlight sweeps across every ~3s. The gradient

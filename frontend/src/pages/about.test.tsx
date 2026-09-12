@@ -22,8 +22,8 @@ describe('About page site banner', () => {
     expect(screen.getByRole('link', { name: /discord/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'ABOUT' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'SUPPORT' })).toBeTruthy();
-    // Profile and Sign out live inside the account dropdown ("ACCOUNT"
-    // here because the test renders without an AuthProvider/profile).
-    expect(screen.getByRole('button', { name: 'ACCOUNT' })).toBeTruthy();
+    // Without an AuthProvider the context default has session: null, so the
+    // banner renders a SIGN IN link instead of the account dropdown.
+    expect(screen.getByRole('link', { name: /sign in/i })).toBeTruthy();
   });
 });

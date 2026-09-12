@@ -933,14 +933,18 @@ export function getRecommendedYankPasteSequence(
   const candidates: deletePlanCandidate[] = [];
 
   if (strategy === 'WORD') {
-    // Navigate to yankFrom → ye → navigate to pasteOffset → p
-    // After ye, cursor stays at yankFrom
+    // Single-character words: `ye` overshoots to the end of the *next* word
+    // since the cursor is already on the word's last (and only) character.
+    // Use `yl` instead, which yanks just the character under the cursor.
+    const isSingleChar = yankTo - yankFrom === 1;
+    // Navigate to yankFrom → ye/yl → navigate to pasteOffset → p
+    // After ye/yl, cursor stays at yankFrom
     const plan = buildYankPastePlan(
       codeSnippet,
       startingOffset,
       startingPreferredX,
       yankFrom,
-      ['y', 'e'],
+      isSingleChar ? ['y', 'l'] : ['y', 'e'],
       yankFrom,
       pasteOffset
     );

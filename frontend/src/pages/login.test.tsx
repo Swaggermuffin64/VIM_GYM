@@ -188,6 +188,7 @@ describe('Login page challenge taunt', () => {
       displayName: 'Jackson',
       rank: 4,
       totalRacers: 212,
+      bestMs: 61_300,
       raceDate: '2026-08-16',
     });
 
@@ -198,8 +199,28 @@ describe('Login page challenge taunt', () => {
     const banner = screen.getByRole('status');
     expect(banner.textContent).toContain('Jackson');
     expect(banner.textContent).toContain("thinks they're better than you");
-    expect(banner.textContent).toContain('(at vim.)');
-    expect(banner.textContent).toContain('#4 of 212');
+    expect(banner.textContent).toContain('(at vim).');
+    expect(banner.textContent).toContain("finished today's daily race in");
+    expect(banner.textContent).toContain('61.3 seconds');
+  });
+
+  it('renders the taunt at a size that reads from across the card', async () => {
+    mockFetchChallenge.mockResolvedValue({
+      displayName: 'Jackson',
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+      raceDate: '2026-08-16',
+    });
+
+    await act(async () => {
+      renderLoginWithChallenge('a1B2c3D4e5');
+    });
+
+    const banner = screen.getByRole('status');
+    const [headline, detail] = banner.querySelectorAll('p');
+    expect((headline as HTMLElement).style.fontSize).toBe('20px');
+    expect((detail as HTMLElement).style.fontSize).toBe('15px');
   });
 
   it('stashes the challenge slug in sessionStorage', async () => {
@@ -207,6 +228,7 @@ describe('Login page challenge taunt', () => {
       displayName: 'Jackson',
       rank: 4,
       totalRacers: 212,
+      bestMs: 61_300,
       raceDate: '2026-08-16',
     });
 

@@ -22,6 +22,8 @@ afterEach(() => {
 
 const {
   fetchDailyRace,
+  fetchDailyRaceCached,
+  invalidateDailyRaceCache,
   startDailyAttempt,
   completeDailyAttempt,
   fetchDailyLeaderboard,
@@ -208,6 +210,7 @@ describe('fetchChallenge', () => {
         display_name: 'Alice',
         rank: 3,
         total_racers: 20,
+        best_ms: 42_500,
         race_date: '2026-08-16',
       })
     );
@@ -218,6 +221,7 @@ describe('fetchChallenge', () => {
       displayName: 'Alice',
       rank: 3,
       totalRacers: 20,
+      bestMs: 42_500,
       raceDate: '2026-08-16',
     });
   });
@@ -313,6 +317,21 @@ describe('createDailyShareLink', () => {
     expect(init.headers).not.toHaveProperty('Content-Type');
   });
 
+  // A race finished at 23:59 UTC shared at 00:01 must share against the day
+  // it was raced on, so the loaded race's date rides along in the body.
+  it('sends the race date in the body when given', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, url: 'https://vimgym.app/s/abc' })
+    );
+
+    await createDailyShareLink('tok', '2026-08-15');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe('POST');
+    expect(init.headers).toHaveProperty('Content-Type', 'application/json');
+    expect(JSON.parse(init.body)).toEqual({ race_date: '2026-08-15' });
+  });
+
   it('returns ok with url on success', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({
@@ -338,5 +357,104 @@ describe('createDailyShareLink', () => {
     const result = await createDailyShareLink('tok');
 
     expect(result).toEqual({ status: 'error' });
+  });
+});
+
+describe('fetchDailyRaceCached', () => {
+  /** A GET /api/daily body for the given UTC race date. */
+  function raceBody(raceDate: string) {
+    return {
+      success: true,
+      race_date: raceDate,
+      tasks: [],
+      attempts: [],
+      attempts_remaining: 3,
+      best_ms: null,
+    };
+  }
+
+  const TODAY = new Date().toISOString().slice(0, 10);
+
+  beforeEach(() => {
+    invalidateDailyRaceCache();
+  });
+
+  it('fetches once and serves later reads from memory', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+
+    const first = await fetchDailyRaceCached('tok');
+    const second = await fetchDailyRaceCached('tok');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it('does not cache a failed request', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ success: false }, 500));
+    expect(await fetchDailyRaceCached('tok')).toEqual({ status: 'error' });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(raceBody(TODAY)));
+    expect((await fetchDailyRaceCached('tok')).status).toBe('ok');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // Yesterday's race is never today's answer, so a stale entry is ignored
+  // without anyone having to clear it at midnight.
+  it('ignores an entry cached on an earlier UTC day', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(raceBody('2020-01-01')));
+    await fetchDailyRaceCached('tok');
+
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+    const result = await fetchDailyRaceCached('tok');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      status: 'ok',
+      info: expect.objectContaining({ raceDate: TODAY }),
+    });
+  });
+
+  it('refetches after an attempt is started', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+    await fetchDailyRaceCached('tok');
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ race_date: TODAY, attempt_number: 1, game_id: 7 })
+    );
+    await startDailyAttempt('tok');
+
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+    await fetchDailyRaceCached('tok');
+
+    // initial read + start + post-start read
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('refetches after an attempt is completed', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+    await fetchDailyRaceCached('tok');
+
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        placing: {
+          rank: 1,
+          total_racers: 1,
+          best_ms: 5000,
+          attempts_remaining: 2,
+        },
+      })
+    );
+    await completeDailyAttempt({
+      accessToken: 'tok',
+      gameId: 7,
+      durationMs: 5000,
+    });
+
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+    await fetchDailyRaceCached('tok');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

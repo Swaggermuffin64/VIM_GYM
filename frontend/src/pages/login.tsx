@@ -212,18 +212,23 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
   },
   tauntHeadline: {
-    fontSize: '16px',
+    fontSize: '20px',
     color: colors.textPrimary,
     margin: '0 0 6px',
     lineHeight: 1.5,
   },
   tauntDetail: {
-    fontSize: '13px',
+    fontSize: '15px',
     color: colors.textSecondary,
     margin: 0,
     lineHeight: 1.5,
   },
 };
+
+/** Format a race duration as seconds with one decimal, e.g. 15702 -> "15.7". */
+function formatSeconds(ms: number): string {
+  return (ms / 1000).toFixed(1);
+}
 
 /**
  * Login page. When the URL contains a `?challenge=<slug>` query param, the
@@ -263,11 +268,12 @@ export default function Login() {
         <div style={styles.tauntBanner} role="status">
           <p style={styles.tauntHeadline}>
             <strong>{challenge.displayName}</strong> thinks they&#39;re better
-            than you. <em>(at vim.)</em>
+            than you <em>(at vim)</em>.
           </p>
           <p style={styles.tauntDetail}>
-            They placed #{challenge.rank} of {challenge.totalRacers} in
-            today&#39;s daily race. Sign in and put them in their place.
+            They finished today&#39;s daily race in{' '}
+            {formatSeconds(challenge.bestMs)} seconds. Sign in and put them in
+            their place.
           </p>
         </div>
       )}

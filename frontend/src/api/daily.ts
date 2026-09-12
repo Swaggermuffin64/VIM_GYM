@@ -66,6 +66,8 @@ export interface ChallengeInfo {
   displayName: string;
   rank: number;
   totalRacers: number;
+  /** The sharer's best finish time for the day, in milliseconds. */
+  bestMs: number;
   raceDate: string;
 }
 
@@ -85,12 +87,54 @@ function safeParseJson(text: string): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// Today's-race cache
+// ---------------------------------------------------------------------------
+
+/**
+ * Last successful GET /api/daily response. Today's race is fixed for the whole
+ * UTC day and only the user's own attempts change it, so callers that just
+ * want to display it (the home page) can reuse this instead of refetching on
+ * every navigation. Starting or completing an attempt drops it.
+ */
+let cachedRace: DailyRaceInfo | null = null;
+
+/** Today's date in UTC, in the same YYYY-MM-DD form the server returns. */
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Today's race, served from memory when it was already fetched today. A cached
+ * entry from a previous UTC day is ignored, so the page rolls over on its own
+ * without anyone having to clear it.
+ */
+export async function fetchDailyRaceCached(
+  accessToken: string
+): Promise<FetchDailyResult> {
+  if (cachedRace && cachedRace.raceDate === todayUtc()) {
+    return { status: 'ok', info: cachedRace };
+  }
+  const result = await fetchDailyRace(accessToken);
+  if (result.status === 'ok') cachedRace = result.info;
+  return result;
+}
+
+/**
+ * Forget the cached race. Called automatically when an attempt is started or
+ * completed; exported for tests and for anywhere that needs a hard refresh.
+ */
+export function invalidateDailyRaceCache(): void {
+  cachedRace = null;
+}
+
+// ---------------------------------------------------------------------------
 // API functions
 // ---------------------------------------------------------------------------
 
 /**
  * Fetch today's daily race info and the current user's attempts.
  * Maps the backend's snake_case keys to the camelCase DailyRaceInfo shape.
+ * Always hits the network — see fetchDailyRaceCached for the display path.
  */
 export async function fetchDailyRace(
   accessToken: string
@@ -136,6 +180,8 @@ export async function fetchDailyRace(
 export async function startDailyAttempt(
   accessToken: string
 ): Promise<StartAttemptResult> {
+  // Claiming a slot changes the attempt counts the cache is holding.
+  invalidateDailyRaceCache();
   try {
     // No body, so no Content-Type: Fastify 400s (FST_ERR_CTP_EMPTY_JSON_BODY)
     // on an application/json request with an empty body.
@@ -180,6 +226,8 @@ export async function completeDailyAttempt(params: {
   gameId: number;
   durationMs: number;
 }): Promise<CompleteAttemptResult> {
+  // A finished attempt adds a time and spends a slot.
+  invalidateDailyRaceCache();
   try {
     const res = await fetch(`${API_BASE}/api/daily/attempt/complete`, {
       method: 'POST',
@@ -291,17 +339,29 @@ export async function fetchDailyLeaderboard(
 }
 
 /**
- * Generate (or retrieve) a shareable link for today's daily result.
+ * Generate (or retrieve) a shareable link for a daily result.
  * Requires at least one completed attempt.
+ *
+ * Pass the raceDate of the race being shared (from DailyRaceInfo) so a race
+ * finished just after UTC midnight still shares against the day it was raced
+ * on; omitting it lets the server assume "today".
  */
 export async function createDailyShareLink(
-  accessToken: string
+  accessToken: string,
+  raceDate?: string
 ): Promise<ShareLinkResult> {
   try {
-    // No body, so no Content-Type (see startDailyAttempt).
+    // Without a raceDate there is no body, so no Content-Type either
+    // (see startDailyAttempt).
     const res = await fetch(`${API_BASE}/api/daily/share`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: raceDate
+        ? {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          }
+        : { Authorization: `Bearer ${accessToken}` },
+      ...(raceDate ? { body: JSON.stringify({ race_date: raceDate }) } : {}),
     });
 
     const body = safeParseJson(await res.text());
@@ -350,6 +410,7 @@ export async function fetchChallenge(
       displayName: b.display_name as string,
       rank: b.rank as number,
       totalRacers: b.total_racers as number,
+      bestMs: b.best_ms as number,
       raceDate: b.race_date as string,
     };
   } catch {

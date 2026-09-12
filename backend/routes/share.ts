@@ -9,7 +9,7 @@
  * /api/challenge/:slug is the JSON the login page reads to render that taunt.
  *
  * Both endpoints are unauthenticated and expose only display name, placing,
- * and date.
+ * best time, and date.
  */
 import type { FastifyInstance } from 'fastify';
 import { getShareInfo, queryDailyPlacing } from '../db/daily.js';
@@ -18,6 +18,11 @@ import { buildShareCardSvg, renderShareCardPng } from '../share/ogImage.js';
 
 /** Regex for valid share slugs: exactly 10 base62 characters. */
 const SLUG_PATTERN = /^[0-9A-Za-z]{10}$/;
+
+/** Format a duration as seconds with one decimal, e.g. 38400 -> "38.4". */
+export function formatSeconds(ms: number): string {
+  return (ms / 1000).toFixed(1);
+}
 
 /** Escape &, <, >, ", ' for safe interpolation into HTML/attributes. */
 export function escapeHtml(s: string): string {
@@ -100,10 +105,9 @@ export async function registerShareRoutes(
       }
 
       const name = info.displayName;
-      const { rank, totalRacers: total } = placing;
 
-      const title = `${name} placed #${rank} of ${total} in today's VIMGYM daily`;
-      const description = `${name} thinks they're better than you. (at vim.) Race today's daily and prove them wrong.`;
+      const title = `${name} finished the VIMGYM daily race in ${formatSeconds(placing.bestMs)} seconds`;
+      const description = `${name} thinks they're better than you (at vim). Race today's daily and prove them wrong.`;
       const target = `${SHARE_LINK_BASE_URL}/login?challenge=${slug}`;
       const imageUrl = `${SHARE_LINK_BASE_URL}/s/${slug}/og.png`;
 
@@ -178,8 +182,9 @@ export async function registerShareRoutes(
   /**
    * GET /api/challenge/:slug — JSON challenge data.
    *
-   * Returns only the sharer's display name, rank, total racers, and race
-   * date. Used by the frontend login page to render a challenge taunt.
+   * Returns only the sharer's display name, rank, total racers, best time,
+   * and race date. Used by the frontend login page to render a challenge
+   * taunt. The best time is already public via the unfurl card's title.
    */
   fastify.get<{ Params: { slug: string } }>(
     '/api/challenge/:slug',
@@ -205,6 +210,7 @@ export async function registerShareRoutes(
         display_name: info.displayName,
         rank: placing.rank,
         total_racers: placing.totalRacers,
+        best_ms: placing.bestMs,
         race_date: info.raceDate,
       };
     }

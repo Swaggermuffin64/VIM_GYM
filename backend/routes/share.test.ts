@@ -27,7 +27,7 @@ describe('escapeHtml', () => {
 });
 
 describe('GET /s/:slug', () => {
-  it('serves OG tags with the challenger name and placing, and a redirect', async () => {
+  it('serves OG tags with the challenger name and best time, and a redirect', async () => {
     vi.mocked(daily.getShareInfo).mockResolvedValue({
       userId: 'u1',
       displayName: 'Jackson',
@@ -43,7 +43,9 @@ describe('GET /s/:slug', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('og:title');
-    expect(res.body).toContain('Jackson placed #4 of 212');
+    expect(res.body).toContain(
+      'Jackson finished the VIMGYM daily race in 61.3 seconds'
+    );
     expect(res.body).toContain('/login?challenge=a1B2c3D4e5');
   });
 
@@ -137,7 +139,7 @@ describe('GET /s/:slug/og.png', () => {
 });
 
 describe('GET /api/challenge/:slug', () => {
-  it('returns only name, placing, and date', async () => {
+  it('returns only name, placing, best time, and date', async () => {
     vi.mocked(daily.getShareInfo).mockResolvedValue({
       userId: 'u1',
       displayName: 'Jackson',
@@ -156,6 +158,7 @@ describe('GET /api/challenge/:slug', () => {
       display_name: 'Jackson',
       rank: 4,
       total_racers: 212,
+      best_ms: 61_300,
       race_date: '2026-08-16',
     });
   });

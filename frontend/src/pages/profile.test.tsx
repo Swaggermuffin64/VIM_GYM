@@ -236,67 +236,104 @@ const STATS = {
         total_time_ms: 84000,
         started_at: '2026-08-06T10:00:00Z',
       },
+      // Solo daily: completed, but position is always null in solo modes.
+      {
+        play_mode: 'daily',
+        position: null,
+        finished: true,
+        left_race: false,
+        total_time_ms: 17200,
+        started_at: '2026-08-05T10:00:00Z',
+      },
+      {
+        play_mode: 'quick_play',
+        position: null,
+        finished: false,
+        left_race: true,
+        total_time_ms: null,
+        started_at: '2026-08-04T10:00:00Z',
+      },
     ],
   },
 };
 
 describe('ProfilePage stats', () => {
-  it('renders the four stat tiles', async () => {
+  it('renders exactly the three headline tiles: races, win rate, avg race', async () => {
     stubFetch({ stats: STATS });
     render(<ProfilePage />);
-    expect(await screen.findByText('12')).toBeTruthy(); // races
-    expect(screen.getByText('5')).toBeTruthy(); // wins
-    expect(screen.getByText('42%')).toBeTruthy(); // win rate
-    expect(screen.getByText('348')).toBeTruthy(); // tasks
-    expect(screen.getByText(/avg 4\.1s/i)).toBeTruthy(); // avg task time
-  });
-
-  it('renders best race, avg race time, and efficiency tiles', async () => {
-    stubFetch({ stats: STATS });
-    render(<ProfilePage />);
-    expect(await screen.findByText(/best race/i)).toBeTruthy();
-    // 61234ms appears as both the best-race tile and a recent-game time
-    expect(screen.getAllByText('1:01.2').length).toBe(2);
+    expect(await screen.findByText('12')).toBeTruthy(); // races_played
+    expect(screen.getByText('42%')).toBeTruthy(); // win_rate 5/12
     expect(screen.getByText('1:15.0')).toBeTruthy(); // avg_race_ms 75000
-    expect(screen.getByText('87%')).toBeTruthy(); // efficiency 0.87
   });
 
-  it('hides the efficiency tile below the sample threshold', async () => {
+  it('renders the tiles as bare value/label pairs with no sub-text', async () => {
+    stubFetch({ stats: STATS });
+    render(<ProfilePage />);
+    await screen.findByText('12'); // stats loaded
+    expect(screen.queryByText(/incl\. practice/i)).toBeNull();
+    expect(screen.queryByText(/\d+ wins?$/)).toBeNull();
+  });
+
+  it('shows a dash for avg race when no session has finished', async () => {
     stubFetch({
-      stats: {
-        ...STATS,
-        stats: { ...STATS.stats, efficiency_sample: 3 },
-      },
+      stats: { ...STATS, stats: { ...STATS.stats, avg_race_ms: null } },
     });
     render(<ProfilePage />);
     await screen.findByText('12'); // stats loaded
-    expect(screen.queryByText('87%')).toBeNull();
+    // Dashes: the avg-race tile plus the two rows with no recorded time.
+    expect(screen.getAllByText('—').length).toBe(3);
   });
 
-  it('hides the efficiency tile when no attempts qualify', async () => {
-    stubFetch({
-      stats: {
-        ...STATS,
-        stats: {
-          ...STATS.stats,
-          avg_task_efficiency: null,
-          efficiency_sample: 0,
-        },
-      },
-    });
+  it('drops the retired tiles even though the API still returns them', async () => {
+    stubFetch({ stats: STATS });
     render(<ProfilePage />);
-    await screen.findByText('12');
+    await screen.findByText('12'); // stats loaded
+    expect(screen.queryByText(/best race/i)).toBeNull();
     expect(screen.queryByText(/efficiency/i)).toBeNull();
+    expect(screen.queryByText('348')).toBeNull(); // tasks_completed
+    expect(screen.queryByText(/avg 4\.1s/i)).toBeNull(); // avg_task_ms
   });
 
-  it('renders recent games with result and time, practice rows unranked', async () => {
+  it('lays the recent games out as one shared grid so columns line up', async () => {
+    // A grid per row would size columns to that row's own text, leaving
+    // "Sep 8"/"Sep 12" and "DNF"/"1st" ragged down the card.
+    stubFetch({ stats: STATS });
+    render(<ProfilePage />);
+    const heading = await screen.findByText(/recent games/i);
+    const card = heading.parentElement!;
+    expect(card.style.display).toBe('grid');
+    expect(card.style.gridTemplateColumns).toBe(
+      'minmax(0, 1fr) auto auto auto'
+    );
+    // Every cell is a direct child of that one grid, so 4 per game row.
+    expect(card.children.length).toBe(1 + STATS.stats.recent_games.length * 4);
+    expect(card.querySelector('[style*="display: grid"]')).toBeNull();
+  });
+
+  it('renders recent games with placing and time', async () => {
     stubFetch({ stats: STATS });
     render(<ProfilePage />);
     expect(await screen.findByText('1st')).toBeTruthy();
     expect(screen.getByText('2nd')).toBeTruthy();
-    // 61234ms: recent-game row plus the best-race tile
-    expect(screen.getAllByText('1:01.2').length).toBeGreaterThan(0);
+    expect(screen.getByText('1:01.2')).toBeTruthy(); // recent-game row time
     expect(screen.getAllByText(/practice/i).length).toBeGreaterThan(0);
+  });
+
+  it('leaves the result cell blank for a completed solo run, not DNF', async () => {
+    // Solo modes store position null, so the label must key off `finished`;
+    // a finished run needs no word — its recorded time says it completed.
+    stubFetch({ stats: STATS });
+    render(<ProfilePage />);
+    expect(await screen.findByText('17.2s')).toBeTruthy(); // the daily row
+    expect(screen.queryByText(/done/i)).toBeNull();
+    expect(screen.getAllByText('DNF').length).toBe(1); // only the practice row
+  });
+
+  it('still marks abandoned runs as left or DNF', async () => {
+    stubFetch({ stats: STATS });
+    render(<ProfilePage />);
+    expect(await screen.findByText('left')).toBeTruthy(); // quit mid-race
+    expect(screen.getByText('DNF')).toBeTruthy(); // unfinished practice row
   });
 
   it('degrades to identity-only when the stats fetch fails', async () => {

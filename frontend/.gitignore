@@ -15,6 +15,15 @@
 # kept local so throwaway layout experiments never reach the repo
 src/pages/*.preview.tsx
 
+# tsc output for the config project (tsconfig.node.json). It now emits under
+# node_modules, but keep these ignored: a stray vite.config.js shadows
+# vite.config.ts in Vite's resolution order and silently wins.
+vite.config.js
+vite.config.d.ts
+vitest.config.js
+vitest.config.d.ts
+*.tsbuildinfo
+
 # misc
 .DS_Store
 .env.local

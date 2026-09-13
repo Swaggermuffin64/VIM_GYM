@@ -46,12 +46,17 @@ const PAGE = `<!doctype html>
 createServer(async (req, res) => {
   if (req.url?.startsWith('/card.png')) {
     const png = await renderShareCardPng(buildShareCardSvg(SAMPLE));
-    res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
+    res.writeHead(200, {
+      'content-type': 'image/png',
+      'cache-control': 'no-store',
+    });
     res.end(png);
   } else {
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(PAGE);
   }
 }).listen(PORT, () => {
-  console.log(`OG card preview at http://localhost:${PORT} — edit share/ogImage.ts and watch it update`);
+  console.log(
+    `OG card preview at http://localhost:${PORT} — edit share/ogImage.ts and watch it update`
+  );
 });

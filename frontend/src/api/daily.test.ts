@@ -13,6 +13,7 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
+  invalidateDailyLeaderboardCache();
 });
 
 afterEach(() => {
@@ -23,7 +24,9 @@ afterEach(() => {
 const {
   fetchDailyRace,
   fetchDailyRaceCached,
+  getCachedDailyRace,
   invalidateDailyRaceCache,
+  invalidateDailyLeaderboardCache,
   startDailyAttempt,
   completeDailyAttempt,
   fetchDailyLeaderboard,
@@ -300,6 +303,78 @@ describe('fetchDailyLeaderboard', () => {
     const [url] = fetchMock.mock.calls[0];
     expect(String(url)).toContain('limit=8');
   });
+
+  it('serves a repeat call for the same slice from cache', async () => {
+    // A fresh Response per call — a Response body can only be read once.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({ success: true, entries: [], total_racers: 3 })
+      )
+    );
+
+    const first = await fetchDailyLeaderboard('tok', '2026-08-16', 8);
+    const second = await fetchDailyLeaderboard('tok', '2026-08-16', 8);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it('fetches again for a different date or limit', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({ success: true, entries: [], total_racers: 0 })
+      )
+    );
+
+    await fetchDailyLeaderboard('tok', '2026-08-16', 8);
+    await fetchDailyLeaderboard('tok', '2026-08-17', 8);
+    await fetchDailyLeaderboard('tok', '2026-08-16', 30);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not cache an error response', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'internal' }, 500)
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ success: true, entries: [], total_racers: 5 })
+    );
+
+    await fetchDailyLeaderboard('tok');
+    const second = await fetchDailyLeaderboard('tok');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(second.totalRacers).toBe(5);
+  });
+
+  it('is invalidated when a daily attempt completes', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({ success: true, entries: [], total_racers: 1 })
+      )
+    );
+
+    await fetchDailyLeaderboard('tok');
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        best_ms: 3000,
+        rank: 1,
+        total_racers: 2,
+        attempts_remaining: 1,
+      })
+    );
+    await completeDailyAttempt({
+      accessToken: 'tok',
+      gameId: 42,
+      durationMs: 3000,
+    });
+    await fetchDailyLeaderboard('tok');
+
+    // One leaderboard fetch, one completion, then a fresh leaderboard fetch.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('createDailyShareLink', () => {
@@ -377,6 +452,21 @@ describe('fetchDailyRaceCached', () => {
 
   beforeEach(() => {
     invalidateDailyRaceCache();
+  });
+
+  it('getCachedDailyRace peeks the cache without fetching', async () => {
+    expect(getCachedDailyRace()).toBeNull();
+
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+    await fetchDailyRaceCached('tok');
+
+    expect(getCachedDailyRace()).toEqual(
+      expect.objectContaining({ raceDate: TODAY })
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    invalidateDailyRaceCache();
+    expect(getCachedDailyRace()).toBeNull();
   });
 
   it('fetches once and serves later reads from memory', async () => {

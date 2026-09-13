@@ -6,6 +6,7 @@
  * from the backend's snake_case to camelCase for frontend consumption.
  */
 import type { Task } from '../types/task';
+import { TtlCache } from './ttlCache';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -104,15 +105,26 @@ function todayUtc(): string {
 }
 
 /**
- * Today's race, served from memory when it was already fetched today. A cached
- * entry from a previous UTC day is ignored, so the page rolls over on its own
+ * Today's race straight from memory, or null when nothing fresh is cached.
+ * Lets a page seed its initial state synchronously (no loading flash) when
+ * the user arrives from a page that already fetched the race. A cached entry
+ * from a previous UTC day is ignored, so the page rolls over on its own
  * without anyone having to clear it.
+ */
+export function getCachedDailyRace(): DailyRaceInfo | null {
+  return cachedRace && cachedRace.raceDate === todayUtc() ? cachedRace : null;
+}
+
+/**
+ * Today's race, served from memory when it was already fetched today.
+ * See getCachedDailyRace for the freshness rule.
  */
 export async function fetchDailyRaceCached(
   accessToken: string
 ): Promise<FetchDailyResult> {
-  if (cachedRace && cachedRace.raceDate === todayUtc()) {
-    return { status: 'ok', info: cachedRace };
+  const cached = getCachedDailyRace();
+  if (cached) {
+    return { status: 'ok', info: cached };
   }
   const result = await fetchDailyRace(accessToken);
   if (result.status === 'ok') cachedRace = result.info;
@@ -226,8 +238,9 @@ export async function completeDailyAttempt(params: {
   gameId: number;
   durationMs: number;
 }): Promise<CompleteAttemptResult> {
-  // A finished attempt adds a time and spends a slot.
+  // A finished attempt adds a time, spends a slot, and moves the board.
   invalidateDailyRaceCache();
+  invalidateDailyLeaderboardCache();
   try {
     const res = await fetch(`${API_BASE}/api/daily/attempt/complete`, {
       method: 'POST',
@@ -297,11 +310,53 @@ function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
   }));
 }
 
+/**
+ * Recently fetched leaderboard slices, keyed by date+limit. The board only
+ * moves when someone finishes a run, so a short TTL keeps home↔daily
+ * navigation from re-querying while still picking up other racers' times
+ * within a minute. The user's own completions invalidate it immediately.
+ */
+const leaderboardCache = new TtlCache<DailyLeaderboardData>(60_000);
+
+/**
+ * Forget all cached leaderboard slices. Called automatically when the user
+ * completes an attempt (their new time changes the board); exported for tests.
+ */
+export function invalidateDailyLeaderboardCache(): void {
+  leaderboardCache.clear();
+}
+
+/**
+ * Fetch the daily leaderboard, serving repeats of the same date+limit slice
+ * from a 60-second in-memory cache. Error responses are not cached.
+ */
 export async function fetchDailyLeaderboard(
   accessToken: string,
   date?: string,
   limit?: number
 ): Promise<DailyLeaderboardData> {
+  const cacheKey = `${date ?? 'today'}|${limit ?? 'default'}`;
+  const cached = leaderboardCache.get(cacheKey);
+  if (cached) return cached;
+
+  const result = await fetchDailyLeaderboardFromNetwork(
+    accessToken,
+    date,
+    limit
+  );
+  if (result !== null) {
+    leaderboardCache.set(cacheKey, result);
+    return result;
+  }
+  return EMPTY_LEADERBOARD;
+}
+
+/** Network fetch behind fetchDailyLeaderboard. Returns null on any error. */
+async function fetchDailyLeaderboardFromNetwork(
+  accessToken: string,
+  date?: string,
+  limit?: number
+): Promise<DailyLeaderboardData | null> {
   try {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
@@ -319,7 +374,7 @@ export async function fetchDailyLeaderboard(
         res.status,
         body
       );
-      return EMPTY_LEADERBOARD;
+      return null;
     }
 
     const b = body as Record<string, unknown>;
@@ -334,7 +389,7 @@ export async function fetchDailyLeaderboard(
     };
   } catch (err) {
     console.error('[daily] fetchDailyLeaderboard network error:', err);
-    return EMPTY_LEADERBOARD;
+    return null;
   }
 }
 

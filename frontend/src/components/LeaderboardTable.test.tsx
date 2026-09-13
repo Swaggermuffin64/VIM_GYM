@@ -8,10 +8,14 @@ import { cleanup, render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 import { LeaderboardTable } from './LeaderboardTable';
+import { invalidateMainLeaderboardCache } from '../api/leaderboard';
 
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  // The API client caches leaderboard slices across renders; each test wants
+  // to observe its own network traffic.
+  invalidateMainLeaderboardCache();
   mockFetch.mockResolvedValue({
     ok: true,
     json: async () => ({

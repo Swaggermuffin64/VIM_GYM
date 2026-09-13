@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Task } from '../types/task';
 
-const { submitPracticeSession } = await import('./leaderboard');
+const {
+  submitPracticeSession,
+  fetchMainLeaderboard,
+  invalidateMainLeaderboardCache,
+} = await import('./leaderboard');
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -18,6 +22,7 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   fetchMock = vi.fn();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
+  invalidateMainLeaderboardCache();
 });
 
 afterEach(() => {
@@ -151,5 +156,96 @@ describe('submitPracticeSession', () => {
       (fetchMock.mock.calls[0][1] as RequestInit).body as string
     );
     expect(body.game_id).toBeUndefined();
+  });
+});
+
+const ENTRY = {
+  id: 'run-1',
+  play_mode: 'practice',
+  duration_ms: 4200,
+  display_name: 'Bob',
+  achieved_at: '2026-09-13T00:00:00Z',
+  has_tasks: true,
+};
+
+describe('fetchMainLeaderboard', () => {
+  it('requests the slice as query params and returns entries', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        entries: [ENTRY],
+        databaseConfigured: true,
+      })
+    );
+
+    const result = await fetchMainLeaderboard(5, 'all', 'week');
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('limit=5');
+    expect(String(url)).toContain('play_mode=all');
+    expect(String(url)).toContain('time_range=week');
+    expect(result).toEqual({
+      status: 'ok',
+      entries: [ENTRY],
+      databaseConfigured: true,
+    });
+  });
+
+  it('serves a repeat call for the same slice from cache', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ success: true, entries: [ENTRY] }))
+    );
+
+    const first = await fetchMainLeaderboard(5, 'all', 'all_time');
+    const second = await fetchMainLeaderboard(5, 'all', 'all_time');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(second).toEqual(first);
+  });
+
+  it('fetches again for a different slice', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ success: true, entries: [] }))
+    );
+
+    await fetchMainLeaderboard(5, 'all', 'all_time');
+    await fetchMainLeaderboard(30, 'all', 'all_time');
+    await fetchMainLeaderboard(5, 'all', 'week');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns an error result without caching it', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ success: false, error: 'boom' }, 500)
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ success: true, entries: [ENTRY] })
+    );
+
+    const first = await fetchMainLeaderboard(5, 'all', 'all_time');
+    const second = await fetchMainLeaderboard(5, 'all', 'all_time');
+
+    expect(first.status).toBe('error');
+    expect(second.status).toBe('ok');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('is invalidated when a practice session is recorded', async () => {
+    // A fresh Response per call — a Response body can only be read once.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse({ success: true, entries: [], ranks: null }))
+    );
+
+    await fetchMainLeaderboard(5, 'all', 'all_time');
+    await submitPracticeSession({
+      accessToken: 'tok',
+      durationMs: 4200,
+      tasks: TASKS,
+    });
+    await fetchMainLeaderboard(5, 'all', 'all_time');
+
+    // One board fetch, one submission, then a fresh board fetch.
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

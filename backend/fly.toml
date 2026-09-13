@@ -7,6 +7,10 @@ primary_region = "iad"
 [env]
   PORT = "3001"
   FRONTEND_URL = "https://vimgym.app,https://www.vimgym.app"
+  # Production is the sole eager creator of the Race of the Day (in-process
+  # rollover scheduler at 0:00 UTC, plus on boot). Local dev shares the
+  # database and must not set this.
+  DAILY_EAGER_CREATE = "true"
 
 [http_service]
   internal_port = 3001

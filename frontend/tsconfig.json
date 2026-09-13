@@ -10,6 +10,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    // Build cache lives under node_modules so it never shows up as a repo
+    // change; see tsconfig.node.json for the same treatment of its emit.
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,

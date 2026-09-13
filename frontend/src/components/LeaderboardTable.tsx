@@ -1,21 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { colors } from '../theme';
+import { fetchMainLeaderboard } from '../api/leaderboard';
+import type {
+  MainLeaderboardEntry as LeaderboardEntry,
+  MainLeaderboardPlayModeFilter as PlayModeFilter,
+  MainLeaderboardTimeRange as TimeRange,
+} from '../api/leaderboard';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
-
-type LeaderboardEntry = {
-  id: string;
-  play_mode: string;
-  duration_ms: number;
-  display_name: string | null;
-  achieved_at: string;
-  has_tasks: boolean;
-};
-
-type PlayModeFilter = 'all' | 'practice' | 'quick_play' | 'private_match';
-
-type TimeRange = 'all_time' | 'week' | 'month';
 
 const TIME_RANGE_OPTIONS: readonly (readonly [TimeRange, string])[] = [
   ['week', 'This Week'],
@@ -53,10 +46,16 @@ function playModeLabel(mode: string): string {
   }
 }
 
+/**
+ * Load leaderboard rows for the given slice. `enabled` lets a caller that
+ * starts collapsed defer the request until the section is actually opened,
+ * so a hidden board costs nothing on page load.
+ */
 function useLeaderboardData(
   limit: number,
   filter: PlayModeFilter,
-  timeRange: TimeRange = 'all_time'
+  timeRange: TimeRange = 'all_time',
+  enabled: boolean = true
 ) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,37 +65,21 @@ function useLeaderboardData(
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const q = new URLSearchParams({
-        limit: String(limit),
-        play_mode: filter,
-        time_range: timeRange,
-      });
-      const res = await fetch(`${API_BASE}/api/leaderboard?${q}`);
-      const data = (await res.json()) as {
-        success?: boolean;
-        error?: string;
-        entries?: LeaderboardEntry[];
-        databaseConfigured?: boolean;
-      };
-      if (!res.ok || !data.success) {
-        setError(data.error || `Failed to load (${res.status})`);
-        setEntries([]);
-        return;
-      }
-      setEntries(data.entries ?? []);
-      setDatabaseConfigured(data.databaseConfigured !== false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Network error');
+    const result = await fetchMainLeaderboard(limit, filter, timeRange);
+    if (result.status === 'ok') {
+      setEntries(result.entries);
+      setDatabaseConfigured(result.databaseConfigured);
+    } else {
+      setError(result.message);
       setEntries([]);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, [limit, filter, timeRange]);
 
   useEffect(() => {
+    if (!enabled) return;
     void load();
-  }, [load]);
+  }, [load, enabled]);
 
   return { entries, loading, error, databaseConfigured };
 }
@@ -560,12 +543,25 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
 /*  Inline leaderboard (home page)                                    */
 /* ------------------------------------------------------------------ */
 
-export function LeaderboardTable({ style }: { style?: React.CSSProperties }) {
-  const [open, setOpen] = useState(true);
+/**
+ * Collapsible top-5 leaderboard for the home page. Starts open unless
+ * `defaultOpen` says otherwise; while collapsed it shows just its header bar
+ * and doesn't fetch.
+ */
+export function LeaderboardTable({
+  style,
+  defaultOpen = true,
+}: {
+  style?: React.CSSProperties;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   const [modalOpen, setModalOpen] = useState(false);
   const { entries, loading, error, databaseConfigured } = useLeaderboardData(
     5,
-    'all'
+    'all',
+    'all_time',
+    open
   );
   const { loadingReplay, handleReplay } = useReplay();
 

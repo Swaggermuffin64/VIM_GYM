@@ -2,7 +2,12 @@ name: Daily Restart
 
 on:
   schedule:
-    - cron: '0 8 * * *' # 8:00 AM UTC daily
+    # 05:00 UTC — the global traffic trough (1am US Eastern, 7am Central
+    # Europe). Race-of-the-day creation no longer depends on this restart:
+    # the backend's in-process rollover scheduler (daily/dailyRolloverScheduler.ts)
+    # creates each day's race at UTC midnight. This restart is process hygiene
+    # (fresh memory, fresh task cache) and can run at the quietest hour.
+    - cron: '0 5 * * *'
 
   workflow_dispatch: # allow manual trigger from GitHub UI
 

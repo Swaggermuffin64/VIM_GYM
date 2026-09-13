@@ -89,7 +89,7 @@ export interface PracticeSummary {
   deleteTasksWithRecommendation: number;
 }
 
-export type KeystrokeSource = 'practice' | 'multiplayer';
+export type KeystrokeSource = 'practice' | 'multiplayer' | 'daily';
 
 export interface KeystrokeEvent {
   key: string;

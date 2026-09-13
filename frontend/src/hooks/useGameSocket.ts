@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import type { GameState } from '../types/multiplayer';
 import { EMPTY_TASK } from '../types/multiplayer';
 import { supabase } from '../lib/supabase';
+import { connectionErrorMessage } from '../lib/connectionErrors';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 const MATCHMAKING_URL =
@@ -27,6 +28,8 @@ interface UseGameSocketReturn {
   sendTaskComplete: (payload: { offset?: number; text?: string }) => void;
   clearResetFlag: () => void;
   getMatchToken: () => string | null;
+  /** Reconnect after a handshake rejection, which Socket.IO does not retry. */
+  retryConnection: () => void;
 }
 
 const initialGameState: Omit<GameState, 'myPlayerId'> = {
@@ -67,6 +70,7 @@ export function useGameSocket(): UseGameSocketReturn {
   const setupSocketListeners = useCallback((socket: Socket) => {
     socket.on('connect', () => {
       setIsConnected(true);
+      setError(null);
       setGameState((prev) => ({
         ...prev,
         myPlayerId: socket.id || null,
@@ -77,9 +81,14 @@ export function useGameSocket(): UseGameSocketReturn {
       setIsConnected(false);
     });
 
+    // A handshake rejection (server full, too many connections from this
+    // network, auth failure) is terminal: Socket.IO will not retry it. Surface
+    // the reason so the lobby can explain the dead end and offer a retry.
     socket.on('connect_error', (err) => {
       console.error('Socket.IO connect error:', err.message);
+      setIsConnected(false);
       setIsConnecting(false);
+      setError(connectionErrorMessage(err));
     });
 
     // Room events
@@ -278,6 +287,13 @@ export function useGameSocket(): UseGameSocketReturn {
     },
     [setupSocketListeners]
   );
+
+  // Reconnect after a handshake rejection. Socket.IO gives up on those, so
+  // without an explicit retry the player's only escape is reloading the page.
+  const retryConnection = useCallback(() => {
+    setError(null);
+    void connectSocket(BACKEND_URL);
+  }, [connectSocket]);
 
   // Connect on mount to the persistent game server (no auth needed for private rooms)
   useEffect(() => {
@@ -542,5 +558,6 @@ export function useGameSocket(): UseGameSocketReturn {
     sendTaskComplete,
     clearResetFlag,
     getMatchToken,
+    retryConnection,
   };
 }

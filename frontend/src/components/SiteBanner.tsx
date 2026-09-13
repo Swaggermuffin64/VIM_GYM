@@ -197,7 +197,7 @@ export function SiteBanner() {
       </Link>
       <div style={styles.navLinks}>
         <a
-          href="https://github.com/swaggermuffin64/vim-racing"
+          href="https://github.com/Swaggermuffin64/VIM_GYM"
           target="_blank"
           rel="noopener noreferrer"
           style={{ ...styles.navLink, ...styles.navLinkWithIcon }}

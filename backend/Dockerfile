@@ -21,6 +21,11 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
+# Fonts for the share-card SVG rasterization (share/ogImage.ts): librsvg
+# renders text via fontconfig, and the bare Alpine image ships no fonts.
+# font-jetbrains-mono is the site's brand font, used for the wordmark.
+RUN apk add --no-cache fontconfig ttf-dejavu font-jetbrains-mono
+
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001

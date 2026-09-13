@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { peekChallengeSlug } from '../lib/challengeRedirect';
 
 /**
  * Requires authentication and completed onboarding.
@@ -94,6 +95,14 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     location.pathname !== '/onboarding'
   ) {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  // OAuth always returns to the origin root, so a challenge-link visitor
+  // lands on '/' after sign-in. Forward them to the daily race; the daily
+  // page clears the stash on arrival. Only '/' is forwarded so a lingering
+  // stash can never hijack deliberate navigation elsewhere.
+  if (location.pathname === '/' && peekChallengeSlug()) {
+    return <Navigate to="/daily" replace />;
   }
 
   return <>{children}</>;

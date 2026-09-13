@@ -24,7 +24,13 @@ import type {
   SocketData,
 } from './multiplayer/types.js';
 import { RoomManager } from './multiplayer/roomManager.js';
-import { BACKEND_PORT, CORS_ORIGINS, HEALTH_METRICS_TOKEN } from './config.js';
+import {
+  BACKEND_PORT,
+  CORS_ORIGINS,
+  DAILY_EAGER_CREATE,
+  HEALTH_METRICS_TOKEN,
+} from './config.js';
+import { startDailyRolloverScheduler } from './daily/dailyRolloverScheduler.js';
 import { dbHealthCheck } from './db/pool.js';
 import {
   insertSessionLeaderboardRow,
@@ -40,8 +46,11 @@ import {
 } from './auth/auth.js';
 import { socketRateLimiter } from './rateLimit/socketRateLimiter.js';
 import { connectionLimiter } from './rateLimit/connectionLimiter.js';
-import { verifySupabaseToken, isSupabaseToken } from './auth/supabaseAuth.js';
-import type { SupabaseUser } from './auth/supabaseAuth.js';
+import { connectionRejectionError } from './rateLimit/connectionRejection.js';
+import {
+  requireSupabaseAuth,
+  tryResolveSupabaseUser,
+} from './auth/httpAuth.js';
 import { resolveSocketIdentity } from './auth/socketIdentity.js';
 import { invalidateCachedDisplayName } from './auth/identityCache.js';
 import { getProfile, upsertProfile } from './db/profiles.js';
@@ -58,6 +67,8 @@ import { getPlayerStats } from './db/playerStats.js';
 import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
 import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
+import { registerDailyRoutes } from './routes/daily.js';
+import { registerShareRoutes } from './routes/share.js';
 import { isAuthorizedForHealthMetrics } from './health/healthMetrics.js';
 import {
   validatePlayerName,
@@ -101,47 +112,6 @@ await fastify.register(fastifyRateLimit, {
   // Skip rate limiting for health check
   allowList: (req: { url?: string }) => req.url === '/',
 });
-
-/**
- * Extract and verify a Supabase JWT from the Authorization header.
- * Returns the user on success, or sends a 401 and returns null.
- */
-async function requireSupabaseAuth(
-  request: { headers: { authorization?: string | string[] | undefined } },
-  reply: { status: (code: number) => { send: (body: unknown) => unknown } }
-): Promise<SupabaseUser | null> {
-  const token = extractTokenFromAuthHeader(request.headers);
-  if (!token || !isSupabaseToken(token)) {
-    reply
-      .status(401)
-      .send({ success: false, error: 'Authentication required' });
-    return null;
-  }
-  const result = await verifySupabaseToken(token);
-  if (!result.success || !result.user) {
-    reply
-      .status(401)
-      .send({ success: false, error: result.error || 'Authentication failed' });
-    return null;
-  }
-  return result.user;
-}
-
-/**
- * Attempt to resolve a Supabase user from the request's Authorization header.
- * Unlike requireSupabaseAuth, this never writes a response — it simply returns
- * null when no valid token is present. Used for endpoints where authentication
- * is optional (e.g. practice tasks served to anonymous players).
- */
-async function tryResolveSupabaseUser(request: {
-  headers: { authorization?: string | string[] | undefined };
-}): Promise<SupabaseUser | null> {
-  const token = extractTokenFromAuthHeader(request.headers);
-  if (!token || !isSupabaseToken(token)) return null;
-  const result = await verifySupabaseToken(token);
-  if (!result.success || !result.user) return null;
-  return result.user;
-}
 
 // Store active tasks with TTL to prevent unbounded memory growth
 const ACTIVE_TASKS_MAX = 10_000;
@@ -232,16 +202,22 @@ fastify.post<{
       .send({ success: false, error: avatarResult.error });
   }
 
-  const profile = await upsertProfile(user.id, {
+  const result = await upsertProfile(user.id, {
     display_name: nameResult.value!,
     avatar_url: avatarResult.value,
   });
 
-  if (!profile) {
+  if (result.status === 'name_taken') {
+    return reply
+      .status(409)
+      .send({ success: false, error: 'That name is taken — try another' });
+  }
+  if (result.status === 'error') {
     return reply
       .status(500)
       .send({ success: false, error: 'Failed to update profile' });
   }
+  const profile = result.profile;
 
   invalidateCachedDisplayName(user.id);
 
@@ -366,7 +342,7 @@ fastify.post<{
   } = request.body;
   let { gameId, taskHash } = request.body;
 
-  if (source !== 'practice' && source !== 'multiplayer') {
+  if (source !== 'practice' && source !== 'multiplayer' && source !== 'daily') {
     return { success: false, error: 'Invalid source' };
   }
 
@@ -469,14 +445,14 @@ fastify.post<{
     if (user) {
       const compacted = compactKeystrokes(eventsResult.value!);
       const count = eventsResult.value!.length;
-      if (source === 'practice') {
+      if (source === 'practice' || source === 'daily') {
         const durationMs = completedAt - startedAt;
         if (durationMs > 0) {
           void insertTaskAttempt({
             userId: user.id,
             taskHash,
             gameId,
-            playMode: 'practice',
+            playMode: source,
             durationMs,
             keystrokeCount: count,
             keystrokes: compacted,
@@ -870,6 +846,12 @@ fastify.get('/api/task/practice', async (request) => {
   };
 });
 
+// Daily race routes (Race of the Day)
+await fastify.register(registerDailyRoutes);
+
+// Public share unfurl page and challenge endpoint (unauthenticated)
+await fastify.register(registerShareRoutes);
+
 // Memory-aware health check for Fly.io auto-restart
 const MEMORY_LIMIT_MB = 200;
 let roomManager: RoomManager | null = null;
@@ -909,8 +891,15 @@ fastify.get('/health', async (request, reply) => {
     // Rooms
     rooms: roomManager?.roomCount ?? 0,
     roomsByState: roomManager?.roomsByState ?? {},
-    // Connections
+    // Connections — `socketConnections` is the true engine count (including
+    // load-test sockets, which bypass the limiter); `limitedConnections` is what
+    // the ceiling is measured against.
     socketConnections: io.engine.clientsCount,
+    limitedConnections: connectionLimiter.getTotalConnections(),
+    maxTotalConnections: connectionLimiter.getMaxTotalConnections(),
+    maxConnectionsPerIp: connectionLimiter.getMaxConnectionsPerIp(),
+    trackedIps: connectionLimiter.getTrackedIpCount(),
+    capacityRejections: connectionLimiter.getCapacityRejectionCount(),
     // Process
     uptimeS: Math.round(process.uptime()),
     database,
@@ -939,6 +928,11 @@ await Promise.race([
 
 // Start Fastify first, then attach Socket.IO
 await fastify.listen({ port: BACKEND_PORT, host: '0.0.0.0' });
+
+// The task cache is ready (awaited above). The scheduler creates today's race
+// now and each following day's race just after UTC midnight, independent of
+// restarts. Lazy creation in routes/daily.ts covers any failure.
+startDailyRolloverScheduler(DAILY_EAGER_CREATE);
 
 // Now attach Socket.IO to the Fastify server
 const io = new Server<
@@ -993,18 +987,23 @@ io.use((socket, next) => {
 
   socket.data.isLoadTest = !!isLoadTest;
 
-  // Check and register connection (bypass for load tests)
-  if (!isLoadTest && !connectionLimiter.addConnection(ip, socket.id)) {
-    console.log(
-      `🚫 Connection limit exceeded for IP ${ip} (${connectionLimiter.getConnectionCount(ip)} connections)`
-    );
-    return next(
-      new Error('Too many connections from your IP. Please try again later.')
-    );
+  // Check and register connection (bypass for load tests, so a load test can
+  // measure the memory and event-loop cost of connections past the ceiling).
+  if (!isLoadTest) {
+    const admission = connectionLimiter.addConnection(ip, socket.id);
+    if (!admission.admitted) {
+      console.log(
+        `🚫 Connection rejected (${admission.reason}) for IP ${ip}: ` +
+          `${connectionLimiter.getConnectionCount(ip)}/${connectionLimiter.getMaxConnectionsPerIp()} for this IP, ` +
+          `${connectionLimiter.getTotalConnections()}/${connectionLimiter.getMaxTotalConnections()} total`
+      );
+      return next(connectionRejectionError(admission.reason));
+    }
   }
 
   console.log(
-    `📊 Connection from ${ip} (${connectionLimiter.getConnectionCount(ip)}/${10} for this IP)`
+    `📊 Connection from ${ip} (${connectionLimiter.getConnectionCount(ip)}/${connectionLimiter.getMaxConnectionsPerIp()} for this IP, ` +
+      `${connectionLimiter.getTotalConnections()}/${connectionLimiter.getMaxTotalConnections()} total)`
   );
   next();
 });

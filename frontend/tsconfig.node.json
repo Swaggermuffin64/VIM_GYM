@@ -1,6 +1,15 @@
 {
   "compilerOptions": {
     "composite": true,
+    // This project exists only to typecheck the Vite/Vitest configs. Left to
+    // emit, it wrote vite.config.js and vitest.config.js next to their .ts
+    // sources -- and Vite resolves vite.config.js FIRST, so the dev server
+    // silently loaded a stale compiled copy of its own config. A referenced
+    // composite project may not set noEmit (TS6310), so emit declarations
+    // only and send them, and the build cache, under node_modules.
+    "emitDeclarationOnly": true,
+    "outDir": "./node_modules/.tmp/tsconfig.node",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",

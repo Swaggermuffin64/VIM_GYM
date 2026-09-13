@@ -127,7 +127,10 @@ export async function getOrCreateDailyRace(
 
 /**
  * Returns all attempts for a user on a given race date, ordered by attempt
- * number. Used by routes/daily.ts to show the user's attempt history.
+ * number. Used by routes/daily.ts to show the user's attempt history and to
+ * classify each slot: a null gameId means the slot never received a playable
+ * game (failed start) and is reusable, while a non-null gameId with a null
+ * durationMs is a forfeited race that still counts against the daily cap.
  * Returns an empty array on no pool or error.
  */
 export async function getDailyAttempts(
@@ -138,6 +141,7 @@ export async function getDailyAttempts(
     attemptNumber: number;
     durationMs: number | null;
     completedAt: Date | null;
+    gameId: number | null;
   }>
 > {
   const pool = getPool();
@@ -150,8 +154,9 @@ export async function getDailyAttempts(
       attempt_number: number;
       duration_ms: number | null;
       completed_at: Date | null;
+      game_id: number | null;
     }>(
-      `SELECT attempt_number, duration_ms, completed_at
+      `SELECT attempt_number, duration_ms, completed_at, game_id
          FROM daily_attempts
         WHERE user_id = $1 AND race_date = $2
         ORDER BY attempt_number`,
@@ -161,6 +166,7 @@ export async function getDailyAttempts(
       attemptNumber: r.attempt_number,
       durationMs: r.duration_ms,
       completedAt: r.completed_at,
+      gameId: r.game_id,
     }));
   } catch (err) {
     logError('getDailyAttempts', err);
@@ -175,8 +181,9 @@ export async function getDailyAttempts(
  * nothing, and the single retry recomputes.
  *
  * Called by routes/daily.ts when the user starts a daily attempt and has no
- * abandoned (claimed-but-unraced) slot to reuse; the route checks for one
- * first, so closing the tab or losing the start response never burns a slot.
+ * game-less slot (failed start) to reuse; the route checks for one first, so
+ * a server error during start never burns a slot. Slots whose game was
+ * actually handed out are burned whether or not the race was finished.
  */
 export async function claimDailyAttempt(
   userId: string,

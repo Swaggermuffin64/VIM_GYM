@@ -107,7 +107,7 @@ export async function registerShareRoutes(
       const name = info.displayName;
 
       const title = `${name} finished the VIMGYM daily race in ${formatSeconds(placing.bestMs)} seconds`;
-      const description = `${name} thinks they're better than you (at vim). Race today's daily and prove them wrong.`;
+      const description = `They think they're better than you (at vim). Race today's daily and prove them wrong.`;
       const target = `${SHARE_LINK_BASE_URL}/login?challenge=${slug}`;
       const imageUrl = `${SHARE_LINK_BASE_URL}/s/${slug}/og.png`;
 

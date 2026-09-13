@@ -51,10 +51,18 @@ export function injectMeta(
     `<meta name="twitter:description" content="${d}">`,
   ].join('\n    ');
 
+  const ROOT_ANCHOR = '<div id="root"></div>';
+
+  if (!template.includes(ROOT_ANCHOR)) {
+    throw new Error(
+      `Prerender failed for ${route}: the <div id="root"></div> anchor was not ` +
+        `found in the Vite template. Vite's index.html output format has probably ` +
+        `changed (extra attributes, different whitespace, etc.). Update the ` +
+        `ROOT_ANCHOR constant in injectMeta.ts to match the new format.`
+    );
+  }
+
   return template
     .replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>\n    ${head}`)
-    .replace(
-      '<div id="root"></div>',
-      `<div id="root">${stripHoistableTags(body)}</div>`
-    );
+    .replace(ROOT_ANCHOR, `<div id="root">${stripHoistableTags(body)}</div>`);
 }

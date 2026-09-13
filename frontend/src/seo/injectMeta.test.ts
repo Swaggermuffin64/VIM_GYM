@@ -54,9 +54,46 @@ describe('injectMeta', () => {
     );
   });
 
-  it('escapes quotes in metadata so attributes cannot break', () => {
-    const out = injectMeta(TEMPLATE, '/', '<p>x</p>');
-    const quoted = out.match(/content="([^"]*)"/g) ?? [];
-    expect(quoted.length).toBeGreaterThan(0);
+  it('escapes quotes and ampersands in metadata attributes', () => {
+    // Craft a route whose metadata contains characters that would break
+    // unescaped HTML attributes. We monkey-patch ROUTE_META temporarily
+    // rather than changing the real values.
+    const original = { ...ROUTE_META['/'] };
+    try {
+      (ROUTE_META as Record<string, typeof original>)['/'] = {
+        ...original,
+        title: 'A "quoted" & <dangerous> title',
+        description: 'She said "hello" & waved <bye>',
+      };
+      const out = injectMeta(TEMPLATE, '/', '<p>x</p>');
+
+      // The og:title content attribute must contain escaped forms
+      expect(out).toContain(
+        'content="A &quot;quoted&quot; &amp; &lt;dangerous&gt; title"'
+      );
+      // The og:description content attribute must contain escaped forms
+      expect(out).toContain(
+        'content="She said &quot;hello&quot; &amp; waved &lt;bye&gt;"'
+      );
+
+      // Raw unescaped quotes must not appear inside any content="..." attribute
+      const contentAttrs = out.match(/content="[^"]*"/g) ?? [];
+      for (const attr of contentAttrs) {
+        // The inner value (between the outer quotes) must not contain raw " or unescaped &
+        const inner = attr.slice('content="'.length, -1);
+        expect(inner).not.toMatch(/(?<!&amp;|&quot;|&lt;|&gt;)["]/);
+      }
+    } finally {
+      (ROUTE_META as Record<string, typeof original>)['/'] = original;
+    }
+  });
+
+  it('throws when the #root anchor is not found in the template', () => {
+    const badTemplate = `<!doctype html>
+<html lang="en"><head><title>VIMGYM</title></head>
+<body><div id="root" data-x="1"></div></body></html>`;
+    expect(() => injectMeta(badTemplate, '/', '<p>content</p>')).toThrow(
+      /id="root"/
+    );
   });
 });

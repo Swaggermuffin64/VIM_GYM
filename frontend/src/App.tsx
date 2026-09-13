@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/home';
 import PracticeEditor from './pages/practice';
-import MultiplayerGame from './pages/multiplayer';
+import MultiplayerPage from './pages/multiplayer';
 import About from './pages/about';
 import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
@@ -67,14 +67,8 @@ function App() {
             </AuthGuard>
           }
         />
-        <Route
-          path="/multiplayer"
-          element={
-            <AuthGuard>
-              <MultiplayerGame />
-            </AuthGuard>
-          }
-        />
+        {/* Public marketing view; the page gates the game itself. */}
+        <Route path="/multiplayer" element={<MultiplayerPage />} />
         <Route
           path="/profile"
           element={

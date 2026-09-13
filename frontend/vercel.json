@@ -7,6 +7,11 @@
       "has": [{ "type": "host", "value": "vimgym.app" }],
       "destination": "https://www.vimgym.app/:path*",
       "permanent": true
+    },
+    {
+      "source": "/app",
+      "destination": "/",
+      "permanent": false
     }
   ],
   "rewrites": [
@@ -20,7 +25,7 @@
     },
     {
       "source": "/((?!s/|assets/|sitemap\\.xml|robots\\.txt|favicon|practice|multiplayer|about).*)",
-      "destination": "/index.html"
+      "destination": "/app.html"
     }
   ]
 }

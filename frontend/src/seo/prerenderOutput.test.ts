@@ -66,4 +66,27 @@ describe.skipIf(!built)('prerendered output', () => {
       expect((pages.get(route)!.match(/<title>/g) ?? []).length).toBe(1);
     }
   });
+
+  describe('SPA fallback shell (app.html)', () => {
+    let appHtml: string;
+    beforeAll(() => {
+      appHtml = readFileSync(resolve(buildDir, 'app.html'), 'utf-8');
+    });
+
+    it('exists', () => {
+      expect(existsSync(resolve(buildDir, 'app.html'))).toBe(true);
+    });
+
+    it('has an empty #root div', () => {
+      expect(appHtml).toContain('<div id="root"></div>');
+    });
+
+    it('has no canonical link', () => {
+      expect(appHtml).not.toMatch(/<link[^>]*rel="canonical"/);
+    });
+
+    it('does not carry the home page title', () => {
+      expect(appHtml).not.toContain(ROUTE_META['/'].title);
+    });
+  });
 });

@@ -23,6 +23,13 @@ function outputFileFor(route: PublicRoute): string {
   return route === '/' ? 'index.html' : `${route.slice(1)}.html`;
 }
 
+// Write the unmodified Vite shell as the SPA fallback for client-only routes.
+// vercel.json rewrites non-prerendered paths to /app.html so they get an empty
+// #root and a generic <title>, not the prerendered home page's markup.
+const appShellPath = resolve(buildDir, 'app.html');
+writeFileSync(appShellPath, template, 'utf-8');
+console.log(`spa fallback -> ${appShellPath}`);
+
 for (const route of PUBLIC_ROUTES) {
   const body = renderRoute(route);
   const html = injectMeta(template, route, body);

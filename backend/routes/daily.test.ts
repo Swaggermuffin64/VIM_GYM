@@ -44,6 +44,8 @@ beforeEach(() => {
   // Most tests are for users with no prior attempts today; individual tests
   // override with their own attempt history.
   vi.mocked(daily.getDailyAttempts).mockResolvedValue([]);
+  // Attach succeeds by default; failure-path tests override with false.
+  vi.mocked(daily.attachGameToDailyAttempt).mockResolvedValue(true);
 });
 
 describe('GET /api/daily', () => {
@@ -164,6 +166,56 @@ describe('POST /api/daily/attempt/start', () => {
     expect(daily.attachGameToDailyAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ attemptNumber: 2, gameId: 77 })
     );
+  });
+
+  it('returns 500 game_creation_failed when the game session cannot be created', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+    vi.mocked(daily.claimDailyAttempt).mockResolvedValue({
+      status: 'claimed',
+      attemptNumber: 1,
+    });
+    vi.mocked(stats.createGameSession).mockResolvedValue(null);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/attempt/start',
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toMatchObject({
+      success: false,
+      error: 'game_creation_failed',
+    });
+    expect(daily.attachGameToDailyAttempt).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 attach_failed when the game cannot be linked to the attempt', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+    vi.mocked(daily.claimDailyAttempt).mockResolvedValue({
+      status: 'claimed',
+      attemptNumber: 1,
+    });
+    vi.mocked(stats.createGameSession).mockResolvedValue(77);
+    vi.mocked(daily.attachGameToDailyAttempt).mockResolvedValue(false);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/attempt/start',
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toMatchObject({
+      success: false,
+      error: 'attach_failed',
+    });
   });
 
   it('refuses the 4th attempt with 403 out_of_attempts', async () => {

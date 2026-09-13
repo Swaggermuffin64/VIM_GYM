@@ -148,13 +148,24 @@ export async function registerDailyRoutes(
       userIds: [user.id],
     });
 
-    if (gameId !== null) {
-      await attachGameToDailyAttempt({
-        userId: user.id,
-        raceDate,
-        attemptNumber,
-        gameId,
-      });
+    // A response with no playable game is not a success: fail loudly so the
+    // client can retry (the claimed slot is reusable, so nothing is burned).
+    if (gameId === null) {
+      return reply
+        .status(500)
+        .send({ success: false, error: 'game_creation_failed' });
+    }
+
+    const attached = await attachGameToDailyAttempt({
+      userId: user.id,
+      raceDate,
+      attemptNumber,
+      gameId,
+    });
+    if (!attached) {
+      // An unattached game can never be completed (completeDailyAttempt
+      // matches on game_id), so handing it out would strand the run.
+      return reply.status(500).send({ success: false, error: 'attach_failed' });
     }
 
     return {

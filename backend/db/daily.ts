@@ -599,6 +599,30 @@ export async function getOrCreateShareLink(
 }
 
 /**
+ * Adds one click to a share link's counter. Called by routes/share.ts when a
+ * non-crawler request resolves /s/:slug (see share/crawlerDetection.ts), so
+ * the count approximates human clicks rather than unfurl-preview fetches.
+ * Fire-and-forget: errors are logged and swallowed so counting can never
+ * break the share page.
+ */
+export async function incrementShareLinkClicks(slug: string): Promise<void> {
+  const pool = getPool();
+  if (!pool) {
+    logSkip('incrementShareLinkClicks');
+    return;
+  }
+  try {
+    await pool.query(
+      `UPDATE daily_share_links SET click_count = click_count + 1
+        WHERE slug = $1`,
+      [slug]
+    );
+  } catch (err) {
+    logError('incrementShareLinkClicks', err);
+  }
+}
+
+/**
  * Resolves a share slug to the sharer's user id, display name, and race date.
  * Returns null when the slug does not exist or on error.
  *

@@ -24,6 +24,7 @@ import {
   queryDailyPlacing,
   getOrCreateShareLink,
   getShareInfo,
+  incrementShareLinkClicks,
 } from './daily.js';
 
 describe('generateShareSlug', () => {
@@ -119,6 +120,28 @@ describe('attachGameToDailyAttempt', () => {
   });
 });
 
+describe('incrementShareLinkClicks', () => {
+  it('increments the click count for the slug', async () => {
+    poolAvailable = true;
+    mockQuery.mockResolvedValue({ rowCount: 1, rows: [] });
+
+    await incrementShareLinkClicks('a1B2c3D4e5');
+
+    const [sql, params] = mockQuery.mock.calls[0]!;
+    expect(String(sql)).toContain('click_count');
+    expect(params).toEqual(['a1B2c3D4e5']);
+  });
+
+  it('swallows database errors so counting never breaks the share page', async () => {
+    poolAvailable = true;
+    mockQuery.mockRejectedValue(new Error('connection reset'));
+
+    await expect(
+      incrementShareLinkClicks('a1B2c3D4e5')
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('daily db functions without DATABASE_URL', () => {
   const uid = '00000000-0000-0000-0000-000000000000';
 
@@ -150,5 +173,8 @@ describe('daily db functions without DATABASE_URL', () => {
     await expect(queryDailyPlacing(uid, '2026-08-16')).resolves.toBeNull();
     await expect(getOrCreateShareLink(uid, '2026-08-16')).resolves.toBeNull();
     await expect(getShareInfo('abc123XYZ0')).resolves.toBeNull();
+    await expect(
+      incrementShareLinkClicks('abc123XYZ0')
+    ).resolves.toBeUndefined();
   });
 });

@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 vi.mock('../db/daily.js', () => ({
   getShareInfo: vi.fn(),
   queryDailyPlacing: vi.fn(),
+  incrementShareLinkClicks: vi.fn(),
 }));
 
 import * as daily from '../db/daily.js';
@@ -71,6 +72,79 @@ describe('GET /s/:slug', () => {
     const app = await buildServer();
     expect((await app.inject({ url: '/s/nope' })).statusCode).toBe(404);
     expect((await app.inject({ url: '/s/aaaaaaaaaa' })).statusCode).toBe(404);
+  });
+});
+
+describe('GET /s/:slug click counting', () => {
+  const BROWSER_UA =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+  const CRAWLER_UA =
+    'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)';
+
+  function mockValidShare() {
+    vi.mocked(daily.getShareInfo).mockResolvedValue({
+      userId: 'u1',
+      displayName: 'Jackson',
+      raceDate: '2026-08-16',
+    });
+    vi.mocked(daily.queryDailyPlacing).mockResolvedValue({
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+    });
+  }
+
+  it('counts a click from a real browser', async () => {
+    mockValidShare();
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/s/a1B2c3D4e5',
+      headers: { 'user-agent': BROWSER_UA },
+    });
+    expect(daily.incrementShareLinkClicks).toHaveBeenCalledWith('a1B2c3D4e5');
+  });
+
+  // Unfurl crawlers hit the page when the link is merely PASTED, before any
+  // human clicks: counting them would inflate every share by several "clicks".
+  it('does not count unfurl crawlers', async () => {
+    mockValidShare();
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/s/a1B2c3D4e5',
+      headers: { 'user-agent': CRAWLER_UA },
+    });
+    expect(daily.incrementShareLinkClicks).not.toHaveBeenCalled();
+  });
+
+  it('does not count malformed or unknown slugs', async () => {
+    vi.mocked(daily.getShareInfo).mockResolvedValue(null);
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/s/nope',
+      headers: { 'user-agent': BROWSER_UA },
+    });
+    await app.inject({
+      method: 'GET',
+      url: '/s/aaaaaaaaaa',
+      headers: { 'user-agent': BROWSER_UA },
+    });
+    expect(daily.incrementShareLinkClicks).not.toHaveBeenCalled();
+  });
+
+  // The unfurl page references og.png, so every crawler (and some browsers)
+  // fetches it right after the page: it must never count as a second click.
+  it('does not count og.png image fetches', async () => {
+    mockValidShare();
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/s/a1B2c3D4e5/og.png',
+      headers: { 'user-agent': BROWSER_UA },
+    });
+    expect(daily.incrementShareLinkClicks).not.toHaveBeenCalled();
   });
 });
 

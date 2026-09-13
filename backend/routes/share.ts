@@ -12,9 +12,14 @@
  * best time, and date.
  */
 import type { FastifyInstance } from 'fastify';
-import { getShareInfo, queryDailyPlacing } from '../db/daily.js';
+import {
+  getShareInfo,
+  incrementShareLinkClicks,
+  queryDailyPlacing,
+} from '../db/daily.js';
 import { SHARE_LINK_BASE_URL } from '../config.js';
 import { buildShareCardSvg, renderShareCardPng } from '../share/ogImage.js';
+import { isKnownCrawler } from '../share/crawlerDetection.js';
 
 /** Regex for valid share slugs: exactly 10 base62 characters. */
 const SLUG_PATTERN = /^[0-9A-Za-z]{10}$/;
@@ -94,6 +99,12 @@ export async function registerShareRoutes(
           .status(404)
           .type('text/html; charset=utf-8')
           .send(notFoundHtml());
+      }
+
+      // Count human clicks only: unfurl crawlers fetch this page when the
+      // link is merely pasted into a chat. og.png fetches are never counted.
+      if (!isKnownCrawler(request.headers['user-agent'])) {
+        await incrementShareLinkClicks(slug);
       }
 
       const placing = await queryDailyPlacing(info.userId, info.raceDate);

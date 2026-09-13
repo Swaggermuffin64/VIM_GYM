@@ -1,6 +1,7 @@
 import React from 'react';
 import { colors } from '../theme';
 import { SiteBanner } from '../components/SiteBanner';
+import { PageMeta } from '../seo/PageMeta';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -163,6 +164,7 @@ const styles: Record<string, React.CSSProperties> = {
 function About() {
   return (
     <div style={styles.container}>
+      <PageMeta route="/about" />
       <SiteBanner />
 
       <div style={styles.mainContent}>

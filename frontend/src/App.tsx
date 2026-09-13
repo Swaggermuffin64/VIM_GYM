@@ -61,14 +61,8 @@ function App() {
             </AuthGuard>
           }
         />
-        <Route
-          path="/about"
-          element={
-            <AuthGuard>
-              <About />
-            </AuthGuard>
-          }
-        />
+        {/* Public: indexable marketing copy, no session required. */}
+        <Route path="/about" element={<About />} />
         <Route
           path="/practice"
           element={

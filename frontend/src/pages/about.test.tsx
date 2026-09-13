@@ -7,6 +7,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import About from './about';
+import { ROUTE_META } from '../seo/routeMeta';
 
 afterEach(cleanup);
 
@@ -25,5 +26,25 @@ describe('About page site banner', () => {
     // Without an AuthProvider the context default has session: null, so the
     // banner renders a SIGN IN link instead of the account dropdown.
     expect(screen.getByRole('link', { name: /sign in/i })).toBeTruthy();
+  });
+});
+
+describe('About page content', () => {
+  it('renders its content with no session', () => {
+    render(
+      <MemoryRouter initialEntries={['/about']}>
+        <About />
+      </MemoryRouter>
+    );
+    expect(screen.getByText(/What is VIM_GYM\?/i)).toBeDefined();
+  });
+
+  it('sets the about page title', () => {
+    render(
+      <MemoryRouter initialEntries={['/about']}>
+        <About />
+      </MemoryRouter>
+    );
+    expect(document.title).toBe(ROUTE_META['/about'].title);
   });
 });

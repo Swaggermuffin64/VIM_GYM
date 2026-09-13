@@ -5,12 +5,10 @@ import { AuthGuard } from '../components/AuthGuard';
 import { BrandedLoading } from '../components/BrandedLoading';
 import PracticePublic from './practice/PracticePublic';
 
-// Re-export shared types/components so existing consumers (e.g. daily.tsx) keep
-// working without changing their import path.
-export type { RaceSessionPageProps } from './practice/PracticeEditor';
-export { RaceSessionPage } from './practice/PracticeEditor';
-
-// Lazy so CodeMirror stays out of the initial bundle and out of the prerender.
+// Lazy so the public view does not depend on the editor module. The bundle will
+// not actually split until the gated routes in App.tsx are lazy-loaded too
+// (multiplayer also imports CodeMirror eagerly), but this keeps the public path
+// free of browser-only imports for the prerender step.
 const PracticeEditor = React.lazy(() => import('./practice/PracticeEditor'));
 
 /**

@@ -29,8 +29,8 @@ const AUTH = {
 };
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => AUTH }));
 
-// Stub the RaceSessionPage to a simple testid div (per brief: mock './practice').
-vi.mock('./practice', () => ({
+// Stub the RaceSessionPage to a simple testid div.
+vi.mock('./practice/PracticeEditor', () => ({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   RaceSessionPage: (_props: {
     config: unknown;

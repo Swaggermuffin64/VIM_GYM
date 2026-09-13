@@ -20,6 +20,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
 import {
   fetchDailyRace,
+  fetchDailyRaceCached,
+  getCachedDailyRace,
   startDailyAttempt,
   completeDailyAttempt,
   fetchDailyLeaderboard,
@@ -106,7 +108,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
   container: {
-    maxWidth: '1040px',
+    maxWidth: '1200px',
     width: '100%',
     margin: '0 auto',
     padding: '48px 32px',
@@ -117,19 +119,19 @@ const styles: Record<string, React.CSSProperties> = {
   split: {
     display: 'grid',
     gridTemplateColumns: '1.4fr 1fr',
-    gap: '28px',
+    gap: '36px',
     alignItems: 'stretch',
   },
   stage: {
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
-    gap: '18px',
+    gap: '22px',
     padding: '24px 0',
   },
   // Same typographic treatment as the title, one step down in scale.
   dateHeader: {
-    fontSize: '20px',
+    fontSize: '24px',
     fontWeight: 800,
     color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", "Fira Code", monospace',
@@ -137,7 +139,7 @@ const styles: Record<string, React.CSSProperties> = {
     textShadow: `0 0 20px ${colors.primaryGlow}`,
   },
   title: {
-    fontSize: '42px',
+    fontSize: '54px',
     fontWeight: 800,
     color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", "Fira Code", monospace',
@@ -152,14 +154,14 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   metaText: {
-    fontSize: '15px',
+    fontSize: '17px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
   attemptDots: {
     display: 'inline-flex',
-    gap: '8px',
-    fontSize: '18px',
+    gap: '10px',
+    fontSize: '22px',
     fontFamily: '"JetBrains Mono", monospace',
   },
   dotUsed: {
@@ -169,25 +171,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textMuted,
   },
   bestTime: {
-    fontSize: '15px',
+    fontSize: '17px',
     color: colors.successLight,
     fontFamily: '"JetBrains Mono", monospace',
   },
   buttonRow: {
     display: 'flex',
-    gap: '12px',
+    gap: '14px',
     flexWrap: 'wrap',
     alignItems: 'center',
   },
   // Matches metaText ("N of 3 attempts used") for a consistent caption tier.
   subLine: {
-    fontSize: '15px',
+    fontSize: '17px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
   flexButton: {
-    padding: '16px 26px',
-    fontSize: '15px',
+    padding: '18px 30px',
+    fontSize: '17px',
     fontWeight: 700,
     letterSpacing: '0.5px',
     color: colors.secondaryLight,
@@ -208,8 +210,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 30px',
   },
   startButton: {
-    padding: '18px 24px',
-    fontSize: '17px',
+    padding: '20px 32px',
+    fontSize: '19px',
     fontWeight: 600,
     color: colors.bgDark,
     background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryLight} 100%)`,
@@ -222,24 +224,28 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: `0 0 20px ${colors.primaryGlow}`,
   },
   countdown: {
-    fontSize: '14px',
+    fontSize: '16px',
     color: colors.textMuted,
     fontFamily: '"JetBrains Mono", monospace',
   },
   countdownTime: {
     color: colors.warning,
     fontWeight: 700,
-    fontSize: '18px',
+    fontSize: '22px',
     letterSpacing: '2px',
   },
-  backArrow: {
-    padding: 0,
+  // The quiet way out, matching the results screen's "Back to leaderboard":
+  // bare muted text below the stage content, never competing with the title.
+  homeLink: {
+    padding: '4px 0',
     width: 'fit-content',
-    display: 'flex',
+    fontSize: '15px',
+    fontWeight: 500,
     background: 'transparent',
     border: 'none',
-    color: colors.textPrimary,
+    color: colors.textMuted,
     cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
     transition: 'all 0.2s ease',
   },
   // Share modal
@@ -344,13 +350,25 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '1px',
     fontFamily: '"JetBrains Mono", monospace',
   },
+  // The og.png slot: locked to the card's 1200x630 ratio so the placeholder
+  // and the loaded image occupy identical space.
+  previewImage: {
+    width: '100%',
+    aspectRatio: '1200 / 630',
+    display: 'block',
+    objectFit: 'cover',
+    borderRadius: '6px',
+    border: `1px solid ${colors.border}`,
+    background: colors.bgDark,
+    marginTop: '4px',
+  },
   // Leaderboard rail (right column)
   rail: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.border}`,
     borderRadius: '12px',
-    padding: '20px',
-    maxHeight: '520px',
+    padding: '24px',
+    maxHeight: '600px',
     overflowY: 'auto',
     alignSelf: 'center',
     width: '100%',
@@ -360,20 +378,20 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'baseline',
     borderBottom: `1px solid ${colors.border}`,
-    paddingBottom: '12px',
-    marginBottom: '10px',
+    paddingBottom: '14px',
+    marginBottom: '12px',
   },
-  // Left inset matches the rows' 12px padding so the dots sit under the ranks.
+  // Left inset matches the rows' 14px padding so the dots sit under the ranks.
   railDivider: {
     textAlign: 'left',
     color: colors.textMuted,
-    fontSize: '13px',
-    padding: '4px 12px',
+    fontSize: '15px',
+    padding: '4px 14px',
     userSelect: 'none',
     fontFamily: '"JetBrains Mono", monospace',
   },
   leaderboardTitle: {
-    fontSize: '15px',
+    fontSize: '17px',
     fontWeight: 700,
     color: colors.textPrimary,
     textTransform: 'uppercase',
@@ -382,13 +400,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   leaderboardRow: {
     display: 'grid',
-    gridTemplateColumns: '40px 1fr 80px',
+    gridTemplateColumns: '48px 1fr 92px',
     gap: '8px',
     alignItems: 'center',
-    padding: '10px 12px',
+    padding: '12px 14px',
     borderRadius: '8px',
     fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '14px',
+    fontSize: '16px',
   },
   leaderboardRowOwn: {
     background: `${colors.primary}15`,
@@ -413,7 +431,7 @@ const styles: Record<string, React.CSSProperties> = {
   leaderboardEmpty: {
     color: colors.textMuted,
     fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '14px',
+    fontSize: '16px',
     textAlign: 'center',
     padding: '16px 0',
   },
@@ -539,7 +557,12 @@ const styles: Record<string, React.CSSProperties> = {
 export default function DailyRacePage() {
   const navigate = useNavigate();
   const { session, user } = useAuth();
-  const [phase, setPhase] = useState<Phase>({ name: 'loading' });
+  // Seed from the in-memory race cache (warmed by the home page) so arriving
+  // here paints the pre-race screen immediately instead of flashing a spinner.
+  const [phase, setPhase] = useState<Phase>(() => {
+    const cached = getCachedDailyRace();
+    return cached ? { name: 'preRace', info: cached } : { name: 'loading' };
+  });
   const [leaderboard, setLeaderboard] = useState<DailyLeaderboardData>({
     entries: [],
     neighborhood: null,
@@ -561,8 +584,16 @@ export default function DailyRacePage() {
 
   const loadInfo = useCallback(async () => {
     if (!session?.access_token) return;
+    // A cached race (from the home page, or from this page's own last load)
+    // lands synchronously — no spinner. Mutations (starting or completing an
+    // attempt) invalidate the cache, so a stale hit here can't happen.
+    const cached = getCachedDailyRace();
+    if (cached) {
+      setPhase({ name: 'preRace', info: cached });
+      return;
+    }
     setPhase({ name: 'loading' });
-    const result = await fetchDailyRace(session.access_token);
+    const result = await fetchDailyRaceCached(session.access_token);
     if (result.status === 'ok') {
       setPhase({ name: 'preRace', info: result.info });
     } else {
@@ -577,9 +608,12 @@ export default function DailyRacePage() {
   // ------- Fetch leaderboard when on preRace -------
 
   // Top 8 keeps the rail height fixed; the pinned neighborhood covers
-  // anyone ranked below that.
+  // anyone ranked below that. Fetched during 'loading' too, in parallel with
+  // the race info rather than serialized behind it; the API client's TTL
+  // cache absorbs the repeat call when the phase flips to 'preRace'.
   useEffect(() => {
-    if (phase.name !== 'preRace' || !session?.access_token) return;
+    if (phase.name !== 'preRace' && phase.name !== 'loading') return;
+    if (!session?.access_token) return;
     void fetchDailyLeaderboard(session.access_token, undefined, 8).then(
       setLeaderboard
     );
@@ -775,23 +809,6 @@ function PreRaceScreen({
     <div className="daily-split" style={styles.split}>
       {/* Left: the race stage */}
       <div style={styles.stage}>
-        <button style={styles.backArrow} onClick={onBack} aria-label="Back">
-          <svg
-            width="34"
-            height="26"
-            viewBox="0 0 34 26"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M14 3 L4 13 L14 23 M4 13 H31"
-              stroke="currentColor"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
         <div style={styles.title}>Race of the Day</div>
         <div style={styles.dateHeader}>{info.raceDate}</div>
 
@@ -844,6 +861,10 @@ function PreRaceScreen({
           {info.tasks.length} tasks · same set for everyone · resets at midnight
           UTC
         </div>
+
+        <button style={styles.homeLink} onClick={onBack}>
+          ← Back to home
+        </button>
       </div>
 
       {/* Right: leaderboard rail */}
@@ -1048,17 +1069,31 @@ function FlexShareModal({
         </div>
 
         <div style={styles.previewLabel}>
-          How it unfurls in Slack, Discord, or iMessage:
+          How it looks in Slack, Discord, or iMessage:
         </div>
+        {/* Mirrors a real unfurl: site line, bold title, description, then
+            the large card image — the same og.png recipients actually see,
+            served from the minted link (see backend/routes/share.ts). */}
         <div style={styles.previewCard}>
+          <div style={styles.previewHost}>VIMGYM · vimgym.app</div>
           <div style={styles.previewTitle}>
             {name} finished the VIMGYM daily race in {timeLine}
           </div>
           <div style={styles.previewDesc}>
-            {name} thinks they&apos;re better than you (at vim). Race
-            today&apos;s daily and prove them wrong.
+            They think they&apos;re better than you (at vim). Race today&apos;s
+            daily and prove them wrong.
           </div>
-          <div style={styles.previewHost}>vimgym.app</div>
+          {url ? (
+            <img
+              style={styles.previewImage}
+              src={`${url}/og.png`}
+              alt="Share card image preview"
+            />
+          ) : (
+            // Same-sized placeholder while the link mints, so the modal
+            // doesn't jump when the real image arrives.
+            <div style={styles.previewImage} aria-hidden="true" />
+          )}
         </div>
       </div>
     </div>

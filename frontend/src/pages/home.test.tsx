@@ -27,8 +27,11 @@ vi.mock('../components/SiteBanner', () => ({
 }));
 
 const mockFetchDailyRace = vi.fn();
+const mockFetchDailyLeaderboard = vi.fn();
 vi.mock('../api/daily', () => ({
   fetchDailyRaceCached: (...args: unknown[]) => mockFetchDailyRace(...args),
+  fetchDailyLeaderboard: (...args: unknown[]) =>
+    mockFetchDailyLeaderboard(...args),
 }));
 
 const HomePage = (await import('./home')).default;
@@ -54,6 +57,11 @@ function renderHome() {
 
 beforeEach(() => {
   mockFetchDailyRace.mockResolvedValue({ status: 'ok', info: makeInfo() });
+  mockFetchDailyLeaderboard.mockResolvedValue({
+    entries: [],
+    neighborhood: null,
+    totalRacers: 0,
+  });
 });
 
 afterEach(() => {
@@ -91,6 +99,16 @@ describe('HomePage', () => {
     expect(mockFetchDailyRace).toHaveBeenCalledWith('tok');
     expect(await screen.findByText('2 attempts left')).toBeTruthy();
     expect(screen.getByLabelText('1 of 3 attempts used')).toBeTruthy();
+  });
+
+  // Clicking through to /daily should land on a fully-formed screen, so the
+  // menu warms the same leaderboard slice the daily page renders.
+  it('prefetches the daily leaderboard so /daily paints without a fetch waterfall', async () => {
+    await act(async () => {
+      renderHome();
+    });
+
+    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith('tok', undefined, 8);
   });
 
   it('invites the user to race while attempts remain', async () => {

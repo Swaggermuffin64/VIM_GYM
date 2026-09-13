@@ -45,9 +45,14 @@ const mockStartDailyAttempt = vi.fn();
 const mockCompleteDailyAttempt = vi.fn();
 const mockFetchDailyLeaderboard = vi.fn();
 const mockCreateDailyShareLink = vi.fn();
+// The synchronous cache peek the page seeds its phase from; defaults to a
+// cold cache so most tests exercise the fetch path.
+const mockGetCachedDailyRace = vi.fn();
 
 vi.mock('../api/daily', () => ({
   fetchDailyRace: (...args: unknown[]) => mockFetchDailyRace(...args),
+  fetchDailyRaceCached: (...args: unknown[]) => mockFetchDailyRace(...args),
+  getCachedDailyRace: (...args: unknown[]) => mockGetCachedDailyRace(...args),
   startDailyAttempt: (...args: unknown[]) => mockStartDailyAttempt(...args),
   completeDailyAttempt: (...args: unknown[]) =>
     mockCompleteDailyAttempt(...args),
@@ -102,6 +107,7 @@ function makeInfo(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  mockGetCachedDailyRace.mockReturnValue(null);
   mockFetchDailyRace.mockResolvedValue({ status: 'ok', info: makeInfo() });
   mockStartDailyAttempt.mockResolvedValue({
     status: 'started',
@@ -146,6 +152,20 @@ describe('DailyRacePage', () => {
     expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
 
     expect(sessionStorage.getItem('vimgym.challengeSlug')).toBeNull();
+  });
+
+  // Arriving from the home page (which already fetched today's race) must
+  // paint the pre-race screen immediately — no loading-spinner flash, no
+  // network round trip.
+  it('seeds the pre-race screen from the cache without fetching', async () => {
+    mockGetCachedDailyRace.mockReturnValue(makeInfo());
+
+    await act(async () => {
+      renderDaily();
+    });
+
+    expect(screen.getByText(/Start attempt 1 of 3/i)).toBeTruthy();
+    expect(mockFetchDailyRace).not.toHaveBeenCalled();
   });
 
   // 1. Pre-race screen shows attempt dots and correct start button label.
@@ -311,8 +331,16 @@ describe('DailyRacePage', () => {
     expect(
       (await screen.findByDisplayValue('https://vim.gym/c/abc')) as unknown
     ).toBeTruthy();
-    // Explains the rich unfurl.
-    expect(screen.getByText(/unfurls/i)).toBeTruthy();
+    // Explains the rich unfurl preview.
+    expect(
+      screen.getByText(/How it looks in Slack, Discord, or iMessage/i)
+    ).toBeTruthy();
+    // The preview shows the real og.png the minted link serves, so what the
+    // user sees is exactly what recipients get.
+    const previewImage = (await screen.findByAltText(
+      /Share card image preview/i
+    )) as HTMLImageElement;
+    expect(previewImage.src).toBe('https://vim.gym/c/abc/og.png');
   });
 
   it('copies the link from the modal and confirms', async () => {

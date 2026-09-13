@@ -17,6 +17,9 @@ import type { DailyRaceInfo } from '../api/daily';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 import { LeaderboardTable } from '../components/LeaderboardTable';
 import { SiteBanner } from '../components/SiteBanner';
+import HomePublic from './home/HomePublic';
+import { BrandedLoading } from '../components/BrandedLoading';
+import { AuthGuard } from '../components/AuthGuard';
 
 /** The three always-available modes, in the order they appear on the right. */
 const MODES = [
@@ -43,7 +46,7 @@ const MODES = [
   },
 ];
 
-export default function HomePage() {
+function HomeSignedIn() {
   return (
     <div style={styles.container}>
       <SiteBanner />
@@ -419,3 +422,22 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '16px 20px',
   },
 };
+
+/**
+ * Route component for `/`. Chooses between the public landing page and the
+ * signed-in menu. The branch is on session state only — never on user-agent,
+ * which would be cloaking.
+ *
+ * AuthGuard still wraps the signed-in branch: it owns the onboarding redirect
+ * and the challenge-link forward to /daily.
+ */
+export default function HomeRoute() {
+  const { session, loading } = useAuth();
+  if (loading) return <BrandedLoading />;
+  if (!session) return <HomePublic />;
+  return (
+    <AuthGuard>
+      <HomeSignedIn />
+    </AuthGuard>
+  );
+}

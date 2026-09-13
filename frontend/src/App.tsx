@@ -53,14 +53,8 @@ function App() {
         {/* Public legal pages — registered with Google OAuth, so no AuthGuard */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
-        <Route
-          path="/"
-          element={
-            <AuthGuard>
-              <HomePage />
-            </AuthGuard>
-          }
-        />
+        {/* Public landing page; HomePage gates the signed-in menu itself. */}
+        <Route path="/" element={<HomePage />} />
         {/* Public: indexable marketing copy, no session required. */}
         <Route path="/about" element={<About />} />
         <Route

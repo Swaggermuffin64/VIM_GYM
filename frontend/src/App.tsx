@@ -57,14 +57,8 @@ function App() {
         <Route path="/" element={<HomePage />} />
         {/* Public: indexable marketing copy, no session required. */}
         <Route path="/about" element={<About />} />
-        <Route
-          path="/practice"
-          element={
-            <AuthGuard>
-              <PracticeEditor />
-            </AuthGuard>
-          }
-        />
+        {/* Public marketing view; the page gates the editor itself. */}
+        <Route path="/practice" element={<PracticeEditor />} />
         <Route
           path="/daily"
           element={
@@ -98,14 +92,7 @@ function App() {
           }
         />
         {/* Keep old route for backwards compatibility */}
-        <Route
-          path="/vim-editor"
-          element={
-            <AuthGuard>
-              <PracticeEditor />
-            </AuthGuard>
-          }
-        />
+        <Route path="/vim-editor" element={<PracticeEditor />} />
       </Routes>
     </Router>
   );

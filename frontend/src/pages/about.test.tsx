@@ -29,6 +29,18 @@ describe('About page site banner', () => {
   });
 });
 
+describe('About page heading hierarchy', () => {
+  it('has a keyword-bearing h1 consistent with ROUTE_META', () => {
+    render(
+      <MemoryRouter initialEntries={['/about']}>
+        <About />
+      </MemoryRouter>
+    );
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1.textContent).toBe(ROUTE_META['/about'].title);
+  });
+});
+
 describe('About page content', () => {
   it('renders its content with no session', () => {
     render(

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { colors } from '../../theme';
 import { SiteBanner } from '../../components/SiteBanner';
 import { PageMeta } from '../../seo/PageMeta';
+import { StructuredData } from '../../seo/StructuredData';
 
 /** Warms the lazy route chunk so the first click does not wait on a download. */
 const PREFETCH: Record<string, () => Promise<unknown>> = {
@@ -129,6 +130,7 @@ export default function HomePublic() {
   return (
     <div style={styles.container}>
       <PageMeta route="/" />
+      <StructuredData />
       <SiteBanner />
       <div style={styles.main}>
         {/* Keyword-bearing heading for crawlers; the wordmark below is branded. */}

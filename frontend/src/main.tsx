@@ -1,11 +1,12 @@
 import React from 'react';
-import ReactDOM from 'react-dom/client';
+import ReactDOM, { hydrateRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 import './index.css';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const container = document.getElementById('root')!;
+const tree = (
   <React.StrictMode>
     <AuthProvider>
       <App />
@@ -13,3 +14,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <Analytics />
   </React.StrictMode>
 );
+
+// Prerendered routes ship server markup; everything else mounts empty.
+if (container.hasChildNodes()) {
+  hydrateRoot(container, tree);
+} else {
+  ReactDOM.createRoot(container).render(tree);
+}

@@ -143,6 +143,14 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.7,
     margin: 0,
   },
+  pageHeading: {
+    fontSize: '40px',
+    fontWeight: 800,
+    color: colors.textPrimary,
+    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    letterSpacing: '-1.5px',
+    marginBottom: '48px',
+  },
   donateButton: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -173,6 +181,10 @@ function About() {
         <div style={styles.bgGlow2} />
 
         <div style={styles.content}>
+          <h1 style={styles.pageHeading}>
+            About VIMGYM — Why Practice Vim Motions
+          </h1>
+
           {/* What Is VIM_GYM */}
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>What is VIM_GYM?</h2>

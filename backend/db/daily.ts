@@ -79,6 +79,15 @@ export async function getOrCreateDailyRace(
         .filter((h): h is string => typeof h === 'string');
       if (hashes.length !== picked.length) return null;
       await upsertTasksOnFirstUse(picked);
+      // upsertTasksOnFirstUse swallows DB errors, so verify every task row is
+      // actually durable before committing the race row. Committing a race
+      // whose tasks are missing would leave the day permanently unservable:
+      // later requests see the race exists, skip creation, and find no tasks.
+      const durable = await pool.query<{ content_hash: string }>(
+        `SELECT content_hash FROM tasks WHERE content_hash = ANY($1)`,
+        [hashes]
+      );
+      if (durable.rows.length !== hashes.length) return null;
       await pool.query(
         `INSERT INTO daily_races (race_date, task_hashes) VALUES ($1, $2)
          ON CONFLICT (race_date) DO NOTHING`,
@@ -220,27 +229,31 @@ export async function claimDailyAttempt(
 /**
  * Links a game session id to an existing daily attempt row. Called by
  * routes/daily.ts after createGameSession so the attempt tracks which
- * stats-parity game session backs it.
+ * stats-parity game session backs it. Returns whether the attempt row was
+ * actually updated, so the route can refuse to hand out a game the attempt
+ * does not track (completing such a game would fail later).
  */
 export async function attachGameToDailyAttempt(params: {
   userId: string;
   raceDate: string;
   attemptNumber: number;
   gameId: number;
-}): Promise<void> {
+}): Promise<boolean> {
   const pool = getPool();
   if (!pool) {
     logSkip('attachGameToDailyAttempt');
-    return;
+    return false;
   }
   try {
-    await pool.query(
+    const res = await pool.query(
       `UPDATE daily_attempts SET game_id = $4
         WHERE user_id = $1 AND race_date = $2 AND attempt_number = $3`,
       [params.userId, params.raceDate, params.attemptNumber, params.gameId]
     );
+    return res.rowCount === 1;
   } catch (err) {
     logError('attachGameToDailyAttempt', err);
+    return false;
   }
 }
 

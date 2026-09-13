@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
+import { act } from 'react';
 
 const authState: { session: Session | null } = { session: null };
 vi.mock('../contexts/AuthContext', () => ({
@@ -12,6 +13,12 @@ vi.mock('../contexts/AuthContext', () => ({
 vi.mock('../lib/supabase', () => ({
   supabase: { auth: { signInWithOAuth: vi.fn() } },
 }));
+
+let mockFetchChallenge: ReturnType<typeof vi.fn>;
+vi.mock('../api/daily', () => {
+  mockFetchChallenge = vi.fn().mockResolvedValue(null);
+  return { fetchChallenge: mockFetchChallenge };
+});
 
 const Login = (await import('./login')).default;
 
@@ -24,8 +31,28 @@ function renderLogin() {
   );
 }
 
+/**
+ * Renders the login page with a challenge query param and route stubs
+ * so Navigate redirects can be detected.
+ */
+function renderLoginWithChallenge(slug: string) {
+  return render(
+    <MemoryRouter initialEntries={[`/login?challenge=${slug}`]}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/daily"
+          element={<div data-testid="daily-page">Daily</div>}
+        />
+        <Route path="/" element={<div data-testid="home-page">Home</div>} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
 beforeEach(() => {
   authState.session = null;
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -152,5 +179,90 @@ describe('Login page left panel', () => {
     expect(
       screen.getByRole('button', { name: /continue with github/i })
     ).toBeDefined();
+  });
+});
+
+describe('Login page challenge taunt', () => {
+  it('renders the taunt banner when fetchChallenge resolves with data', async () => {
+    mockFetchChallenge.mockResolvedValue({
+      displayName: 'Jackson',
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+      raceDate: '2026-08-16',
+    });
+
+    await act(async () => {
+      renderLoginWithChallenge('a1B2c3D4e5');
+    });
+
+    const banner = screen.getByRole('status');
+    expect(banner.textContent).toContain('Jackson');
+    expect(banner.textContent).toContain("thinks they're better than you");
+    expect(banner.textContent).toContain('(at vim).');
+    expect(banner.textContent).toContain("finished today's daily race in");
+    expect(banner.textContent).toContain('61.3 seconds');
+  });
+
+  it('renders the taunt at a size that reads from across the card', async () => {
+    mockFetchChallenge.mockResolvedValue({
+      displayName: 'Jackson',
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+      raceDate: '2026-08-16',
+    });
+
+    await act(async () => {
+      renderLoginWithChallenge('a1B2c3D4e5');
+    });
+
+    const banner = screen.getByRole('status');
+    const [headline, detail] = banner.querySelectorAll('p');
+    expect((headline as HTMLElement).style.fontSize).toBe('20px');
+    expect((detail as HTMLElement).style.fontSize).toBe('15px');
+  });
+
+  it('stashes the challenge slug in sessionStorage', async () => {
+    mockFetchChallenge.mockResolvedValue({
+      displayName: 'Jackson',
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+      raceDate: '2026-08-16',
+    });
+
+    await act(async () => {
+      renderLoginWithChallenge('a1B2c3D4e5');
+    });
+
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBe('a1B2c3D4e5');
+  });
+
+  it('shows the normal login page when fetchChallenge resolves null (silent degradation)', async () => {
+    mockFetchChallenge.mockResolvedValue(null);
+
+    await act(async () => {
+      renderLoginWithChallenge('a1B2c3D4e5');
+    });
+
+    // No taunt banner -- role="status" should not be present
+    expect(screen.queryByRole('status')).toBeNull();
+    // Normal login card is still rendered
+    expect(screen.getByText('Sign in to compete.')).toBeDefined();
+  });
+
+  it('redirects to /daily when authenticated with a stashed slug', async () => {
+    sessionStorage.setItem('vimgym.challengeSlug', 'a1B2c3D4e5');
+    authState.session = { access_token: 'tok' } as Session;
+
+    await act(async () => {
+      renderLoginWithChallenge('a1B2c3D4e5');
+    });
+
+    expect(screen.getByTestId('daily-page')).toBeDefined();
+    // The stash must survive this hop: a new user gets bounced from /daily
+    // to onboarding by AuthGuard, and onboarding still needs the slug.
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBe('a1B2c3D4e5');
   });
 });

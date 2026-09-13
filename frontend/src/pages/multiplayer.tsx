@@ -365,6 +365,7 @@ const MultiplayerGame: React.FC = () => {
     sendTaskComplete,
     clearResetFlag,
     getMatchToken,
+    retryConnection,
   } = useGameSocket();
 
   const editorRef = useRef<VimRaceEditorHandle>(null);
@@ -1099,6 +1100,7 @@ const MultiplayerGame: React.FC = () => {
           onJoinRoom={joinRoom}
           onQuickMatch={quickMatch}
           onCancelQuickMatch={cancelQuickMatch}
+          onRetryConnection={retryConnection}
         />
       </div>
     );

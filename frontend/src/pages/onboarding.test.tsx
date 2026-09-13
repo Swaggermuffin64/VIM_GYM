@@ -62,6 +62,7 @@ afterEach(() => {
   cleanup();
   globalThis.fetch = originalFetch;
   vi.clearAllMocks();
+  sessionStorage.clear();
 });
 
 function renderApp() {
@@ -71,6 +72,7 @@ function renderApp() {
         <Routes>
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/login" element={<div>LOGIN</div>} />
+          <Route path="/daily" element={<div>DAILY</div>} />
           <Route
             path="/"
             element={
@@ -126,6 +128,85 @@ describe('onboarding completion', () => {
     // AuthGuard must see the updated profile; a stale
     // has_completed_onboarding=false would redirect back to /onboarding.
     await waitFor(() => expect(screen.getByText('HOME')).toBeTruthy());
+  });
+
+  it('lands on /daily after saving when a challenge slug is stashed', async () => {
+    sessionStorage.setItem('vimgym.challengeSlug', 'a1B2c3D4e5');
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/user/me')) {
+        return jsonResponse({
+          success: true,
+          profile: {
+            id: 'u1',
+            display_name: 'placeholder',
+            avatar_url: null,
+            is_premium: false,
+            has_completed_onboarding: false,
+          },
+        });
+      }
+      if (
+        String(url).endsWith('/api/user/profile') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse({
+          success: true,
+          profile: {
+            id: 'u1',
+            display_name: 'speedy',
+            avatar_url: null,
+            is_premium: false,
+            has_completed_onboarding: true,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${String(url)}`);
+    });
+
+    renderApp();
+    const input = await screen.findByRole('textbox');
+    fireEvent.change(input, { target: { value: 'speedy' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => expect(screen.getByText('DAILY')).toBeTruthy());
+  });
+
+  it('shows the taken-name error and stays on onboarding on a 409', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/user/me')) {
+        return jsonResponse({
+          success: true,
+          profile: {
+            id: 'u1',
+            display_name: 'placeholder',
+            avatar_url: null,
+            is_premium: false,
+            has_completed_onboarding: false,
+          },
+        });
+      }
+      if (
+        String(url).endsWith('/api/user/profile') &&
+        init?.method === 'POST'
+      ) {
+        return jsonResponse(
+          { success: false, error: 'That name is taken — try another' },
+          409
+        );
+      }
+      throw new Error(`unexpected fetch: ${String(url)}`);
+    });
+
+    renderApp();
+    const input = await screen.findByRole('textbox');
+    fireEvent.change(input, { target: { value: 'speedy' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() =>
+      expect(screen.getByText(/That name is taken/i)).toBeTruthy()
+    );
+    // Still on onboarding, not navigated away.
+    expect(screen.getByRole('textbox')).toBeTruthy();
   });
 
   it('shows the server error and stays on onboarding when the save fails', async () => {

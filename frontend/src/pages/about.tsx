@@ -236,26 +236,6 @@ function About() {
               <div
                 style={styles.roadmapItem}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = colors.secondary;
-                  e.currentTarget.style.boxShadow = `0 4px 20px ${colors.secondaryGlow}`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = colors.border;
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              >
-                <div
-                  style={{ ...styles.roadmapDot, background: colors.secondary }}
-                />
-                <div style={styles.roadmapTitle}>User Accounts</div>
-                <p style={styles.roadmapDescription}>
-                  Save your progress, stats, and personal bests.
-                </p>
-              </div>
-
-              <div
-                style={styles.roadmapItem}
-                onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = colors.warning;
                   e.currentTarget.style.boxShadow = `0 4px 20px rgba(251, 191, 36, 0.2)`;
                 }}
@@ -283,7 +263,7 @@ function About() {
             <p style={styles.sectionText}>
               VIM_GYM is free and will always stay free. But as the project
               grows, so will the cost of servers. I&apos;m looking into many
-              ways to sustain donations, were the fastest and simplest.
+              ways to sustain it and donations were the fastest and simplest.
             </p>
             <p style={{ ...styles.sectionText, marginTop: '16px' }}>
               If you like the project and would like to see it go further, I

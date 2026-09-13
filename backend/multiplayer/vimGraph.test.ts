@@ -179,4 +179,22 @@ describe('getRecommendedYankPasteSequence', () => {
     );
     expect(rec!.recommendedWeight).toBeGreaterThan(0);
   });
+
+  it('recommends yl (not ye) for a single-character WORD yank', () => {
+    const snippet = CODE_SNIPPIT_OBJECTS[0]!;
+    const lastLine =
+      snippet.lineOffsetRanges[snippet.lineOffsetRanges.length - 1]!;
+    const yankFrom = 0;
+    const rec = getRecommendedYankPasteSequence(
+      snippet,
+      'WORD',
+      yankFrom,
+      yankFrom + 1,
+      lastLine[0],
+      0
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedSequence).not.toContain('e');
+    expect(rec!.recommendedSequence.slice(0, 2)).toEqual(['y', 'l']);
+  });
 });

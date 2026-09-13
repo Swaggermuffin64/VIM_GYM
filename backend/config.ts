@@ -18,6 +18,44 @@ export const CORS_ORIGINS = [
 // Shared secret for verifying match tokens issued by the matchmaker
 export const MATCH_TOKEN_SECRET = process.env.MATCH_TOKEN_SECRET;
 
+/** Read a positive integer from the environment, falling back when unset or invalid. */
+function positiveIntFromEnv(raw: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Maximum concurrent Socket.IO connections from a single IP.
+ *
+ * Deliberately far above what one player needs: shared NATs (offices,
+ * universities, coworking spaces, VPNs) put many legitimate players behind one
+ * address, and a player turned away here has no way to understand why. Its only
+ * job is to stop a single host from monopolising the server — a distributed
+ * flood is bounded by MAX_TOTAL_SOCKET_CONNECTIONS instead.
+ */
+export const MAX_CONNECTIONS_PER_IP = positiveIntFromEnv(
+  process.env.MAX_CONNECTIONS_PER_IP,
+  30
+);
+
+/**
+ * Maximum concurrent Socket.IO connections the process will admit.
+ *
+ * Without this ceiling the only backstop is RSS crossing the `/health` memory
+ * limit, which makes Fly restart the machine — and every in-progress race lives
+ * in this process's memory, so a restart wipes them all. Shedding new
+ * connections instead lets players already racing finish.
+ *
+ * Tune with data, not guesswork: watch `memMB`, `eventLoopLagMs` and
+ * `socketConnections` together on `/health` under load, and set this below the
+ * connection count where either memory headroom or event-loop lag runs out.
+ * `capacityRejections` on `/health` shows whether the ceiling is ever reached.
+ */
+export const MAX_TOTAL_SOCKET_CONNECTIONS = positiveIntFromEnv(
+  process.env.MAX_TOTAL_SOCKET_CONNECTIONS,
+  2000
+);
+
 /** Supabase / Postgres connection string; optional until leaderboard persistence is used. */
 export const DATABASE_URL = process.env.DATABASE_URL?.trim() || undefined;
 
@@ -45,3 +83,18 @@ if (SUPABASE_JWT_SECRET && !SUPABASE_URL) {
  */
 export const HEALTH_METRICS_TOKEN =
   process.env.HEALTH_METRICS_TOKEN?.trim() || undefined;
+
+/**
+ * When 'true', the backend eagerly creates today's daily race at startup.
+ * Set only in the production fly.toml: local dev shares the production
+ * database, and a dev restart must never pick the day's task set.
+ */
+export const DAILY_EAGER_CREATE = process.env.DAILY_EAGER_CREATE === 'true';
+
+/**
+ * Public origin that share URLs are minted under. The Vercel frontend rewrites
+ * `/s/*` from this origin to the backend's share endpoint, so the links look
+ * like they belong to the main app domain.
+ */
+export const SHARE_LINK_BASE_URL =
+  process.env.SHARE_LINK_BASE_URL?.trim() || 'https://vimgym.app';

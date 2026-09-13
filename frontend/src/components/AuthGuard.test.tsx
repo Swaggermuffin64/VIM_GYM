@@ -39,6 +39,7 @@ function renderGuard(initialPath = '/') {
       <Routes>
         <Route path="/login" element={<div>LOGIN PAGE</div>} />
         <Route path="/onboarding" element={<div>ONBOARDING PAGE</div>} />
+        <Route path="/daily" element={<div>DAILY PAGE</div>} />
         <Route
           path="*"
           element={
@@ -62,6 +63,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  sessionStorage.clear();
 });
 
 describe('AuthGuard', () => {
@@ -77,6 +79,26 @@ describe('AuthGuard', () => {
     authState.profile = READY_PROFILE;
     authState.profileStatus = 'ready';
     renderGuard();
+    expect(await screen.findByText('PROTECTED CONTENT')).toBeDefined();
+  });
+
+  // OAuth always lands on the origin root, so the guard is what forwards a
+  // challenge-link visitor from '/' to the daily race after sign-in.
+  it('forwards an onboarded user from / to /daily when a challenge slug is stashed', async () => {
+    authState.session = FAKE_SESSION;
+    authState.profile = READY_PROFILE;
+    authState.profileStatus = 'ready';
+    sessionStorage.setItem('vimgym.challengeSlug', 'a1B2c3D4e5');
+    renderGuard('/');
+    expect(await screen.findByText('DAILY PAGE')).toBeDefined();
+  });
+
+  it('does not hijack pages other than / when a challenge slug is stashed', async () => {
+    authState.session = FAKE_SESSION;
+    authState.profile = READY_PROFILE;
+    authState.profileStatus = 'ready';
+    sessionStorage.setItem('vimgym.challengeSlug', 'a1B2c3D4e5');
+    renderGuard('/practice');
     expect(await screen.findByText('PROTECTED CONTENT')).toBeDefined();
   });
 

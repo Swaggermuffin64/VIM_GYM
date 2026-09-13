@@ -1,6 +1,6 @@
 /**
  * Profile page: identity header (inline-editable display name,
- * premium badge, member-since) plus racing/task stats and recent games
+ * premium badge, member-since) plus three headline stats and recent games
  * (spec: docs/superpowers/specs/2026-08-08-profile-page-revamp-design.md).
  *
  * Fetches /api/user/me for identity and /api/user/stats for the stats
@@ -23,24 +23,19 @@ interface RecentGame {
   started_at: string;
 }
 
+/**
+ * The slice of /api/user/stats the page displays. The endpoint returns more
+ * (best race, task counts, keystroke efficiency); the profile deliberately
+ * shows only the three headline numbers — how much you play, how often you
+ * win, and how fast you are.
+ */
 interface PlayerStats {
   races_played: number;
-  wins: number;
   win_rate: number;
-  best_race_ms: number | null;
-  tasks_completed: number;
-  avg_task_ms: number | null;
   /** Mean finished-session time across ALL modes, practice included. */
   avg_race_ms: number | null;
-  /** 0–1 mean of capped optimal/actual keystroke ratios; null if no data. */
-  avg_task_efficiency: number | null;
-  /** Attempts behind avg_task_efficiency; small samples are hidden. */
-  efficiency_sample: number;
   recent_games: RecentGame[];
 }
-
-/** Hide the efficiency tile until this many attempts back the average. */
-const EFFICIENCY_MIN_SAMPLE = 5;
 
 /** 61234 -> "1:01.2"; 4120 -> "4.1s". Race times get m:ss.t, short times s.t. */
 export function formatDuration(ms: number): string {
@@ -70,29 +65,27 @@ function formatGameDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/** Result label for a recent-game row: position, "left", "DNF", or mode. */
+/**
+ * Result label for a recent-game row.
+ *
+ * Only multiplayer races carry a finishing position; solo modes (daily,
+ * practice) always store position null. A completed solo run needs no
+ * label — the recorded time already says it finished — so the `finished`
+ * check returns an empty cell rather than falling through to DNF.
+ */
 function gameResultLabel(g: RecentGame): string {
-  if (g.play_mode === 'practice') return 'practice';
   if (g.position !== null) return ordinal(g.position);
+  if (g.finished) return '';
   if (g.left_race) return 'left';
   return 'DNF';
 }
 
 /** One tile in the profile stat row: big value, small uppercase label. */
-function StatTile({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
+function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div style={styles.tile}>
       <p style={styles.tileValue}>{value}</p>
       <p style={styles.tileLabel}>{label}</p>
-      {sub && <p style={styles.tileSub}>{sub}</p>}
     </div>
   );
 }
@@ -143,13 +136,13 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
   },
   name: {
-    fontSize: '24px',
+    fontSize: '32px',
     fontWeight: 700,
     color: colors.textPrimary,
     margin: 0,
   },
   nameInput: {
-    fontSize: '20px',
+    fontSize: '26px',
     fontWeight: 700,
     color: colors.textPrimary,
     background: colors.bgCard,
@@ -157,10 +150,11 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '8px',
     padding: '6px 10px',
     fontFamily: 'inherit',
-    width: '220px',
+    width: '280px',
   },
   smallButton: {
-    padding: '6px 14px',
+    fontSize: '15px',
+    padding: '8px 16px',
     borderRadius: '8px',
     border: 'none',
     cursor: 'pointer',
@@ -170,7 +164,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
   smallButtonMuted: {
-    padding: '6px 14px',
+    fontSize: '15px',
+    padding: '8px 16px',
     borderRadius: '8px',
     cursor: 'pointer',
     background: 'transparent',
@@ -183,16 +178,16 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     color: colors.textMuted,
     cursor: 'pointer',
-    fontSize: '16px',
+    fontSize: '20px',
     padding: '4px',
   },
   memberSince: {
-    fontSize: '12px',
+    fontSize: '15px',
     color: colors.textMuted,
     margin: '4px 0 0',
   },
   editError: {
-    fontSize: '12px',
+    fontSize: '15px',
     color: '#f87171',
     margin: '4px 0 0',
   },
@@ -218,19 +213,23 @@ const styles: Record<string, React.CSSProperties> = {
     background: colors.bgCard,
   },
   tileValue: {
-    fontSize: '28px',
+    fontSize: '36px',
     fontWeight: 700,
     color: colors.textPrimary,
     margin: 0,
   },
   tileLabel: {
-    fontSize: '11px',
+    fontSize: '14px',
     color: colors.textSecondary,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
     margin: '4px 0 0',
   },
-  tileSub: { fontSize: '11px', color: colors.textMuted, margin: '2px 0 0' },
+  /**
+   * The recent-games list is a single four-column grid (mode / result /
+   * time / date) so every row shares the same column widths. Rows are
+   * plain cells, not nested grids — see the render for why.
+   */
   recentCard: {
     width: '100%',
     maxWidth: '640px',
@@ -238,31 +237,34 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${colors.border}`,
     borderRadius: '12px',
     background: colors.bgCard,
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '10px',
-  },
-  gameRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr auto auto auto',
-    gap: '16px',
-    fontSize: '13px',
+    gridTemplateColumns: 'minmax(0, 1fr) auto auto auto',
+    columnGap: '20px',
+    rowGap: '10px',
+    fontSize: '16px',
     alignItems: 'center',
   },
-  gameMode: { textTransform: 'capitalize' as const },
-  label: {
-    fontSize: '11px',
+  /** Section heading, spanning all four columns of the grid above. */
+  recentHeading: {
+    gridColumn: '1 / -1',
+    fontSize: '14px',
     color: colors.textSecondary,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
     margin: 0,
     fontWeight: 700,
   },
+  gameMode: { textTransform: 'capitalize' as const },
+  // The three trailing columns are right-aligned so their ragged-length
+  // values ("1st"/"DNF", "4.1s"/"1:15.0", "Sep 8"/"Sep 12") end flush.
+  gameResult: { justifySelf: 'end' as const },
+  gameTime: { justifySelf: 'end' as const },
+  gameDate: { justifySelf: 'end' as const, color: colors.textMuted },
   backButton: {
     width: '100%',
     maxWidth: '640px',
     padding: '16px 24px',
-    fontSize: '15px',
+    fontSize: '17px',
     fontWeight: 500,
     background: 'transparent',
     border: `1px solid ${colors.border}`,
@@ -276,7 +278,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: 'auto',
     padding: '4px 12px',
     borderRadius: '20px',
-    fontSize: '11px',
+    fontSize: '13px',
     fontWeight: 700,
     letterSpacing: '0.5px',
     textTransform: 'uppercase' as const,
@@ -449,35 +451,11 @@ export default function ProfilePage() {
         {stats && (
           <>
             <div style={styles.tileGroup}>
-              <p style={styles.label}>Racing</p>
               <div style={styles.tileRow}>
                 <StatTile label="Races" value={String(stats.races_played)} />
-                <StatTile label="Wins" value={String(stats.wins)} />
                 <StatTile
                   label="Win rate"
                   value={`${Math.round(stats.win_rate * 100)}%`}
-                />
-                <StatTile
-                  label="Best race"
-                  value={
-                    stats.best_race_ms !== null
-                      ? formatDuration(stats.best_race_ms)
-                      : '—'
-                  }
-                />
-              </div>
-            </div>
-            <div style={styles.tileGroup}>
-              <p style={styles.label}>Tasks</p>
-              <div style={styles.tileRow}>
-                <StatTile
-                  label="Tasks"
-                  value={String(stats.tasks_completed)}
-                  sub={
-                    stats.avg_task_ms !== null
-                      ? `avg ${formatDuration(stats.avg_task_ms)}`
-                      : undefined
-                  }
                 />
                 <StatTile
                   label="Avg race"
@@ -486,54 +464,45 @@ export default function ProfilePage() {
                       ? formatDuration(stats.avg_race_ms)
                       : '—'
                   }
-                  sub="incl. practice"
                 />
-                {stats.avg_task_efficiency !== null &&
-                  stats.efficiency_sample >= EFFICIENCY_MIN_SAMPLE && (
-                    <StatTile
-                      label="Efficiency"
-                      value={`${Math.round(stats.avg_task_efficiency * 100)}%`}
-                      sub="keystrokes vs optimal"
-                    />
-                  )}
               </div>
             </div>
             {stats.recent_games.length > 0 && (
+              // One grid for the whole list — a grid per row would size its
+              // columns to that row's own text, so "Sep 8" and "Sep 12" (or
+              // "DNF" and "1st") would not line up down the card.
               <div style={styles.recentCard}>
-                <p style={styles.label}>Recent games</p>
-                {stats.recent_games.map((g, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      ...styles.gameRow,
-                      color:
-                        g.play_mode === 'practice'
-                          ? colors.textMuted
-                          : colors.textPrimary,
-                    }}
-                  >
-                    <span style={styles.gameMode}>
-                      {g.play_mode.replaceAll('_', ' ')}
-                    </span>
-                    <span
-                      style={
-                        g.position === 1
-                          ? { color: colors.successLight }
-                          : undefined
-                      }
-                    >
-                      {gameResultLabel(g)}
-                    </span>
-                    <span>
-                      {g.total_time_ms !== null
-                        ? formatDuration(g.total_time_ms)
-                        : '—'}
-                    </span>
-                    <span style={{ color: colors.textMuted }}>
-                      {formatGameDate(g.started_at)}
-                    </span>
-                  </div>
-                ))}
+                <p style={styles.recentHeading}>Recent games</p>
+                {stats.recent_games.map((g, i) => {
+                  const rowColor =
+                    g.play_mode === 'practice'
+                      ? colors.textMuted
+                      : colors.textPrimary;
+                  return (
+                    <React.Fragment key={i}>
+                      <span style={{ ...styles.gameMode, color: rowColor }}>
+                        {g.play_mode.replaceAll('_', ' ')}
+                      </span>
+                      <span
+                        style={{
+                          ...styles.gameResult,
+                          color:
+                            g.position === 1 ? colors.successLight : rowColor,
+                        }}
+                      >
+                        {gameResultLabel(g)}
+                      </span>
+                      <span style={{ ...styles.gameTime, color: rowColor }}>
+                        {g.total_time_ms !== null
+                          ? formatDuration(g.total_time_ms)
+                          : '—'}
+                      </span>
+                      <span style={styles.gameDate}>
+                        {formatGameDate(g.started_at)}
+                      </span>
+                    </React.Fragment>
+                  );
+                })}
               </div>
             )}
           </>

@@ -517,6 +517,15 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: `0 0 22px ${colors.primaryGlow}`,
     transition: 'all 0.2s ease',
   },
+  submitFailedNotice: {
+    margin: 0,
+    maxWidth: '420px',
+    textAlign: 'center',
+    fontSize: '14px',
+    lineHeight: 1.5,
+    color: colors.textMuted,
+    fontFamily: '"JetBrains Mono", monospace',
+  },
   leaderboardLink: {
     padding: '4px 8px',
     fontSize: '14px',
@@ -1147,9 +1156,12 @@ export function DailyCompletionExtras({
   onTryAgain: () => void;
   onBackToLeaderboard: () => void;
 }) {
-  if (!completionInfo || completionInfo.kind !== 'daily') return null;
-
-  const { bestMs, attemptsRemaining } = completionInfo;
+  // A null completionInfo means completeDailyAttempt failed (network blip,
+  // expired token). This overlay is the only UI on screen at that point, so
+  // it must still render the local attempt times and an exit — only the
+  // actions that need the server's record of the run are withheld.
+  const daily = completionInfo?.kind === 'daily' ? completionInfo : null;
+  const attemptsRemaining = daily?.attemptsRemaining ?? 0;
   const attempts = finishedAttemptsIncluding(loadedAttempts, justFinished);
 
   // Unraced slots keep the tile row balanced and show what's still available;
@@ -1209,14 +1221,21 @@ export function DailyCompletionExtras({
         ))}
       </div>
 
-      <div style={styles.actionRow}>
-        {attemptsRemaining > 0 && (
-          <button style={styles.tryAgainPill} onClick={onTryAgain}>
-            Try again ({attemptsRemaining} left)
-          </button>
-        )}
-        <FlexShareButton bestMs={bestMs} raceDate={raceDate} pill />
-      </div>
+      {daily ? (
+        <div style={styles.actionRow}>
+          {attemptsRemaining > 0 && (
+            <button style={styles.tryAgainPill} onClick={onTryAgain}>
+              Try again ({attemptsRemaining} left)
+            </button>
+          )}
+          <FlexShareButton bestMs={daily.bestMs} raceDate={raceDate} pill />
+        </div>
+      ) : (
+        <p style={styles.submitFailedNotice}>
+          Your time couldn&apos;t be submitted &mdash; check your connection and
+          head back to the leaderboard to see where things stand.
+        </p>
+      )}
 
       <button style={styles.leaderboardLink} onClick={onBackToLeaderboard}>
         Back to leaderboard

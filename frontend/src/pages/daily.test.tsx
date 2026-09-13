@@ -581,6 +581,48 @@ describe('DailyCompletionExtras', () => {
     );
   }
 
+  // When completeDailyAttempt fails (network blip, expired token), the
+  // completion overlay is the only UI on screen: it must still offer a way
+  // out, or the user is stranded until a browser reload.
+  describe('when the completion submission failed (null completionInfo)', () => {
+    function renderFailedSubmission() {
+      return render(
+        <MemoryRouter>
+          <DailyCompletionExtras
+            completionInfo={null}
+            raceDate={RACE_DATE}
+            loadedAttempts={LOADED_ATTEMPTS}
+            justFinished={JUST_FINISHED}
+            onTryAgain={() => {}}
+            onBackToLeaderboard={() => {}}
+          />
+        </MemoryRouter>
+      );
+    }
+
+    it('still shows the finished attempts and a back-to-leaderboard exit', () => {
+      renderFailedSubmission();
+      expect(screen.getByText('Attempt 2')).toBeTruthy();
+      expect(screen.getByText('38.4s')).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: /Back to leaderboard/i })
+      ).toBeTruthy();
+    });
+
+    it('explains that the time could not be submitted', () => {
+      renderFailedSubmission();
+      expect(screen.getByText(/couldn.t be submitted/i)).toBeTruthy();
+    });
+
+    it('hides the actions that need a server-recorded result', () => {
+      renderFailedSubmission();
+      // Sharing and remaining-attempt counts come from the server's record
+      // of the run; without one they would 403 or lie.
+      expect(screen.queryByRole('button', { name: /Flex/i })).toBeNull();
+      expect(screen.queryByText(/Try again/i)).toBeNull();
+    });
+  });
+
   it("lists every finished attempt's time, including the run that just ended", () => {
     renderExtras();
     expect(screen.getByText('Attempt 1')).toBeTruthy();

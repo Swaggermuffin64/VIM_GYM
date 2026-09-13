@@ -21,6 +21,13 @@ import HomePublic from './home/HomePublic';
 import { BrandedLoading } from '../components/BrandedLoading';
 import { AuthGuard } from '../components/AuthGuard';
 
+/** Warms the lazy route chunk so the first click does not wait on a download. */
+const PREFETCH: Record<string, () => Promise<unknown>> = {
+  '/practice': () => import('./practice/PracticeEditor'),
+  '/multiplayer?mode=quick': () => import('./multiplayer/MultiplayerGame'),
+  '/multiplayer?mode=private': () => import('./multiplayer/MultiplayerGame'),
+};
+
 /** The three always-available modes, in the order they appear on the right. */
 const MODES = [
   {
@@ -183,6 +190,7 @@ function ModeRow({
       to={to}
       style={styles.rowLink}
       onMouseEnter={(e) => {
+        void PREFETCH[to]?.();
         e.currentTarget.style.borderColor = accent;
         e.currentTarget.style.boxShadow = `0 8px 24px ${accent}22`;
         const chevron = e.currentTarget.querySelector(

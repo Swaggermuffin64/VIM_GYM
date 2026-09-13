@@ -5,6 +5,12 @@ import { colors } from '../../theme';
 import { SiteBanner } from '../../components/SiteBanner';
 import { PageMeta } from '../../seo/PageMeta';
 
+/** Warms the lazy route chunk so the first click does not wait on a download. */
+const PREFETCH: Record<string, () => Promise<unknown>> = {
+  '/practice': () => import('../practice/PracticeEditor'),
+  '/multiplayer?mode=quick': () => import('../multiplayer/MultiplayerGame'),
+};
+
 /**
  * The logged-out home page — the landing page for search traffic.
  *
@@ -142,7 +148,12 @@ export default function HomePublic() {
 
         <div style={styles.modes}>
           {MODES.map((mode) => (
-            <Link key={mode.title} to={mode.to} style={styles.modeCard}>
+            <Link
+              key={mode.title}
+              to={mode.to}
+              style={styles.modeCard}
+              onMouseEnter={() => void PREFETCH[mode.to]?.()}
+            >
               <h2 style={{ ...styles.modeTitle, color: mode.accent }}>
                 {mode.title}
               </h2>

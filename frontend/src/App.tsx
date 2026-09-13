@@ -24,10 +24,13 @@ import './App.css';
  * These files are gitignored, so this glob legitimately matches nothing in a
  * clean checkout; discovering them beats importing them by name, which would
  * break the build for anyone who doesn't have them. The whole block is
- * compiled out of production builds.
+ * compiled out of production builds. Previews are also skipped under vitest
+ * (import.meta.env.VITEST) — they are a dev-server affordance that tests
+ * should not mount, and their transitive imports (CodeMirror, etc.) would
+ * otherwise bloat the test worker.
  */
 const previewRoutes = Object.entries(
-  import.meta.env.DEV
+  import.meta.env.DEV && !import.meta.env.VITEST
     ? import.meta.glob<{ default: React.ComponentType }>(
         './pages/*.preview.tsx',
         { eager: true }

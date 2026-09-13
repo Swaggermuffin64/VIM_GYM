@@ -1839,7 +1839,7 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
         )}
         {!isSessionComplete && (
           <div style={styles.header}>
-            <div style={styles.title}>VIM_GYM - Practice</div>
+            <div style={styles.title}>VIM_GYM - {config.title}</div>
             <div style={styles.timer}>{formatTime(elapsedTime)}</div>
             <button style={styles.exitButton} onClick={() => navigate('/')}>
               Exit

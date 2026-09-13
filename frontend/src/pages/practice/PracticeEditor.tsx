@@ -953,6 +953,11 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
   });
   const [completionInfo, setCompletionInfo] =
     useState<RaceCompletionInfo | null>(null);
+  // True from the moment the finished run is submitted until the server's
+  // placing comes back. The results screen shows a loading state for that
+  // window instead of rendering half a card that resizes on arrival.
+  const [isAwaitingCompletionInfo, setIsAwaitingCompletionInfo] =
+    useState(false);
 
   // Current task derived from state
   const currentTask = tasks[taskProgress] || null;
@@ -1009,6 +1014,7 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
     if (!accessToken) return;
 
     const duration_ms = Date.now() - sessionStartTime;
+    setIsAwaitingCompletionInfo(true);
     void config
       .submitCompletion({
         accessToken,
@@ -1018,6 +1024,9 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
       })
       .then((result) => {
         setCompletionInfo(result);
+      })
+      .finally(() => {
+        setIsAwaitingCompletionInfo(false);
       });
   }, [isSessionComplete, sessionStartTime, session, statsGameId, config]);
 
@@ -1862,6 +1871,7 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
           <SessionCompleteSummary
             config={config}
             completionInfo={completionInfo}
+            isAwaitingCompletionInfo={isAwaitingCompletionInfo}
             finalTimeMs={finalTime}
             taskSummaries={taskSummaries}
             onRestartSameTasks={restartSameTasks}

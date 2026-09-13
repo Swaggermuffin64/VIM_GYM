@@ -559,11 +559,13 @@ describe('DailyCompletionExtras', () => {
       justFinished?: { attemptNumber: number; durationMs: number };
       attemptsRemaining?: number;
       onTryAgain?: () => void;
+      isAwaitingCompletionInfo?: boolean;
     } = {}
   ) {
     return render(
       <MemoryRouter>
         <DailyCompletionExtras
+          isAwaitingCompletionInfo={overrides.isAwaitingCompletionInfo ?? false}
           completionInfo={{
             kind: 'daily',
             rank: 2,
@@ -580,6 +582,35 @@ describe('DailyCompletionExtras', () => {
       </MemoryRouter>
     );
   }
+
+  // Regression: the placing decides how many attempt slots are left, so the
+  // extras rendered nothing at all until it arrived and the results card
+  // visibly grew when it did. While the run is being scored, the block spins in
+  // the same reserved space the loaded content occupies.
+  describe('while the run is still being scored', () => {
+    it('shows a spinner instead of half-built results', () => {
+      renderExtras({ isAwaitingCompletionInfo: true });
+      expect(screen.getByRole('status')).toBeTruthy();
+      expect(screen.queryByText('Attempt 1')).toBeNull();
+      expect(screen.queryByText(/Try again/i)).toBeNull();
+    });
+
+    it('reserves the same height as the loaded results', () => {
+      const { container, unmount } = renderExtras({
+        isAwaitingCompletionInfo: true,
+      });
+      const loadingHeight = (container.firstElementChild as HTMLElement).style
+        .minHeight;
+      unmount();
+
+      const loaded = renderExtras();
+      const loadedHeight = (loaded.container.firstElementChild as HTMLElement)
+        .style.minHeight;
+
+      expect(loadingHeight).not.toBe('');
+      expect(loadingHeight).toBe(loadedHeight);
+    });
+  });
 
   // When completeDailyAttempt fails (network blip, expired token), the
   // completion overlay is the only UI on screen: it must still offer a way

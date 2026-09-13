@@ -73,11 +73,16 @@ export async function registerDailyRoutes(
         .send({ success: false, error: 'daily_unavailable' });
     }
 
-    // Unfinished rows are claimed-but-never-raced slots (double click, lost
-    // response, closed tab). The start route reuses them, so they are neither
-    // shown to the client nor counted against the cap.
+    // A slot is spent once a playable game was handed out for it, even if the
+    // race was abandoned (forfeit) — otherwise exiting mid-race would grant a
+    // free restart with a fresh timer. Slots with no game attached are failed
+    // starts (server error, lost response before attach): the start route
+    // reuses them, so they are neither shown to the client nor counted.
     const attempts = await getDailyAttempts(user.id, raceDate);
-    const finished = attempts.filter((a) => a.durationMs !== null);
+    const spent = attempts.filter(
+      (a) => a.gameId !== null || a.durationMs !== null
+    );
+    const finished = spent.filter((a) => a.durationMs !== null);
     const bestMs =
       finished.length > 0
         ? Math.min(...finished.map((a) => a.durationMs as number))
@@ -88,12 +93,14 @@ export async function registerDailyRoutes(
       race_date: raceDate,
       tasks: race.tasks.map(withoutSolutionHints),
       num_tasks: race.tasks.length,
-      attempts: finished.map((a) => ({
+      // Forfeited attempts appear with a null duration so the client can show
+      // the slot as used.
+      attempts: spent.map((a) => ({
         attempt_number: a.attemptNumber,
         duration_ms: a.durationMs,
         completed_at: a.completedAt,
       })),
-      attempts_remaining: MAX_DAILY_ATTEMPTS - finished.length,
+      attempts_remaining: MAX_DAILY_ATTEMPTS - spent.length,
       best_ms: bestMs,
     };
   });
@@ -115,17 +122,19 @@ export async function registerDailyRoutes(
         .send({ success: false, error: 'daily_unavailable' });
     }
 
-    // Reuse a claimed-but-unraced slot (double click, lost response, closed
-    // tab) before burning a fresh one. The day's tasks are public via
-    // GET /api/daily before any claim, so an abandoned slot grants no preview
-    // advantage; attaching a fresh game session below restarts the timing
-    // window, which only widens the server-side duration check.
+    // Reuse a slot that never received a game (server error or lost response
+    // during a previous start) before burning a fresh one. Slots that did get
+    // a game are spent even without a finish time: abandoning a race mid-run
+    // forfeits the attempt, so exiting early can't buy a free restart with a
+    // fresh timer.
     const attempts = await getDailyAttempts(user.id, raceDate);
-    const unfinished = attempts.find((a) => a.durationMs === null);
+    const unraced = attempts.find(
+      (a) => a.durationMs === null && a.gameId === null
+    );
 
     let attemptNumber: number;
-    if (unfinished) {
-      attemptNumber = unfinished.attemptNumber;
+    if (unraced) {
+      attemptNumber = unraced.attemptNumber;
     } else {
       const claim = await claimDailyAttempt(user.id, raceDate);
       if (claim.status === 'out_of_attempts') {
@@ -256,12 +265,12 @@ export async function registerDailyRoutes(
       });
 
       // Fetch placing and remaining attempts for the response. As in
-      // GET /api/daily, unfinished slots are reusable, so only finished
-      // attempts count against the cap.
+      // GET /api/daily, every slot that received a game counts against the
+      // cap (finished or forfeited); only never-attached slots are free.
       const placing = await queryDailyPlacing(user.id, completed.raceDate);
       const attempts = await getDailyAttempts(user.id, completed.raceDate);
-      const finishedCount = attempts.filter(
-        (a) => a.durationMs !== null
+      const spentCount = attempts.filter(
+        (a) => a.gameId !== null || a.durationMs !== null
       ).length;
 
       return {
@@ -270,7 +279,7 @@ export async function registerDailyRoutes(
         best_ms: placing?.bestMs ?? Math.round(duration_ms),
         rank: placing?.rank ?? 1,
         total_racers: placing?.totalRacers ?? 1,
-        attempts_remaining: MAX_DAILY_ATTEMPTS - finishedCount,
+        attempts_remaining: MAX_DAILY_ATTEMPTS - spentCount,
       };
     }
   );

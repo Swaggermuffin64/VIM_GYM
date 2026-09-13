@@ -70,6 +70,40 @@ describe('GET /api/daily', () => {
     expect(body.attempts_remaining).toBe(2);
     expect(body.best_ms).toBe(19_800);
   });
+
+  // The optimal solution must never reach the client before a competitive
+  // race — it is readable in the browser's network tab.
+  it('strips the recommended solution from the tasks it returns', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [
+        {
+          id: 't1',
+          type: 'navigate',
+          codeSnippet: 'abc',
+          contentHash: 'h1',
+          description: 'go',
+          targetOffset: 2,
+          recommendedSequence: ['t', 'c'],
+          recommendedWeight: 2,
+        } as never,
+      ],
+    });
+
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/api/daily' });
+
+    expect(res.statusCode).toBe(200);
+    const [task] = res.json().tasks;
+    expect(task.recommendedSequence).toBeUndefined();
+    expect(task.recommendedWeight).toBeUndefined();
+    // Everything the client actually races with is still there.
+    expect(task).toMatchObject({
+      id: 't1',
+      codeSnippet: 'abc',
+      targetOffset: 2,
+    });
+  });
 });
 
 describe('POST /api/daily/attempt/start', () => {

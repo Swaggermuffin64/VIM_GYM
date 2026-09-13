@@ -34,6 +34,23 @@ import {
 } from '../db/daily.js';
 
 /**
+ * Drop the optimal-solution fields from a task before it goes over the wire.
+ * The daily is a competitive race, and anything in this response is readable
+ * in the browser's network tab — shipping the recommended key sequence would
+ * hand out the answer. (This also means daily races have no in-race hint;
+ * that is deliberate.) The stored race keeps the full tasks: task hashing and
+ * completion validation are all server-side.
+ */
+function withoutSolutionHints<
+  T extends { recommendedSequence?: unknown; recommendedWeight?: unknown },
+>(task: T): Omit<T, 'recommendedSequence' | 'recommendedWeight'> {
+  const { recommendedSequence, recommendedWeight, ...rest } = task;
+  void recommendedSequence;
+  void recommendedWeight;
+  return rest;
+}
+
+/**
  * Registers all `/api/daily/*` routes on the given Fastify instance.
  * Intended to be called via `fastify.register(registerDailyRoutes)` in
  * the server entrypoint before `fastify.listen`.
@@ -69,7 +86,7 @@ export async function registerDailyRoutes(
     return {
       success: true,
       race_date: raceDate,
-      tasks: race.tasks,
+      tasks: race.tasks.map(withoutSolutionHints),
       num_tasks: race.tasks.length,
       attempts: finished.map((a) => ({
         attempt_number: a.attemptNumber,

@@ -2,6 +2,7 @@ import React from 'react';
 import { colors } from '../theme';
 import { SiteBanner } from '../components/SiteBanner';
 import { PageMeta } from '../seo/PageMeta';
+import { ROUTE_META } from '../seo/routeMeta';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -175,15 +176,13 @@ function About() {
       <PageMeta route="/about" />
       <SiteBanner />
 
-      <div style={styles.mainContent}>
+      <main style={styles.mainContent}>
         {/* Background glow effects */}
         <div style={styles.bgGlow1} />
         <div style={styles.bgGlow2} />
 
         <div style={styles.content}>
-          <h1 style={styles.pageHeading}>
-            About VIMGYM — Why Practice Vim Motions
-          </h1>
+          <h1 style={styles.pageHeading}>{ROUTE_META['/about'].title}</h1>
 
           {/* What Is VIM_GYM */}
           <div style={styles.section}>
@@ -304,7 +303,7 @@ function About() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -116,6 +116,13 @@ describe('public routes when logged out', () => {
     await waitFor(() => {
       expect(screen.queryByText('PRACTICE EDITOR')).toBeNull();
     });
+    // The public view must be rendered, not a blank page.
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Practice Vim motions solo',
+      })
+    ).toBeDefined();
   });
 
   it('never renders the game without a session', async () => {
@@ -123,6 +130,13 @@ describe('public routes when logged out', () => {
     await waitFor(() => {
       expect(screen.queryByText('MULTIPLAYER GAME')).toBeNull();
     });
+    // The public view must be rendered, not a blank page.
+    expect(
+      screen.getByRole('heading', {
+        level: 1,
+        name: 'Race other developers in Vim',
+      })
+    ).toBeDefined();
   });
 });
 

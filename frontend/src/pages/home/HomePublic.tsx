@@ -132,7 +132,7 @@ export default function HomePublic() {
       <PageMeta route="/" />
       <StructuredData />
       <SiteBanner />
-      <div style={styles.main}>
+      <main style={styles.main}>
         {/* Keyword-bearing heading for crawlers; the wordmark below is branded. */}
         <h1 style={styles.srOnly}>Practice Vim Motions Online — VIMGYM</h1>
         <div style={styles.title} aria-hidden="true">
@@ -163,7 +163,7 @@ export default function HomePublic() {
             </Link>
           ))}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

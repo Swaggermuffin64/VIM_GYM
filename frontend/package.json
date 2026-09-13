@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "tsc -b && vite build && tsx scripts/generateSitemap.mts",
+    "build": "tsc -b && vite build && vite build --ssr src/entry-server.tsx --outDir build-ssr && tsx scripts/prerender.mts && tsx scripts/generateSitemap.mts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

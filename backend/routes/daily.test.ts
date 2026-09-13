@@ -49,16 +49,51 @@ beforeEach(() => {
 });
 
 describe('GET /api/daily', () => {
-  it('hides unfinished attempts and does not count them against the cap', async () => {
+  it('counts a forfeited attempt (game attached, never completed) against the cap', async () => {
     vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
       taskHashes: ['h1'],
       tasks: [{ contentHash: 'h1' } as never],
     });
-    // Slot 1 was claimed but never raced (lost response / closed tab);
-    // slot 2 finished. Only the finished run should be visible or counted.
+    // Slot 1 got a playable game but was abandoned mid-race: it is burned.
+    // Slot 2 finished normally.
     vi.mocked(daily.getDailyAttempts).mockResolvedValue([
-      { attemptNumber: 1, durationMs: null, completedAt: null },
-      { attemptNumber: 2, durationMs: 19_800, completedAt: new Date() },
+      { attemptNumber: 1, durationMs: null, completedAt: null, gameId: 55 },
+      {
+        attemptNumber: 2,
+        durationMs: 19_800,
+        completedAt: new Date(),
+        gameId: 56,
+      },
+    ]);
+
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/api/daily' });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.attempts).toEqual([
+      expect.objectContaining({ attempt_number: 1, duration_ms: null }),
+      expect.objectContaining({ attempt_number: 2, duration_ms: 19_800 }),
+    ]);
+    expect(body.attempts_remaining).toBe(1);
+    expect(body.best_ms).toBe(19_800);
+  });
+
+  it('hides a claimed slot that never received a game and does not count it', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+    // Slot 1 was claimed but game creation/attach failed (server error, lost
+    // response): the player never raced, so nothing is burned or shown.
+    vi.mocked(daily.getDailyAttempts).mockResolvedValue([
+      { attemptNumber: 1, durationMs: null, completedAt: null, gameId: null },
+      {
+        attemptNumber: 2,
+        durationMs: 19_800,
+        completedAt: new Date(),
+        gameId: 56,
+      },
     ]);
 
     const app = await buildServer();
@@ -109,14 +144,21 @@ describe('GET /api/daily', () => {
 });
 
 describe('POST /api/daily/attempt/start', () => {
-  it('reuses a claimed-but-unraced slot instead of burning a new one', async () => {
+  it('reuses a slot that never received a game instead of burning a new one', async () => {
     vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
       taskHashes: ['h1'],
       tasks: [{ contentHash: 'h1' } as never],
     });
+    // Slot 1 was claimed but the start request failed before a game was
+    // attached — the player never raced it, so it is recycled.
     vi.mocked(daily.getDailyAttempts).mockResolvedValue([
-      { attemptNumber: 1, durationMs: null, completedAt: null },
-      { attemptNumber: 2, durationMs: 19_800, completedAt: new Date() },
+      { attemptNumber: 1, durationMs: null, completedAt: null, gameId: null },
+      {
+        attemptNumber: 2,
+        durationMs: 19_800,
+        completedAt: new Date(),
+        gameId: 56,
+      },
     ]);
     vi.mocked(stats.createGameSession).mockResolvedValue(88);
 
@@ -128,12 +170,39 @@ describe('POST /api/daily/attempt/start', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ success: true, attempt_number: 1 });
-    // The abandoned slot is recycled, so no fresh slot is claimed and the
+    // The never-raced slot is recycled, so no fresh slot is claimed and the
     // new game session (fresh timing window) is attached to it.
     expect(daily.claimDailyAttempt).not.toHaveBeenCalled();
     expect(daily.attachGameToDailyAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ attemptNumber: 1, gameId: 88 })
     );
+  });
+
+  it('does not reuse a forfeited slot: abandoning a race burns the attempt', async () => {
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+    // Slot 1 got a playable game and was abandoned mid-race. Restarting must
+    // claim a fresh slot, not recycle the abandoned one with a fresh timer.
+    vi.mocked(daily.getDailyAttempts).mockResolvedValue([
+      { attemptNumber: 1, durationMs: null, completedAt: null, gameId: 55 },
+    ]);
+    vi.mocked(daily.claimDailyAttempt).mockResolvedValue({
+      status: 'claimed',
+      attemptNumber: 2,
+    });
+    vi.mocked(stats.createGameSession).mockResolvedValue(88);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/attempt/start',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ success: true, attempt_number: 2 });
+    expect(daily.claimDailyAttempt).toHaveBeenCalled();
   });
 
   it('claims a slot, creates a daily game session, and returns both ids', async () => {
@@ -275,10 +344,16 @@ describe('POST /api/daily/attempt/complete', () => {
       totalRacers: 212,
       bestMs: 60_000,
     });
-    // The abandoned slot 1 must not count against the remaining attempts.
+    // Slot 1 was forfeited (game attached, never completed): it still counts
+    // against the remaining attempts.
     vi.mocked(daily.getDailyAttempts).mockResolvedValue([
-      { attemptNumber: 1, durationMs: null, completedAt: null },
-      { attemptNumber: 2, durationMs: 60_000, completedAt: new Date() },
+      { attemptNumber: 1, durationMs: null, completedAt: null, gameId: 55 },
+      {
+        attemptNumber: 2,
+        durationMs: 60_000,
+        completedAt: new Date(),
+        gameId: 77,
+      },
     ]);
     const app = await buildServer();
     const res = await app.inject({
@@ -292,7 +367,7 @@ describe('POST /api/daily/attempt/complete', () => {
       rank: 4,
       total_racers: 212,
       best_ms: 60_000,
-      attempts_remaining: 2,
+      attempts_remaining: 1,
     });
     expect(stats.finishGameSession).toHaveBeenCalled();
   });

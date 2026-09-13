@@ -44,6 +44,33 @@ beforeEach(() => {
   poolAvailable = false;
 });
 
+describe('getDailyAttempts', () => {
+  it('returns the attached game id so callers can tell forfeits from never-raced slots', async () => {
+    poolAvailable = true;
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          attempt_number: 1,
+          duration_ms: null,
+          completed_at: null,
+          game_id: 55,
+        },
+        {
+          attempt_number: 2,
+          duration_ms: null,
+          completed_at: null,
+          game_id: null,
+        },
+      ],
+    });
+
+    await expect(getDailyAttempts('user-1', '2026-09-13')).resolves.toEqual([
+      { attemptNumber: 1, durationMs: null, completedAt: null, gameId: 55 },
+      { attemptNumber: 2, durationMs: null, completedAt: null, gameId: null },
+    ]);
+  });
+});
+
 describe('getOrCreateDailyRace durability', () => {
   const TASK = { contentHash: 'h1', type: 'navigate' } as never;
 

@@ -22,8 +22,14 @@ export const setYankRange = StateEffect.define<{
   to: number;
 } | null>();
 
-// Effect to set paste destination marker (for yank_paste tasks - green highlight)
-export const setPasteMarker = StateEffect.define<number | null>();
+// Effect to set paste destination marker (for yank_paste tasks - green highlight).
+// Characterwise tasks highlight the single character at `offset`; linewise
+// tasks (yy + p) highlight the whole line containing `offset` since any column
+// on that line is a valid place to paste.
+export const setPasteMarker = StateEffect.define<{
+  offset: number;
+  linewise?: boolean;
+} | null>();
 
 // Effect to confirm yank (switches yank highlight from blue to green)
 export const setYankConfirmed = StateEffect.define<boolean>();
@@ -46,6 +52,11 @@ const yankRangeMark = Decoration.mark({
 // Decoration mark for paste destination (green)
 const pasteMarkerMark = Decoration.mark({
   class: 'cm-paste-highlight',
+});
+
+// Line decoration for linewise paste destinations (green, whole line)
+const pasteLineMark = Decoration.line({
+  class: 'cm-paste-line-highlight',
 });
 
 /**
@@ -347,8 +358,9 @@ export const targetHighlightField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-// State field for paste marker (separate from main highlight, can coexist)
-const pasteMarkerField = StateField.define<DecorationSet>({
+// State field for paste marker (separate from main highlight, can coexist).
+// Exported so tests can assert the rendered decorations.
+export const pasteMarkerField = StateField.define<DecorationSet>({
   create() {
     return Decoration.none;
   },
@@ -358,10 +370,20 @@ const pasteMarkerField = StateField.define<DecorationSet>({
         if (effect.value === null) {
           return Decoration.none;
         }
-        const pos = effect.value;
+        const { offset, linewise } = effect.value;
         const docLength = tr.state.doc.length;
-        if (pos >= 0 && pos < docLength) {
-          return RangeSet.of([pasteMarkerMark.range(pos, pos + 1)]);
+        if (offset >= 0 && offset < docLength) {
+          if (linewise) {
+            // Highlight only the line's characters, not the full editor width.
+            // An empty line has no characters to mark, so fall back to a
+            // full-width line decoration there.
+            const line = tr.state.doc.lineAt(offset);
+            if (line.from < line.to) {
+              return RangeSet.of([pasteMarkerMark.range(line.from, line.to)]);
+            }
+            return RangeSet.of([pasteLineMark.range(line.from)]);
+          }
+          return RangeSet.of([pasteMarkerMark.range(offset, offset + 1)]);
         }
         return Decoration.none;
       }
@@ -398,6 +420,11 @@ export const targetHighlightTheme = EditorView.baseTheme({
     backgroundColor: 'rgba(34, 197, 94, 0.35)',
     outline: '2px solid #22c55e',
     borderLeft: '2px solid #22c55e',
+  },
+  // Linewise paste destination highlight (green - whole target line)
+  '.cm-paste-line-highlight': {
+    backgroundColor: 'rgba(34, 197, 94, 0.25)',
+    outline: '2px solid #22c55e',
   },
   // Newline indicator gutter (houses both ↵ glyphs and merge bars)
   '.cm-newline-gutter': {

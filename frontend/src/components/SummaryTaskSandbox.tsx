@@ -16,7 +16,7 @@ import {
   setDeleteMode,
   setYankPasteMode,
   setYankPasteConfirmed,
-  setAllowedPasteOffset,
+  setAllowedPasteResults,
   setAllowedDeleteRange,
   allowReset,
   setUndoBarrier,
@@ -185,8 +185,11 @@ export const SummaryTaskSandbox: React.FC<SummaryTaskSandboxProps> = ({
             effects: [
               setYankConfirmed.of(true),
               setYankPasteConfirmed.of(true),
-              setAllowedPasteOffset.of(task.pasteOffset),
-              setPasteMarker.of(task.pasteOffset),
+              setAllowedPasteResults.of(task.expectedResults),
+              setPasteMarker.of({
+                offset: task.pasteOffset,
+                linewise: task.linewise === true,
+              }),
             ],
           });
         }

@@ -38,7 +38,7 @@ import {
   setDeleteMode,
   setYankPasteMode,
   setYankPasteConfirmed,
-  setAllowedPasteOffset,
+  setAllowedPasteResults,
   setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
 import {
@@ -439,8 +439,13 @@ const MultiplayerGame: React.FC = () => {
         return 'Deletion blocked: command went outside the highlighted range.';
       case 'undoBarrier':
         return 'Undo is temporarily blocked right after reset.';
-      case 'wrongPastePosition':
+      case 'wrongPastePosition': {
+        const task = currentTaskRef.current;
+        if (task.type === 'yank_paste' && task.linewise === true) {
+          return 'Wrong position — paste anywhere on the highlighted line.';
+        }
         return 'Wrong position — paste on the highlighted marker.';
+      }
       default:
         return 'Edit blocked by task constraints.';
     }
@@ -533,8 +538,11 @@ const MultiplayerGame: React.FC = () => {
                 effects: [
                   setYankConfirmed.of(true),
                   setYankPasteConfirmed.of(true),
-                  setAllowedPasteOffset.of(task.pasteOffset),
-                  setPasteMarker.of(task.pasteOffset),
+                  setAllowedPasteResults.of(task.expectedResults),
+                  setPasteMarker.of({
+                    offset: task.pasteOffset,
+                    linewise: task.linewise === true,
+                  }),
                 ],
               });
             }
@@ -1053,7 +1061,7 @@ const MultiplayerGame: React.FC = () => {
           setYankRange.of(gameState.task.yankRange),
           setPasteMarker.of(null),
           setYankPasteConfirmed.of(false),
-          setAllowedPasteOffset.of(null),
+          setAllowedPasteResults.of(null),
         ],
       });
     }

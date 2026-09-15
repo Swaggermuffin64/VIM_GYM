@@ -56,10 +56,14 @@ export const setYankPasteMode = StateEffect.define<boolean>();
 export const setYankPasteConfirmed = StateEffect.define<boolean>();
 
 /**
- * State effect to set the allowed paste offset.
- * Insertions must occur on the same line as this offset.
+ * State effect to set the accepted paste results.
+ * During the paste phase, an insertion is only allowed when the resulting
+ * document exactly matches one of these strings — i.e. the paste happened at
+ * the highlighted marker with the correct register content. This keeps the
+ * buffer from ever desyncing from the task (a wrong paste used to leave the
+ * player stuck until undo/reset).
  */
-export const setAllowedPasteOffset = StateEffect.define<number | null>();
+export const setAllowedPasteResults = StateEffect.define<string[] | null>();
 
 export type EditBlockReason =
   | 'undoBarrier'
@@ -107,11 +111,11 @@ const yankPasteConfirmedState = StateField.define<boolean>({
   },
 });
 
-const allowedPasteOffsetState = StateField.define<number | null>({
+const allowedPasteResultsState = StateField.define<string[] | null>({
   create: () => null,
   update(value, tr) {
     for (const effect of tr.effects) {
-      if (effect.is(setAllowedPasteOffset)) return effect.value;
+      if (effect.is(setAllowedPasteResults)) return effect.value;
       // Reset when yankPasteMode is toggled
       if (effect.is(setYankPasteMode)) return null;
     }
@@ -300,20 +304,12 @@ const readOnlyFilter = EditorState.transactionFilter.of((tr) => {
     if (hasDeletion) {
       return buildBlockedTransaction('insertNotAllowed');
     }
-    // Check insertion position matches the expected paste location
-    const pasteOffset = tr.startState.field(allowedPasteOffsetState);
-    if (pasteOffset !== null) {
-      const line = tr.startState.doc.lineAt(pasteOffset);
-      let wrongPosition = false;
-      tr.changes.iterChanges((fromA) => {
-        // Allow insertion anywhere on the paste marker's line or just past its newline (linewise paste)
-        if (fromA < line.from || fromA > line.to + 1) {
-          wrongPosition = true;
-        }
-      });
-      if (wrongPosition) {
-        return buildBlockedTransaction('wrongPastePosition');
-      }
+    // Only let the paste through when it produces one of the task's accepted
+    // results — pasting elsewhere (or with the wrong register content) is
+    // blocked so a stray paste can never leave the buffer unfixable.
+    const allowedResults = tr.startState.field(allowedPasteResultsState);
+    if (allowedResults && !allowedResults.includes(tr.newDoc.toString())) {
+      return buildBlockedTransaction('wrongPastePosition');
     }
     return tr;
   }
@@ -338,7 +334,7 @@ export const readOnlyNavigation: Extension = [
   deleteModeState,
   yankPasteModeState,
   yankPasteConfirmedState,
-  allowedPasteOffsetState,
+  allowedPasteResultsState,
   undoBarrierState,
   allowedDeleteRangeState,
   readOnlyFilter,

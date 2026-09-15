@@ -522,7 +522,9 @@ export function generateYankPasteTask(): YankPasteTask {
   return {
     id: randomUUID(),
     type: 'yank_paste',
-    description: 'Yank the highlighted text and paste it at the marker',
+    description: linewise
+      ? 'Yank the highlighted line and paste it anywhere on the marked line'
+      : 'Yank the highlighted text and paste it at the marker',
     codeSnippet: snippet,
     yankRange: { from: yankFrom, to: yankTo },
     pasteOffset,

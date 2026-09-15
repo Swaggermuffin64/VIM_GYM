@@ -43,7 +43,7 @@ import {
   setDeleteMode,
   setYankPasteMode,
   setYankPasteConfirmed,
-  setAllowedPasteOffset,
+  setAllowedPasteResults,
   setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
 import {
@@ -1072,8 +1072,13 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
         return 'Deletion blocked: command went outside the highlighted range.';
       case 'undoBarrier':
         return 'Undo is temporarily blocked right after reset.';
-      case 'wrongPastePosition':
+      case 'wrongPastePosition': {
+        const task = tasksRef.current[taskProgressRef.current];
+        if (task?.type === 'yank_paste' && task.linewise === true) {
+          return 'Wrong position — paste anywhere on the highlighted line.';
+        }
         return 'Wrong position — paste on the highlighted marker.';
+      }
       default:
         return 'Edit blocked by task constraints.';
     }
@@ -1163,8 +1168,11 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
                 effects: [
                   setYankConfirmed.of(true),
                   setYankPasteConfirmed.of(true),
-                  setAllowedPasteOffset.of(task.pasteOffset),
-                  setPasteMarker.of(task.pasteOffset),
+                  setAllowedPasteResults.of(task.expectedResults),
+                  setPasteMarker.of({
+                    offset: task.pasteOffset,
+                    linewise: task.linewise === true,
+                  }),
                 ],
               });
             }
@@ -1653,8 +1661,11 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
     if (!task) return { label: 'Loading...' };
     if (task.type === 'navigate') return { label: 'Navigate to target' };
     if (task.type === 'delete') return { label: 'Delete the highlighted text' };
-    if (task.type === 'yank_paste')
-      return { label: 'Yank highlighted text and paste at marker' };
+    if (task.type === 'yank_paste') {
+      return task.linewise === true
+        ? { label: 'Yank highlighted line and paste anywhere on marked line' }
+        : { label: 'Yank highlighted text and paste at marker' };
+    }
     return { label: 'Complete the task' };
   };
 

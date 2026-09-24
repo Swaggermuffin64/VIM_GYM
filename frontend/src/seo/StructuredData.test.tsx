@@ -21,7 +21,7 @@ describe('StructuredData', () => {
       (n: { '@type': string }) => n['@type'] === 'WebSite'
     );
     expect(site.url).toBe('https://www.vimgym.app');
-    expect(site.name).toBe('VIMGYM');
+    expect(site.name).toBe('VIM_GYM');
   });
 
   it('lists every public route as a navigation element', () => {

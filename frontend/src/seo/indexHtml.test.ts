@@ -6,7 +6,7 @@ const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf-8');
 
 describe('index.html', () => {
   // An <h1> in the shell competes with the real per-route <title>; Google was
-  // splicing this one into titles as "VIMGYM - VIM_GYM".
+  // splicing this one into titles as "VIM_GYM - VIM_GYM".
   it('has no <h1> in the static shell', () => {
     expect(html).not.toMatch(/<h1/i);
   });

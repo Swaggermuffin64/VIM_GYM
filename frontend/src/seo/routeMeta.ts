@@ -48,25 +48,25 @@ export function isHeadOnlyRoute(route: PublicRoute): route is HeadOnlyRoute {
 
 export const ROUTE_META: Record<PublicRoute, RouteMeta> = {
   '/': {
-    title: 'VIMGYM — Practice Vim Motions by Racing',
+    title: 'VIM_GYM — Practice Vim Motions by Racing',
     description:
       'Learn Vim motions by racing the clock and other people. Daily challenges, multiplayer races, and drills that build real muscle memory. Free to play.',
     priority: 1.0,
   },
   '/about': {
-    title: 'About VIMGYM — Why Practice Vim Motions',
+    title: 'About VIM_GYM — Why Practice Vim Motions',
     description:
-      'What VIMGYM is, why Vim motions are worth drilling, and where the project is headed. Built to make practising Vim feel like a game instead of a chore.',
+      'What VIM_GYM is, why Vim motions are worth drilling, and where the project is headed. Built to make practising Vim feel like a game instead of a chore.',
     priority: 0.7,
   },
   '/practice': {
-    title: 'Vim Practice Mode — Drill Motions Solo | VIMGYM',
+    title: 'Vim Practice Mode — Drill Motions Solo | VIM_GYM',
     description:
       'Drill Vim motions solo at your own pace. Targeted exercises with instant feedback on the optimal keystrokes, so you stop reaching for the arrow keys.',
     priority: 0.9,
   },
   '/multiplayer': {
-    title: 'Vim Multiplayer Races — Quick Play | VIMGYM',
+    title: 'Vim Multiplayer Races — Quick Play | VIM_GYM',
     description:
       'Race other developers through Vim editing challenges in real time. Quick play matches you with an opponent in seconds and fastest correct motions win.',
     priority: 0.9,

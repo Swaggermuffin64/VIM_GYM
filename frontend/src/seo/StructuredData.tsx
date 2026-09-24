@@ -19,7 +19,7 @@ export function StructuredData() {
       '@type': 'WebSite',
       '@id': `${CANONICAL_ORIGIN}/#website`,
       url: CANONICAL_ORIGIN,
-      name: 'VIMGYM',
+      name: 'VIM_GYM',
       description: ROUTE_META['/'].description,
     },
     ...PUBLIC_ROUTES.map((route) => ({

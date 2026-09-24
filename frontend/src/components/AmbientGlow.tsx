@@ -3,7 +3,7 @@ import React from 'react';
 import { colors } from '../theme';
 
 /**
- * The two blurred, slow-drifting colour orbs behind every VIMGYM page — the
+ * The two blurred, slow-drifting colour orbs behind every VIM_GYM page — the
  * cyan and pink glow that gives the site its look. Absolutely positioned, so
  * the parent must be `position: relative; overflow: hidden`, and foreground
  * content needs `position: relative; z-index: 1` to sit on top.

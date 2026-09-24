@@ -72,7 +72,7 @@ export function HomeMenu() {
         <div style={styles.content}>
           {/* Keyword-bearing heading for search crawlers; the visible wordmark
               below is the branded one. */}
-          <h1 style={styles.srOnly}>Practice Vim Motions Online — VIMGYM</h1>
+          <h1 style={styles.srOnly}>Practice Vim Motions Online — VIM_GYM</h1>
           <header style={styles.header}>
             <h1 style={styles.title}>VIM_GYM</h1>
             <p style={styles.subtitle}>Train your Vim muscles.</p>

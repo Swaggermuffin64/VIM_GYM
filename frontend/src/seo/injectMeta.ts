@@ -45,7 +45,7 @@ export function injectMeta(
     `<meta property="og:description" content="${d}">`,
     `<meta property="og:url" content="${url}">`,
     `<meta property="og:type" content="website">`,
-    `<meta property="og:site_name" content="VIMGYM">`,
+    `<meta property="og:site_name" content="VIM_GYM">`,
     `<meta name="twitter:card" content="summary">`,
     `<meta name="twitter:title" content="${t}">`,
     `<meta name="twitter:description" content="${d}">`,

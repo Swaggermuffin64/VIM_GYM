@@ -3,7 +3,7 @@ import { stripHoistableTags, injectMeta } from './injectMeta';
 import { ROUTE_META } from './routeMeta';
 
 const TEMPLATE = `<!doctype html>
-<html lang="en"><head><title>VIMGYM</title></head>
+<html lang="en"><head><title>VIM_GYM</title></head>
 <body><div id="root"></div></body></html>`;
 
 describe('stripHoistableTags', () => {
@@ -33,7 +33,7 @@ describe('injectMeta', () => {
 
   it('replaces the placeholder title with the route title', () => {
     expect(html).toContain(`<title>${ROUTE_META['/practice'].title}</title>`);
-    expect(html).not.toContain('<title>VIMGYM</title>');
+    expect(html).not.toContain('<title>VIM_GYM</title>');
   });
 
   it('adds the route description', () => {
@@ -90,7 +90,7 @@ describe('injectMeta', () => {
 
   it('throws when the #root anchor is not found in the template', () => {
     const badTemplate = `<!doctype html>
-<html lang="en"><head><title>VIMGYM</title></head>
+<html lang="en"><head><title>VIM_GYM</title></head>
 <body><div id="root" data-x="1"></div></body></html>`;
     expect(() => injectMeta(badTemplate, '/', '<p>content</p>')).toThrow(
       /id="root"/

@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -34,6 +34,9 @@ export function SignedOutLobby() {
   const [searchParams] = useSearchParams();
   const mode = searchParams.get('mode') as 'quick' | 'private' | null;
   const toLogin = () => navigate('/login');
+  // Same default as MultiplayerGame, so the toggle behaves identically for
+  // visitors; the value is not persisted for members either.
+  const [relativeLineNumbers, setRelativeLineNumbers] = useState(true);
 
   return (
     <div style={container}>
@@ -42,8 +45,8 @@ export function SignedOutLobby() {
         isConnected={false}
         initialMode={mode}
         error={null}
-        relativeLineNumbersEnabled={false}
-        onRelativeLineNumbersChange={() => {}}
+        relativeLineNumbersEnabled={relativeLineNumbers}
+        onRelativeLineNumbersChange={setRelativeLineNumbers}
         playerName=""
         onCreateRoom={toLogin}
         onJoinRoom={toLogin}

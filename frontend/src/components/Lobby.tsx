@@ -608,27 +608,30 @@ export const Lobby: React.FC<LobbyProps> = ({
               </div>
             ) : (
               <>
-                <label style={styles.optionToggleRow}>
-                  <span style={styles.optionToggleLabel}>
-                    Start with Relative Line Numbers
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Toggle relative line numbers"
-                    aria-pressed={relativeLineNumbersEnabled}
-                    onClick={() =>
-                      onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
-                    }
-                    style={{
-                      ...styles.optionToggleCheckbox,
-                      ...(relativeLineNumbersEnabled
-                        ? styles.optionToggleCheckboxChecked
-                        : {}),
-                    }}
-                  >
-                    ✓
-                  </button>
-                </label>
+                {/* The setting only matters once a race can start; visitors have no race. */}
+                {!onSignInRequired && (
+                  <label style={styles.optionToggleRow}>
+                    <span style={styles.optionToggleLabel}>
+                      Start with Relative Line Numbers
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Toggle relative line numbers"
+                      aria-pressed={relativeLineNumbersEnabled}
+                      onClick={() =>
+                        onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
+                      }
+                      style={{
+                        ...styles.optionToggleCheckbox,
+                        ...(relativeLineNumbersEnabled
+                          ? styles.optionToggleCheckboxChecked
+                          : {}),
+                      }}
+                    >
+                      ✓
+                    </button>
+                  </label>
+                )}
 
                 <button
                   style={{
@@ -695,27 +698,30 @@ export const Lobby: React.FC<LobbyProps> = ({
 
             {errorBanner}
 
-            <label style={styles.optionToggleRow}>
-              <span style={styles.optionToggleLabel}>
-                Start with Relative Line Numbers
-              </span>
-              <button
-                type="button"
-                aria-label="Toggle relative line numbers"
-                aria-pressed={relativeLineNumbersEnabled}
-                onClick={() =>
-                  onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
-                }
-                style={{
-                  ...styles.optionToggleCheckbox,
-                  ...(relativeLineNumbersEnabled
-                    ? styles.optionToggleCheckboxChecked
-                    : {}),
-                }}
-              >
-                ✓
-              </button>
-            </label>
+            {/* The setting only matters once a race can start; visitors have no race. */}
+            {!onSignInRequired && (
+              <label style={styles.optionToggleRow}>
+                <span style={styles.optionToggleLabel}>
+                  Start with Relative Line Numbers
+                </span>
+                <button
+                  type="button"
+                  aria-label="Toggle relative line numbers"
+                  aria-pressed={relativeLineNumbersEnabled}
+                  onClick={() =>
+                    onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
+                  }
+                  style={{
+                    ...styles.optionToggleCheckbox,
+                    ...(relativeLineNumbersEnabled
+                      ? styles.optionToggleCheckboxChecked
+                      : {}),
+                  }}
+                >
+                  ✓
+                </button>
+              </label>
+            )}
 
             {/* Create or Join buttons */}
             {privateSubMode === 'select' && (

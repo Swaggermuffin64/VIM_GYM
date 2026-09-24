@@ -23,15 +23,13 @@ function renderVisitorLobby(mode: 'quick' | 'private') {
 
 describe('SignedOutLobby', () => {
   it.each(['quick', 'private'] as const)(
-    'lets a visitor toggle relative line numbers in %s mode',
+    'hides the relative line numbers toggle in %s mode',
     (mode) => {
       renderVisitorLobby(mode);
-      const toggle = screen.getByLabelText('Toggle relative line numbers');
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
-      fireEvent.click(toggle);
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      fireEvent.click(toggle);
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      expect(
+        screen.queryByLabelText('Toggle relative line numbers')
+      ).toBeNull();
+      expect(screen.queryByText(/relative line numbers/i)).toBeNull();
     }
   );
 

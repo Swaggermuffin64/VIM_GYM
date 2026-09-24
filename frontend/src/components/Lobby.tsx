@@ -136,35 +136,6 @@ const styles: Record<string, React.CSSProperties> = {
     height: '8px',
     borderRadius: '50%',
   },
-  card: {
-    background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '16px',
-    padding: '28px',
-    marginBottom: '20px',
-  },
-  cardTitle: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: colors.textMuted,
-    marginBottom: '16px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '1.5px',
-  },
-  input: {
-    width: '100%',
-    padding: '16px 20px',
-    fontSize: '18px',
-    fontFamily: '"JetBrains Mono", monospace',
-    background: colors.bgDark,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
-    color: colors.textPrimary,
-    marginBottom: '0',
-    boxSizing: 'border-box' as const,
-    outline: 'none',
-    transition: 'border-color 0.2s ease',
-  },
   button: {
     width: '100%',
     padding: '20px 28px',
@@ -225,19 +196,50 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
   },
+  // Back is navigation, not an action: plain text so it never competes with
+  // the real choices above it.
   backButton: {
-    width: '100%',
-    padding: '16px 28px',
+    display: 'block',
+    margin: '28px auto 0',
+    padding: '8px 12px',
     fontSize: '16px',
     fontWeight: 500,
     background: 'transparent',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
+    border: 'none',
     color: colors.textMuted,
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
-    transition: 'all 0.2s ease',
-    marginTop: '12px',
+    transition: 'color 0.2s ease',
+  },
+  joinRow: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'stretch',
+  },
+  joinInput: {
+    flex: 1,
+    minWidth: 0,
+    padding: '16px 20px',
+    fontSize: '18px',
+    fontFamily: '"JetBrains Mono", monospace',
+    background: colors.bgDark,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '10px',
+    color: colors.textPrimary,
+    boxSizing: 'border-box' as const,
+    outline: 'none',
+    transition: 'border-color 0.2s ease',
+  },
+  joinButton: {
+    width: 'auto',
+    flexShrink: 0,
+    padding: '0 32px',
+  },
+  roomCodeError: {
+    color: colors.error,
+    fontSize: '14px',
+    marginTop: '10px',
+    textAlign: 'left' as const,
   },
   playerBadge: {
     display: 'inline-block',
@@ -327,11 +329,6 @@ export const Lobby: React.FC<LobbyProps> = ({
   const [roomCode, setRoomCode] = useState('');
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
 
-  // For private mode, track if we're joining (create is immediate)
-  const [privateSubMode, setPrivateSubMode] = useState<'select' | 'join'>(
-    'select'
-  );
-
   // Show a friendly nudge after waiting 10+ seconds in quick match
   const [showLongWaitMessage, setShowLongWaitMessage] = useState(false);
   const isQuickMatchWaiting =
@@ -366,7 +363,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   const handleJoin = () => {
     if (onSignInRequired) return onSignInRequired();
     const trimmed = roomCode.trim();
-    if (!hasPlayerName || !trimmed) return;
+    if (!playerName.trim() || !trimmed) return;
     if (!isValidRoomCode(trimmed)) {
       setRoomCodeError('Room code must be 6 or 10–20 alphanumeric characters');
       return;
@@ -386,6 +383,11 @@ export const Lobby: React.FC<LobbyProps> = ({
   const canInteract = isConnected || onSignInRequired !== undefined;
   const hasPlayerName =
     playerName.trim() !== '' || onSignInRequired !== undefined;
+  const joinDisabled =
+    !canInteract ||
+    !hasPlayerName ||
+    isLoading ||
+    (roomCode.trim() === '' && onSignInRequired === undefined);
 
   // The server refused the handshake and Socket.IO will not retry it, so the
   // status must not keep claiming we are connecting.
@@ -704,85 +706,60 @@ export const Lobby: React.FC<LobbyProps> = ({
               </label>
             )}
 
-            {/* Create or Join buttons */}
-            {privateSubMode === 'select' && (
-              <>
-                <button
-                  style={{
-                    ...styles.button,
-                    marginBottom: '12px',
-                    ...(!canInteract || !hasPlayerName || isLoading
-                      ? styles.buttonDisabled
-                      : {}),
-                  }}
-                  onClick={handleCreate}
-                  disabled={!canInteract || !hasPlayerName || isLoading}
-                >
-                  {isLoading ? 'Creating...' : 'Create Room'}
-                </button>
-                <button
-                  style={{
-                    ...styles.button,
-                    ...styles.buttonOutline,
-                    ...(!canInteract || !hasPlayerName || isLoading
-                      ? styles.buttonDisabled
-                      : {}),
-                  }}
-                  onClick={() => playerName.trim() && setPrivateSubMode('join')}
-                  disabled={!canInteract || !hasPlayerName || isLoading}
-                >
-                  Join Room
-                </button>
-              </>
-            )}
+            {/* Create is the primary action; joining is a code field beside
+                an outline button, so the two read as different things. */}
+            <button
+              style={{
+                ...styles.button,
+                ...(!canInteract || !hasPlayerName || isLoading
+                  ? styles.buttonDisabled
+                  : {}),
+              }}
+              onClick={handleCreate}
+              disabled={!canInteract || !hasPlayerName || isLoading}
+            >
+              {isLoading ? 'Creating...' : 'Create a room'}
+            </button>
 
-            {/* Join Room */}
-            {privateSubMode === 'join' && (
-              <>
-                <div style={{ ...styles.card, marginBottom: '16px' }}>
-                  <div style={styles.cardTitle}>Room Code</div>
-                  <input
-                    type="text"
-                    placeholder="Paste room ID here..."
-                    value={roomCode}
-                    onChange={(e) => handleRoomCodeChange(e.target.value)}
-                    style={styles.input}
-                    maxLength={20}
-                  />
-                  {roomCodeError && (
-                    <div
-                      style={{
-                        color: colors.error,
-                        fontSize: '12px',
-                        marginTop: '6px',
-                      }}
-                    >
-                      {roomCodeError}
-                    </div>
-                  )}
-                </div>
-                <button
-                  style={{
-                    ...styles.button,
-                    ...(!roomCode.trim() || isLoading
-                      ? styles.buttonDisabled
-                      : {}),
-                  }}
-                  onClick={handleJoin}
-                  disabled={!canInteract || !roomCode.trim() || isLoading}
-                >
-                  {isLoading ? 'Joining...' : 'Join Room'}
-                </button>
-              </>
+            <div style={styles.divider}>
+              <div style={styles.dividerLine} />
+              <span style={styles.dividerText}>or join one</span>
+              <div style={styles.dividerLine} />
+            </div>
+
+            <div style={styles.joinRow}>
+              <input
+                type="text"
+                aria-label="Room code"
+                placeholder="Room code"
+                value={roomCode}
+                onChange={(e) => handleRoomCodeChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleJoin();
+                }}
+                style={styles.joinInput}
+                maxLength={20}
+              />
+              <button
+                style={{
+                  ...styles.button,
+                  ...styles.buttonOutline,
+                  ...styles.joinButton,
+                  ...(joinDisabled ? styles.buttonDisabled : {}),
+                }}
+                onClick={handleJoin}
+                disabled={joinDisabled}
+              >
+                {isLoading ? 'Joining...' : 'Join'}
+              </button>
+            </div>
+            {roomCodeError && (
+              <div style={styles.roomCodeError}>{roomCodeError}</div>
             )}
 
             <button
               style={styles.backButton}
-              onClick={
-                privateSubMode === 'select'
-                  ? handleBack
-                  : () => setPrivateSubMode('select')
-              }
+              onClick={handleBack}
               disabled={isLoading}
             >
               ← Back

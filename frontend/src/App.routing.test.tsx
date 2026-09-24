@@ -111,32 +111,24 @@ describe('public routes when logged out', () => {
     }
   );
 
-  it('never renders the editor without a session', async () => {
+  // The editor owns its own sign-in gate on the Ready button.
+  it('renders the editor at /practice without a session', async () => {
     renderAt('/practice');
-    await waitFor(() => {
-      expect(screen.queryByText('PRACTICE EDITOR')).toBeNull();
-    });
-    // The public view must be rendered, not a blank page.
-    expect(
-      screen.getByRole('heading', {
-        level: 1,
-        name: 'Practice Vim motions solo',
-      })
-    ).toBeDefined();
+    expect(await screen.findByText('PRACTICE EDITOR')).toBeDefined();
   });
 
-  it('never renders the game without a session', async () => {
+  it('renders the visitor lobby, never the game, at /multiplayer', async () => {
     renderAt('/multiplayer');
-    await waitFor(() => {
-      expect(screen.queryByText('MULTIPLAYER GAME')).toBeNull();
-    });
-    // The public view must be rendered, not a blank page.
     expect(
-      screen.getByRole('heading', {
-        level: 1,
-        name: 'Race other developers in Vim',
-      })
+      await screen.findByRole('heading', { level: 1, name: 'Multiplayer' })
     ).toBeDefined();
+    expect(screen.queryByText('MULTIPLAYER GAME')).toBeNull();
+  });
+
+  it('shows the menu with a sign-in daily panel at /', async () => {
+    renderAt('/');
+    expect(await screen.findByText('Sign in to race')).toBeDefined();
+    expect(screen.getByText('Quick Play')).toBeDefined();
   });
 });
 

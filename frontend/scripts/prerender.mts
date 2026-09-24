@@ -10,7 +10,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { PUBLIC_ROUTES, type PublicRoute } from '../src/seo/routeMeta.js';
+import {
+  PUBLIC_ROUTES,
+  isHeadOnlyRoute,
+  type PublicRoute,
+} from '../src/seo/routeMeta.js';
 import { injectMeta } from '../src/seo/injectMeta.js';
 import { renderRoute } from '../build-ssr/entry-server.js';
 
@@ -31,9 +35,13 @@ writeFileSync(appShellPath, template, 'utf-8');
 console.log(`spa fallback -> ${appShellPath}`);
 
 for (const route of PUBLIC_ROUTES) {
-  const body = renderRoute(route);
+  // Head-only routes still get their own title/description/canonical; only
+  // the body is left for the client. See HEAD_ONLY_ROUTES.
+  const body = isHeadOnlyRoute(route) ? '' : renderRoute(route);
   const html = injectMeta(template, route, body);
   const file = resolve(buildDir, outputFileFor(route));
   writeFileSync(file, html, 'utf-8');
-  console.log(`prerendered ${route} -> ${file}`);
+  console.log(
+    `prerendered ${route} (${body ? 'full' : 'head only'}) -> ${file}`
+  );
 }

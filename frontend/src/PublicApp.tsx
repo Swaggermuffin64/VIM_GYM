@@ -1,11 +1,10 @@
 import type { ReactElement } from 'react';
 import { StaticRouter } from 'react-router';
 
-import HomePublic from './pages/home/HomePublic';
-import PracticePublic from './pages/practice/PracticePublic';
-import MultiplayerPublic from './pages/multiplayer/MultiplayerPublic';
+import { HomeMenu } from './pages/home';
+import { SignedOutLobby } from './pages/multiplayer';
 import About from './pages/about';
-import type { PublicRoute } from './seo/routeMeta';
+import type { BodyPrerenderedRoute } from './seo/routeMeta';
 
 /**
  * The public component tree, rendered without AuthProvider.
@@ -13,15 +12,15 @@ import type { PublicRoute } from './seo/routeMeta';
  * This is what the build-time prerender renders to static HTML. It never
  * mounts auth context, so it cannot call Supabase and cannot depend on a
  * browser. Anything added here must be renderable in Node — see
- * scripts/prerender.mts.
+ * scripts/prerender.mts. Routes that cannot meet that bar are listed in
+ * HEAD_ONLY_ROUTES and get metadata only.
  */
-const VIEWS: Record<PublicRoute, () => ReactElement> = {
-  '/': () => <HomePublic />,
-  '/practice': () => <PracticePublic />,
-  '/multiplayer': () => <MultiplayerPublic />,
+const VIEWS: Record<BodyPrerenderedRoute, () => ReactElement> = {
+  '/': () => <HomeMenu />,
+  '/multiplayer': () => <SignedOutLobby />,
   '/about': () => <About />,
 };
 
-export function PublicApp({ route }: { route: PublicRoute }) {
+export function PublicApp({ route }: { route: BodyPrerenderedRoute }) {
   return <StaticRouter location={route}>{VIEWS[route]()}</StaticRouter>;
 }

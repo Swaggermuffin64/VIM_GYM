@@ -804,6 +804,13 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '48px',
     lineHeight: 1.6,
   },
+  readyDescription: {
+    fontSize: '14px',
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+    lineHeight: 1.7,
+    margin: '-32px 0 40px',
+  },
   readyCard: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.border}`,
@@ -1201,10 +1208,15 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
     [formatKeyLabel, isSessionComplete]
   );
 
-  // Start practice session when user clicks Ready
+  // Start the run when the user clicks Ready. The Ready screen is public, but
+  // runs are not: a visitor with no session is sent to sign in instead.
   const handleReady = useCallback(() => {
+    if (!session) {
+      navigate('/login');
+      return;
+    }
     setIsReady(true);
-  }, []);
+  }, [session, navigate]);
 
   // Setup a task in the editor (replace doc + configure highlights)
   const setupTaskInEditor = useCallback((task: Task) => {
@@ -1695,6 +1707,9 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
           <div style={styles.readyContainer}>
             <h1 style={styles.readyTitle}>{config.title}</h1>
             <p style={styles.readySubtitle}>{config.subtitle}</p>
+            {config.description && (
+              <p style={styles.readyDescription}>{config.description}</p>
+            )}
 
             <div style={styles.readyCard}>
               <div style={styles.readyCardTitle}>What to expect</div>
@@ -1777,7 +1792,11 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
                 onClick={handleReady}
                 disabled={isLoadingTasks || tasks.length === 0}
               >
-                {isLoadingTasks ? 'Loading...' : 'Ready'}
+                {isLoadingTasks
+                  ? 'Loading...'
+                  : session
+                    ? 'Ready'
+                    : 'Sign in to start'}
               </button>
             )}
             <button style={styles.backButton} onClick={() => navigate('/')}>
@@ -2092,6 +2111,8 @@ const practiceConfig: RaceSessionConfig = {
   mode: 'practice',
   title: 'Practice Mode',
   subtitle: 'Learn and Hone your Vim skills solo.',
+  description:
+    'Real editing tasks, no timer pressure. After each one you see the keystrokes you used next to the sequence an expert would have chosen, so the shorter motion sticks.',
   summaryTitle: 'Practice Summary',
   showTaskBreakdown: true,
   fetchSession: async (accessToken) => {

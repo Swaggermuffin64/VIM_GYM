@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ROUTE_META, PUBLIC_ROUTES } from './routeMeta';
+import { ROUTE_META, PUBLIC_ROUTES, isHeadOnlyRoute } from './routeMeta';
+
+const BODY_ROUTES = PUBLIC_ROUTES.filter((r) => !isHeadOnlyRoute(r));
+const HEAD_ONLY = PUBLIC_ROUTES.filter(isHeadOnlyRoute);
 
 const buildDir = resolve(__dirname, '../../build');
 const fileFor = (route: string) =>
@@ -46,13 +49,19 @@ describe.skipIf(!built)('prerendered output', () => {
   });
 
   // Google indexed the noscript string because the HTML had no other text.
-  it.each(PUBLIC_ROUTES)('%s has real body content', (route) => {
+  it.each(BODY_ROUTES)('%s has real body content', (route) => {
     const html = pages.get(route)!;
     const start = html.indexOf('<div id="root">') + '<div id="root">'.length;
     // The closing </div> for #root is followed by the module script tag.
     const end = html.indexOf('</div><script', start);
     const rootContent = html.slice(start, end);
     expect(rootContent.length).toBeGreaterThan(500);
+  });
+
+  // The editor's Ready screen cannot render in Node, so /practice ships its
+  // metadata over an empty root and the client fills it in.
+  it.each(HEAD_ONLY)('%s is head-only with an empty root', (route) => {
+    expect(pages.get(route)).toContain('<div id="root"></div>');
   });
 
   // Proves the lazy split held: the heavy editor must not reach the public path.

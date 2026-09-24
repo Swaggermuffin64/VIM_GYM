@@ -27,6 +27,25 @@ export const PUBLIC_ROUTES = [
 
 export type PublicRoute = (typeof PUBLIC_ROUTES)[number];
 
+/**
+ * Public routes whose page cannot be rendered in Node, so the prerender
+ * writes their <head> metadata over an empty #root instead of a full body.
+ * /practice is the editor's own Ready screen, and that module imports
+ * CodeMirror at top level. Crawlers that run JavaScript (Google) still see the
+ * page; link unfurlers only read <head>, which is complete either way.
+ */
+export const HEAD_ONLY_ROUTES = [
+  '/practice',
+] as const satisfies readonly PublicRoute[];
+
+export type HeadOnlyRoute = (typeof HEAD_ONLY_ROUTES)[number];
+/** Public routes the prerender renders to full static HTML. */
+export type BodyPrerenderedRoute = Exclude<PublicRoute, HeadOnlyRoute>;
+
+export function isHeadOnlyRoute(route: PublicRoute): route is HeadOnlyRoute {
+  return (HEAD_ONLY_ROUTES as readonly string[]).includes(route);
+}
+
 export const ROUTE_META: Record<PublicRoute, RouteMeta> = {
   '/': {
     title: 'VIMGYM — Practice Vim Motions by Racing',

@@ -4,33 +4,28 @@ import { cleanup, render, screen } from '@testing-library/react';
 
 const authState = { session: null, profile: null, loading: false };
 vi.mock('./contexts/AuthContext', () => ({ useAuth: () => authState }));
+// Fetches on mount; the prerender never runs effects, but jsdom does.
+vi.mock('./components/LeaderboardTable', () => ({
+  LeaderboardTable: () => <div>LEADERBOARD</div>,
+}));
 
 const { PublicApp } = await import('./PublicApp');
 
 afterEach(cleanup);
 
 describe('PublicApp', () => {
-  it('renders the home view for /', () => {
+  it('renders the home menu for /', () => {
     render(<PublicApp route="/" />);
     expect(
       screen.getByRole('heading', { name: /practice vim motions online/i })
     ).toBeDefined();
+    expect(screen.getByText('Sign in to race')).toBeDefined();
   });
 
-  it('renders the practice view for /practice', () => {
-    render(<PublicApp route="/practice" />);
-    expect(
-      screen.getByRole('heading', {
-        level: 1,
-        name: /practice vim motions solo/i,
-      })
-    ).toBeDefined();
-  });
-
-  it('renders the multiplayer view for /multiplayer', () => {
+  it('renders the visitor lobby for /multiplayer', () => {
     render(<PublicApp route="/multiplayer" />);
     expect(
-      screen.getByRole('heading', { level: 1, name: /race other developers/i })
+      screen.getByRole('heading', { level: 1, name: 'Multiplayer' })
     ).toBeDefined();
   });
 

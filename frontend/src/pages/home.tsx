@@ -1,5 +1,10 @@
 /**
- * Home page (/) — the main menu.
+ * Home page (/) — the main menu, shown to everyone.
+ *
+ * Logged-out visitors (and search crawlers) see the same menu as members; the
+ * daily panel simply invites them to sign in instead of showing live attempts.
+ * The build-time prerender renders HomeMenu directly (see PublicApp.tsx), so it
+ * must stay free of browser-only imports.
  *
  * A split layout: Race of the Day gets a tall featured panel on the left with
  * live attempt dots, a rollover countdown, and the page's only filled CTA;
@@ -17,9 +22,11 @@ import type { DailyRaceInfo } from '../api/daily';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 import { LeaderboardTable } from '../components/LeaderboardTable';
 import { SiteBanner } from '../components/SiteBanner';
-import HomePublic from './home/HomePublic';
+import { AmbientGlow } from '../components/AmbientGlow';
 import { BrandedLoading } from '../components/BrandedLoading';
 import { AuthGuard } from '../components/AuthGuard';
+import { PageMeta } from '../seo/PageMeta';
+import { StructuredData } from '../seo/StructuredData';
 
 /** Warms the lazy route chunk so the first click does not wait on a download. */
 const PREFETCH: Record<string, () => Promise<unknown>> = {
@@ -53,12 +60,18 @@ const MODES = [
   },
 ];
 
-function HomeSignedIn() {
+/** One-line explanation for visitors who have not signed in yet. */
+const VISITOR_DESCRIPTION =
+  'Race through real Vim editing challenges, solo or against other developers, and see the keystrokes an expert would have used.';
+
+export function HomeMenu() {
+  const { session } = useAuth();
   return (
     <div style={styles.container}>
+      <PageMeta route="/" />
+      <StructuredData />
       <SiteBanner />
-      <div style={styles.bgGlow1} />
-      <div style={styles.bgGlow2} />
+      <AmbientGlow />
 
       <div style={styles.mainContent}>
         <div style={styles.content}>
@@ -68,6 +81,9 @@ function HomeSignedIn() {
           <header style={styles.header}>
             <h1 style={styles.title}>VIM_GYM</h1>
             <p style={styles.subtitle}>Train your Vim muscles.</p>
+            {!session && (
+              <p style={styles.description}>{VISITOR_DESCRIPTION}</p>
+            )}
           </header>
 
           <div className="home-split" style={styles.split}>
@@ -94,6 +110,9 @@ function HomeSignedIn() {
  * falls back to static copy, so a slow or broken daily API never blocks the
  * menu. Uses the cached read, so bouncing between the menu and a race costs
  * one request per day rather than one per visit.
+ *
+ * Without a session the panel links to sign-in: /daily is gated, and the
+ * login page is where challenge links land anyway.
  */
 function DailyPanel() {
   const { session } = useAuth();
@@ -121,7 +140,7 @@ function DailyPanel() {
   const outOfAttempts = info != null && info.attemptsRemaining === 0;
 
   return (
-    <Link to="/daily" style={styles.panelLink}>
+    <Link to={session ? '/daily' : '/login'} style={styles.panelLink}>
       <section style={styles.daily}>
         <div style={styles.eyebrow}>
           <span style={styles.liveDot} />
@@ -162,7 +181,11 @@ function DailyPanel() {
         )}
 
         <span style={styles.dailyCta}>
-          {outOfAttempts ? "See today's board" : 'Race now'}
+          {!session
+            ? 'Sign in to race'
+            : outOfAttempts
+              ? "See today's board"
+              : 'Race now'}
         </span>
 
         <div style={styles.dailyFoot}>
@@ -234,30 +257,6 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     overflow: 'hidden',
   },
-  bgGlow1: {
-    position: 'absolute',
-    top: '10%',
-    left: '10%',
-    width: '500px',
-    height: '500px',
-    background: `radial-gradient(circle, ${colors.primaryGlow} 0%, transparent 70%)`,
-    filter: 'blur(80px)',
-    pointerEvents: 'none',
-    animation:
-      'float 15s ease-in-out infinite, pulse-glow 4s ease-in-out infinite',
-  },
-  bgGlow2: {
-    position: 'absolute',
-    bottom: '10%',
-    right: '10%',
-    width: '500px',
-    height: '500px',
-    background: `radial-gradient(circle, ${colors.secondaryGlow} 0%, transparent 70%)`,
-    filter: 'blur(80px)',
-    pointerEvents: 'none',
-    animation:
-      'float 18s ease-in-out infinite reverse, pulse-glow 5s ease-in-out infinite 1s',
-  },
   mainContent: {
     flex: 1,
     display: 'flex',
@@ -298,6 +297,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textSecondary,
     fontFamily: MONO,
     margin: '8px 0 0',
+  },
+  description: {
+    fontSize: '15px',
+    color: colors.textSecondary,
+    fontFamily: MONO,
+    lineHeight: 1.7,
+    maxWidth: '560px',
+    margin: '20px auto 0',
   },
   // Even columns so the seam between them lands under the centered title.
   split: {
@@ -432,20 +439,18 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 /**
- * Route component for `/`. Chooses between the public landing page and the
- * signed-in menu. The branch is on session state only — never on user-agent,
- * which would be cloaking.
- *
- * AuthGuard still wraps the signed-in branch: it owns the onboarding redirect
- * and the challenge-link forward to /daily.
+ * Route component for `/`. Everyone gets the menu; the only branch is whether
+ * AuthGuard wraps it. It must for signed-in users: it owns the onboarding
+ * redirect and the challenge-link forward to /daily. It must not for
+ * visitors, or it would bounce them to login.
  */
 export default function HomeRoute() {
   const { session, loading } = useAuth();
   if (loading) return <BrandedLoading />;
-  if (!session) return <HomePublic />;
+  if (!session) return <HomeMenu />;
   return (
     <AuthGuard>
-      <HomeSignedIn />
+      <HomeMenu />
     </AuthGuard>
   );
 }

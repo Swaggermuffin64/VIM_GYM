@@ -67,6 +67,59 @@ function renderRefusedLobby(
   );
 }
 
+/** The lobby as a visitor with no session sees it. */
+function renderVisitorLobby(
+  initialMode: 'quick' | 'private' | null,
+  onSignInRequired: () => void
+) {
+  return render(
+    <MemoryRouter>
+      <Lobby
+        isConnected={false}
+        initialMode={initialMode}
+        error={null}
+        relativeLineNumbersEnabled={false}
+        onRelativeLineNumbersChange={vi.fn()}
+        playerName=""
+        onCreateRoom={vi.fn()}
+        onJoinRoom={vi.fn()}
+        onQuickMatch={vi.fn()}
+        onSignInRequired={onSignInRequired}
+        description="One sentence about racing."
+      />
+    </MemoryRouter>
+  );
+}
+
+describe('Lobby for a visitor with no session', () => {
+  it('sends Find Match to sign-in even with no player name', () => {
+    const onSignInRequired = vi.fn();
+    renderVisitorLobby('quick', onSignInRequired);
+    const button = screen.getByText('Find Match');
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+    expect(onSignInRequired).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends Create Room to sign-in', () => {
+    const onSignInRequired = vi.fn();
+    renderVisitorLobby('private', onSignInRequired);
+    fireEvent.click(screen.getByText(/create/i));
+    expect(onSignInRequired).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the connection status, since there is no socket', () => {
+    renderVisitorLobby('quick', vi.fn());
+    expect(screen.queryByText('Connected')).toBeNull();
+    expect(screen.queryByText('Connecting...')).toBeNull();
+  });
+
+  it('shows the mode description', () => {
+    renderVisitorLobby(null, vi.fn());
+    expect(screen.getByText('One sentence about racing.')).toBeDefined();
+  });
+});
+
 describe('Lobby back navigation', () => {
   it('returns to home via client-side routing from quick play', async () => {
     renderLobby('quick');

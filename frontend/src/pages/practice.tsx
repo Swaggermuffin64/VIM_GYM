@@ -3,32 +3,34 @@ import React, { Suspense } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthGuard } from '../components/AuthGuard';
 import { BrandedLoading } from '../components/BrandedLoading';
-import PracticePublic from './practice/PracticePublic';
+import { PageMeta } from '../seo/PageMeta';
 
-// Lazy so the public view does not depend on the editor module. The bundle will
-// not actually split until the gated routes in App.tsx are lazy-loaded too
-// (multiplayer also imports CodeMirror eagerly), but this keeps the public path
-// free of browser-only imports for the prerender step.
+// Lazy so the home menu and the prerender do not pull in CodeMirror.
 const PracticeEditor = React.lazy(() => import('./practice/PracticeEditor'));
 
 /**
  * Route component for `/practice`.
  *
- * Logged-out visitors get indexable marketing copy; signed-in users get the
- * editor. The branch is on session state only — serving crawlers something
- * different from humans would be cloaking.
+ * Everyone sees the editor's Ready screen; without a session its Ready button
+ * sends the visitor to sign in (see RaceSessionPage). AuthGuard wraps only the
+ * signed-in branch, for the onboarding redirect — wrapping visitors would
+ * bounce them to login before they saw the page.
  */
 export default function PracticePage() {
   const { session, loading } = useAuth();
 
   if (loading) return <BrandedLoading />;
-  if (!session) return <PracticePublic />;
+
+  const editor = (
+    <Suspense fallback={<BrandedLoading />}>
+      <PracticeEditor />
+    </Suspense>
+  );
 
   return (
-    <AuthGuard>
-      <Suspense fallback={<BrandedLoading />}>
-        <PracticeEditor />
-      </Suspense>
-    </AuthGuard>
+    <>
+      <PageMeta route="/practice" />
+      {session ? <AuthGuard>{editor}</AuthGuard> : editor}
+    </>
   );
 }

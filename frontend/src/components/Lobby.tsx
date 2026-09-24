@@ -16,6 +16,15 @@ interface LobbyProps {
   onCancelQuickMatch?: () => void;
   /** Retry the game-server handshake after it was refused (server full, etc). */
   onRetryConnection?: () => void;
+  /**
+   * Set when the visitor has no session. Every action that would start a game
+   * calls this instead (the route sends them to sign in), the connection
+   * status is hidden because no socket exists, and buttons stay enabled even
+   * though there is no player name yet.
+   */
+  onSignInRequired?: () => void;
+  /** One-sentence explanation of the mode, shown under the subtitle. */
+  description?: string;
 }
 
 const colors = {
@@ -114,6 +123,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '16px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
+  },
+  description: {
+    fontSize: '14px',
+    color: colors.textSecondary,
+    fontFamily: '"JetBrains Mono", monospace',
+    lineHeight: 1.7,
+    maxWidth: '420px',
+    margin: '12px auto 0',
   },
   connectionStatus: {
     display: 'inline-flex',
@@ -315,6 +332,8 @@ export const Lobby: React.FC<LobbyProps> = ({
   onQuickMatch,
   onCancelQuickMatch,
   onRetryConnection,
+  onSignInRequired,
+  description,
 }) => {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState('');
@@ -341,6 +360,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   }, [isQuickMatchWaiting]);
 
   const handleCreate = () => {
+    if (onSignInRequired) return onSignInRequired();
     if (playerName.trim()) {
       onCreateRoom(playerName.trim());
     }
@@ -356,8 +376,9 @@ export const Lobby: React.FC<LobbyProps> = ({
   };
 
   const handleJoin = () => {
+    if (onSignInRequired) return onSignInRequired();
     const trimmed = roomCode.trim();
-    if (!playerName.trim() || !trimmed) return;
+    if (!hasPlayerName || !trimmed) return;
     if (!isValidRoomCode(trimmed)) {
       setRoomCodeError('Room code must be 6 or 10–20 alphanumeric characters');
       return;
@@ -367,13 +388,16 @@ export const Lobby: React.FC<LobbyProps> = ({
   };
 
   const handleQuickMatch = () => {
+    if (onSignInRequired) return onSignInRequired();
     if (playerName.trim()) {
       onQuickMatch(playerName.trim());
     }
   };
 
   const isLoading = isConnecting;
-  const canInteract = isConnected;
+  const canInteract = isConnected || onSignInRequired !== undefined;
+  const hasPlayerName =
+    playerName.trim() !== '' || onSignInRequired !== undefined;
 
   // The server refused the handshake and Socket.IO will not retry it, so the
   // status must not keep claiming we are connecting.
@@ -469,19 +493,22 @@ export const Lobby: React.FC<LobbyProps> = ({
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
               <p style={styles.subtitle}>{getSubtitle()}</p>
+              {description && <p style={styles.description}>{description}</p>}
 
-              <div style={styles.connectionStatus}>
-                <div
-                  style={{
-                    ...styles.dot,
-                    background: getStatusColor(),
-                    boxShadow: `0 0 8px ${getStatusColor()}`,
-                  }}
-                />
-                <span style={{ color: getStatusColor() }}>
-                  {getStatusText()}
-                </span>
-              </div>
+              {!onSignInRequired && (
+                <div style={styles.connectionStatus}>
+                  <div
+                    style={{
+                      ...styles.dot,
+                      background: getStatusColor(),
+                      boxShadow: `0 0 8px ${getStatusColor()}`,
+                    }}
+                  />
+                  <span style={{ color: getStatusColor() }}>
+                    {getStatusText()}
+                  </span>
+                </div>
+              )}
             </div>
 
             {errorBanner}
@@ -606,12 +633,12 @@ export const Lobby: React.FC<LobbyProps> = ({
                   style={{
                     ...styles.button,
                     background: `linear-gradient(135deg, ${colors.success} 0%, #059669 100%)`,
-                    ...(!canInteract || !playerName.trim()
+                    ...(!canInteract || !hasPlayerName
                       ? styles.buttonDisabled
                       : {}),
                   }}
                   onClick={handleQuickMatch}
-                  disabled={!canInteract || !playerName.trim()}
+                  disabled={!canInteract || !hasPlayerName}
                 >
                   Find Match
                 </button>
@@ -647,19 +674,22 @@ export const Lobby: React.FC<LobbyProps> = ({
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
               <p style={styles.subtitle}>{getSubtitle()}</p>
+              {description && <p style={styles.description}>{description}</p>}
 
-              <div style={styles.connectionStatus}>
-                <div
-                  style={{
-                    ...styles.dot,
-                    background: getStatusColor(),
-                    boxShadow: `0 0 8px ${getStatusColor()}`,
-                  }}
-                />
-                <span style={{ color: getStatusColor() }}>
-                  {getStatusText()}
-                </span>
-              </div>
+              {!onSignInRequired && (
+                <div style={styles.connectionStatus}>
+                  <div
+                    style={{
+                      ...styles.dot,
+                      background: getStatusColor(),
+                      boxShadow: `0 0 8px ${getStatusColor()}`,
+                    }}
+                  />
+                  <span style={{ color: getStatusColor() }}>
+                    {getStatusText()}
+                  </span>
+                </div>
+              )}
             </div>
 
             {errorBanner}
@@ -693,12 +723,12 @@ export const Lobby: React.FC<LobbyProps> = ({
                   style={{
                     ...styles.button,
                     marginBottom: '12px',
-                    ...(!canInteract || !playerName.trim() || isLoading
+                    ...(!canInteract || !hasPlayerName || isLoading
                       ? styles.buttonDisabled
                       : {}),
                   }}
                   onClick={handleCreate}
-                  disabled={!canInteract || !playerName.trim() || isLoading}
+                  disabled={!canInteract || !hasPlayerName || isLoading}
                 >
                   {isLoading ? 'Creating...' : 'Create Room'}
                 </button>
@@ -706,12 +736,12 @@ export const Lobby: React.FC<LobbyProps> = ({
                   style={{
                     ...styles.button,
                     ...styles.buttonOutline,
-                    ...(!canInteract || !playerName.trim() || isLoading
+                    ...(!canInteract || !hasPlayerName || isLoading
                       ? styles.buttonDisabled
                       : {}),
                   }}
                   onClick={() => playerName.trim() && setPrivateSubMode('join')}
-                  disabled={!canInteract || !playerName.trim() || isLoading}
+                  disabled={!canInteract || !hasPlayerName || isLoading}
                 >
                   Join Room
                 </button>
@@ -788,6 +818,7 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.header}>
             <h1 style={styles.title}>{getTitle()}</h1>
             <p style={styles.subtitle}>{getSubtitle()}</p>
+            {description && <p style={styles.description}>{description}</p>}
           </div>
           <button style={styles.backButton} onClick={handleBack}>
             ← Back to Home

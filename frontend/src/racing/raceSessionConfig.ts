@@ -31,11 +31,6 @@ export interface RaceSessionConfig {
   /** Ready-screen heading and subtitle. */
   title: string;
   subtitle: string;
-  /**
-   * One or two sentences under the subtitle explaining the mode. The Ready
-   * screen is public, so this doubles as the page's indexable description.
-   */
-  description?: string;
   /** Results-screen heading (e.g. "Practice Summary", "Race Summary"). */
   summaryTitle: string;
   /**

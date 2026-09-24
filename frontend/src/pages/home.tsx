@@ -60,12 +60,7 @@ const MODES = [
   },
 ];
 
-/** One-line explanation for visitors who have not signed in yet. */
-const VISITOR_DESCRIPTION =
-  'Race through real Vim editing challenges, solo or against other developers, and see the keystrokes an expert would have used.';
-
 export function HomeMenu() {
-  const { session } = useAuth();
   return (
     <div style={styles.container}>
       <PageMeta route="/" />
@@ -81,9 +76,6 @@ export function HomeMenu() {
           <header style={styles.header}>
             <h1 style={styles.title}>VIM_GYM</h1>
             <p style={styles.subtitle}>Train your Vim muscles.</p>
-            {!session && (
-              <p style={styles.description}>{VISITOR_DESCRIPTION}</p>
-            )}
           </header>
 
           <div className="home-split" style={styles.split}>
@@ -297,14 +289,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textSecondary,
     fontFamily: MONO,
     margin: '8px 0 0',
-  },
-  description: {
-    fontSize: '18px',
-    color: colors.textPrimary,
-    fontFamily: MONO,
-    lineHeight: 1.7,
-    maxWidth: '680px',
-    margin: '24px auto 0',
   },
   // Even columns so the seam between them lands under the centered title.
   split: {

@@ -13,10 +13,6 @@ const MultiplayerGame = React.lazy(
   () => import('./multiplayer/MultiplayerGame')
 );
 
-/** One-sentence explanation for visitors, shown under the lobby subtitle. */
-const VISITOR_DESCRIPTION =
-  'You and an opponent get the same Vim editing challenges at the same moment; the fastest correct motions win the round.';
-
 /** Mirrors MultiplayerGame's page background so both lobbies look identical. */
 const container: React.CSSProperties = {
   minHeight: '100vh',
@@ -50,7 +46,6 @@ export function SignedOutLobby() {
         onJoinRoom={toLogin}
         onQuickMatch={toLogin}
         onSignInRequired={toLogin}
-        description={VISITOR_DESCRIPTION}
       />
     </div>
   );

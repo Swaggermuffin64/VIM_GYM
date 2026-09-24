@@ -54,12 +54,9 @@ function renderPractice() {
 }
 
 describe('practice Ready screen for a visitor', () => {
-  it('describes the mode and sends Ready to sign-in', async () => {
+  it('sends Ready to sign-in', async () => {
     AUTH.session = null;
     renderPractice();
-    expect(
-      screen.getByText(/keystrokes you used next to the sequence/)
-    ).toBeDefined();
     const button = await screen.findByText('Sign in to start');
     await waitFor(() =>
       expect((button as HTMLButtonElement).disabled).toBe(false)

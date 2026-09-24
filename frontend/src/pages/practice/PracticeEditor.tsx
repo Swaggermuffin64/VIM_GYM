@@ -804,13 +804,6 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '48px',
     lineHeight: 1.6,
   },
-  readyDescription: {
-    fontSize: '17px',
-    color: colors.textPrimary,
-    fontFamily: '"JetBrains Mono", monospace',
-    lineHeight: 1.7,
-    margin: '-28px 0 40px',
-  },
   readyCard: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
     border: `1px solid ${colors.border}`,
@@ -1707,9 +1700,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
           <div style={styles.readyContainer}>
             <h1 style={styles.readyTitle}>{config.title}</h1>
             <p style={styles.readySubtitle}>{config.subtitle}</p>
-            {config.description && (
-              <p style={styles.readyDescription}>{config.description}</p>
-            )}
 
             <div style={styles.readyCard}>
               <div style={styles.readyCardTitle}>What to expect</div>
@@ -2111,8 +2101,6 @@ const practiceConfig: RaceSessionConfig = {
   mode: 'practice',
   title: 'Practice Mode',
   subtitle: 'Learn and Hone your Vim skills solo.',
-  description:
-    'Real editing tasks, no timer pressure. After each one you see the keystrokes you used next to the sequence an expert would have chosen, so the shorter motion sticks.',
   summaryTitle: 'Practice Summary',
   showTaskBreakdown: true,
   fetchSession: async (accessToken) => {

@@ -85,7 +85,6 @@ function renderVisitorLobby(
         onJoinRoom={vi.fn()}
         onQuickMatch={vi.fn()}
         onSignInRequired={onSignInRequired}
-        description="One sentence about racing."
       />
     </MemoryRouter>
   );
@@ -112,11 +111,6 @@ describe('Lobby for a visitor with no session', () => {
     renderVisitorLobby('quick', vi.fn());
     expect(screen.queryByText('Connected')).toBeNull();
     expect(screen.queryByText('Connecting...')).toBeNull();
-  });
-
-  it('shows the mode description', () => {
-    renderVisitorLobby(null, vi.fn());
-    expect(screen.getByText('One sentence about racing.')).toBeDefined();
   });
 });
 

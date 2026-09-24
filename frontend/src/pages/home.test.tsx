@@ -187,15 +187,6 @@ describe('HomePage for a visitor with no session', () => {
     expect(mockFetchDailyRace).not.toHaveBeenCalled();
   });
 
-  it('explains what the site is', async () => {
-    await act(async () => {
-      renderHome();
-    });
-    expect(
-      screen.getByText(/Race through real Vim editing challenges/)
-    ).toBeTruthy();
-  });
-
   it('sets the home page metadata', async () => {
     const { ROUTE_META } = await import('../seo/routeMeta');
     await act(async () => {

@@ -35,9 +35,10 @@ VITE_MATCHMAKING_URL=ws://localhost:3002
 `/`, `/about`, `/practice` and `/multiplayer` are public. Visitors see the
 same screens as members -- the home menu, the practice Ready screen, the
 multiplayer lobby -- and every button that would start a run or a race sends
-them to sign in instead. Each screen carries a one-sentence description of the
-mode, which is the crawlable copy. The branch is on session state, never on
-user-agent, which would be cloaking and is a Google spam policy violation.
+them to sign in instead. The per-route `<title>` and meta description are what
+give each page its own search identity; the screens' own text is the body.
+The branch is on session state, never on user-agent, which would be cloaking
+and is a Google spam policy violation.
 
 `scripts/prerender.mts` renders the public screens to static HTML at build
 time, in Node. **Anything reachable from `src/PublicApp.tsx` must render

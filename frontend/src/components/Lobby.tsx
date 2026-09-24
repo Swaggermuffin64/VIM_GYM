@@ -23,8 +23,6 @@ interface LobbyProps {
    * though there is no player name yet.
    */
   onSignInRequired?: () => void;
-  /** One-sentence explanation of the mode, shown under the subtitle. */
-  description?: string;
 }
 
 const colors = {
@@ -123,14 +121,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '19px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
-  },
-  description: {
-    fontSize: '20px',
-    color: colors.textPrimary,
-    fontFamily: '"JetBrains Mono", monospace',
-    lineHeight: 1.7,
-    maxWidth: '560px',
-    margin: '16px auto 0',
   },
   connectionStatus: {
     display: 'inline-flex',
@@ -333,7 +323,6 @@ export const Lobby: React.FC<LobbyProps> = ({
   onCancelQuickMatch,
   onRetryConnection,
   onSignInRequired,
-  description,
 }) => {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState('');
@@ -494,7 +483,6 @@ export const Lobby: React.FC<LobbyProps> = ({
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
               {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
-              {description && <p style={styles.description}>{description}</p>}
 
               {!onSignInRequired && (
                 <div style={styles.connectionStatus}>
@@ -678,7 +666,6 @@ export const Lobby: React.FC<LobbyProps> = ({
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
               {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
-              {description && <p style={styles.description}>{description}</p>}
 
               {!onSignInRequired && (
                 <div style={styles.connectionStatus}>
@@ -825,7 +812,6 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.header}>
             <h1 style={styles.title}>{getTitle()}</h1>
             {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
-            {description && <p style={styles.description}>{description}</p>}
           </div>
           <button style={styles.backButton} onClick={handleBack}>
             ← Back to Home

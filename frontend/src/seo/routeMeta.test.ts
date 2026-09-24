@@ -13,6 +13,7 @@ describe('ROUTE_META', () => {
       '/about',
       '/practice',
       '/multiplayer',
+      '/daily',
       '/privacy',
       '/terms',
     ]);

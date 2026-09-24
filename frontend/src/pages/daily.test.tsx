@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { cleanup, render, screen, act, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +45,7 @@ const mockStartDailyAttempt = vi.fn();
 const mockCompleteDailyAttempt = vi.fn();
 const mockFetchDailyLeaderboard = vi.fn();
 const mockCreateDailyShareLink = vi.fn();
+const mockFetchChallenge = vi.fn();
 // The synchronous cache peek the page seeds its phase from; defaults to a
 // cold cache so most tests exercise the fetch path.
 const mockGetCachedDailyRace = vi.fn();
@@ -60,6 +61,7 @@ vi.mock('../api/daily', () => ({
     mockFetchDailyLeaderboard(...args),
   createDailyShareLink: (...args: unknown[]) =>
     mockCreateDailyShareLink(...args),
+  fetchChallenge: (...args: unknown[]) => mockFetchChallenge(...args),
 }));
 
 // Import after mocks are wired (top-level await, same pattern as profile.test.tsx).
@@ -71,13 +73,38 @@ const { DailyCompletionExtras } = dailyModule;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function renderDaily() {
+function renderDaily(initialEntry = '/daily') {
   return render(
-    <MemoryRouter initialEntries={['/daily']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <DailyRacePage />
     </MemoryRouter>
   );
 }
+
+/** Echoes where the page navigated, so tests can assert the login hand-off. */
+function LoginProbe() {
+  const location = useLocation();
+  return <div>LOGIN PAGE {location.search}</div>;
+}
+
+function renderDailyWithLoginRoute(initialEntry: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route path="/daily" element={<DailyRacePage />} />
+        <Route path="/login" element={<LoginProbe />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
+const CHALLENGE = {
+  displayName: 'Jackson',
+  rank: 4,
+  totalRacers: 212,
+  bestMs: 61_300,
+  raceDate: '2026-08-16',
+};
 
 const RACE_DATE = '2026-08-16';
 const TASKS = [
@@ -128,6 +155,8 @@ beforeEach(() => {
     status: 'ok',
     url: 'https://vim.gym/c/abc',
   });
+  mockFetchChallenge.mockResolvedValue(null);
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -542,6 +571,89 @@ describe('DailyRacePage', () => {
     const ownRow = screen.getByText('testuser').closest('[aria-current]');
     expect(ownRow).not.toBeNull();
     expect(ownRow!.getAttribute('aria-current')).toBe('true');
+  });
+});
+
+// Share links land visitors here before they sign in. They see the real
+// pre-race screen; Start is the sign-in gate, and the challenge slug survives
+// the trip so login and onboarding can bring them back.
+describe('DailyRacePage for a visitor with no session', () => {
+  beforeEach(() => {
+    AUTH.session = null as unknown as Session;
+  });
+  afterEach(() => {
+    AUTH.session = { access_token: 'tok' } as Session;
+  });
+
+  it('loads the race and the board without a token and offers attempt 1 of 3', async () => {
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
+    expect(mockFetchDailyRace).toHaveBeenCalledWith(null);
+    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(null, undefined, 8);
+    expect(mockGetCachedDailyRace).not.toHaveBeenCalled();
+  });
+
+  it('sends Start to /login instead of claiming an attempt', async () => {
+    await act(async () => {
+      renderDailyWithLoginRoute('/daily');
+    });
+    const start = await screen.findByRole('button', { name: /Start attempt/i });
+    await act(async () => {
+      start.click();
+    });
+    expect(await screen.findByText(/LOGIN PAGE/)).toBeTruthy();
+    expect(mockStartDailyAttempt).not.toHaveBeenCalled();
+  });
+
+  it('stashes a challenge slug and keeps it for the trip through login', async () => {
+    await act(async () => {
+      renderDaily('/daily?challenge=a1B2c3D4e5');
+    });
+    await screen.findByText(/Start attempt 1 of 3/i);
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBe('a1B2c3D4e5');
+  });
+
+  it('ignores a malformed challenge slug', async () => {
+    await act(async () => {
+      renderDaily('/daily?challenge=<script>');
+    });
+    await screen.findByText(/Start attempt 1 of 3/i);
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBeNull();
+    expect(mockFetchChallenge).not.toHaveBeenCalled();
+  });
+
+  it('shows the challenger taunt and carries the slug to login on Start', async () => {
+    mockFetchChallenge.mockResolvedValue(CHALLENGE);
+    await act(async () => {
+      renderDailyWithLoginRoute('/daily?challenge=a1B2c3D4e5');
+    });
+    const banner = await screen.findByRole('status');
+    expect(banner.textContent).toContain('Jackson');
+    expect(banner.textContent).toContain('61.3 seconds');
+
+    const start = await screen.findByRole('button', { name: /Start attempt/i });
+    await act(async () => {
+      start.click();
+    });
+    expect(
+      await screen.findByText('LOGIN PAGE ?challenge=a1B2c3D4e5')
+    ).toBeTruthy();
+  });
+});
+
+describe('DailyRacePage for a member arriving from a share link', () => {
+  it('shows the taunt and clears the stash, since the journey is over', async () => {
+    mockFetchChallenge.mockResolvedValue(CHALLENGE);
+    sessionStorage.setItem('vimgym.challengeSlug', 'a1B2c3D4e5');
+    await act(async () => {
+      renderDaily('/daily?challenge=a1B2c3D4e5');
+    });
+    const banner = await screen.findByRole('status');
+    expect(banner.textContent).toContain('Jackson');
+    expect(sessionStorage.getItem('vimgym.challengeSlug')).toBeNull();
+    expect(mockFetchDailyRace).toHaveBeenCalledWith('tok');
   });
 });
 

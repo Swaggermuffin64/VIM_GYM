@@ -32,10 +32,13 @@ VITE_MATCHMAKING_URL=ws://localhost:3002
 
 ## Public pages and prerendering
 
-`/`, `/about`, `/practice`, `/multiplayer`, `/privacy` and `/terms` are
-public. Visitors see the same screens as members -- the home menu, the
-practice Ready screen, the multiplayer lobby -- and every button that would
-start a run or a race sends them to sign in instead. The per-route `<title>` and meta description are what
+`/`, `/about`, `/practice`, `/multiplayer`, `/daily`, `/privacy` and
+`/terms` are public. Visitors see the same screens as members -- the home
+menu, the practice Ready screen, the multiplayer lobby, the daily pre-race
+screen -- and every button that would start a run or a race sends them to
+sign in instead. Daily share links land on `/daily?challenge=<slug>`, which
+shows the challenger's taunt; the Start button carries the slug to `/login`
+and the stashed slug brings the new member back to `/daily` afterwards. The per-route `<title>` and meta description are what
 give each page its own search identity; the screens' own text is the body.
 The branch is on session state, never on user-agent, which would be cloaking
 and is a Google spam policy violation.

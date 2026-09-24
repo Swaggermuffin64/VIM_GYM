@@ -26,11 +26,16 @@ vi.mock('../taskPool.js', () => ({ pickTasksFromCache: vi.fn(() => []) }));
 vi.mock('../auth/httpAuth.js', () => ({
   // Simulated signed-in user for every request; individual tests override.
   requireSupabaseAuth: vi.fn(async () => ({ id: 'user-1' })),
+  // The public GETs resolve the user optionally; null means a visitor.
+  tryResolveSupabaseUser: vi.fn(async () => ({ id: 'user-1' })),
 }));
 
 import * as daily from '../db/daily.js';
 import * as stats from '../db/stats.js';
-import { requireSupabaseAuth } from '../auth/httpAuth.js';
+import {
+  requireSupabaseAuth,
+  tryResolveSupabaseUser,
+} from '../auth/httpAuth.js';
 import { registerDailyRoutes } from './daily.js';
 
 async function buildServer() {
@@ -110,6 +115,27 @@ describe('GET /api/daily', () => {
 
   // The optimal solution must never reach the client before a competitive
   // race — it is readable in the browser's network tab.
+  // Share links land visitors here before they sign in, so the race must be
+  // readable without a token. They get the tasks and the full attempt
+  // allowance, and no attempt history is looked up for them.
+  it("serves a visitor today's race with no attempts and the full allowance", async () => {
+    vi.mocked(tryResolveSupabaseUser).mockResolvedValueOnce(null);
+    vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
+      taskHashes: ['h1'],
+      tasks: [{ contentHash: 'h1' } as never],
+    });
+
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/api/daily' });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.attempts).toEqual([]);
+    expect(body.attempts_remaining).toBe(3);
+    expect(body.best_ms).toBeNull();
+    expect(daily.getDailyAttempts).not.toHaveBeenCalled();
+  });
+
   it('strips the recommended solution from the tasks it returns', async () => {
     vi.mocked(daily.getOrCreateDailyRace).mockResolvedValue({
       taskHashes: ['h1'],
@@ -506,6 +532,25 @@ describe('GET /api/daily/leaderboard', () => {
     expect(daily.queryDailyNeighborhood).not.toHaveBeenCalled();
   });
 
+  it('serves a visitor the top entries with no neighborhood lookup', async () => {
+    vi.mocked(tryResolveSupabaseUser).mockResolvedValueOnce(null);
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(212);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.entries).toHaveLength(1);
+    expect(body.total_racers).toBe(212);
+    expect(body.neighborhood).toBeNull();
+    expect(daily.queryDailyNeighborhood).not.toHaveBeenCalled();
+  });
+
   it('returns a null neighborhood when the user has no finished attempt', async () => {
     vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
     vi.mocked(daily.countDailyRacers).mockResolvedValue(312);
@@ -531,7 +576,10 @@ describe('auth gating', () => {
       return null;
     });
     const app = await buildServer();
-    const res = await app.inject({ method: 'GET', url: '/api/daily' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/daily/attempt/start',
+    });
     expect(res.statusCode).toBe(401);
   });
 });

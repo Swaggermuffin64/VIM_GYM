@@ -52,7 +52,7 @@ describe('vercel.json SPA fallback', () => {
 
   it('still routes client-only pages to the fallback', () => {
     const pattern = new RegExp(`^${fallback!.source.slice(1)}$`);
-    for (const path of ['daily', 'login', 'profile', 'onboarding']) {
+    for (const path of ['login', 'profile', 'onboarding']) {
       expect(pattern.test(path)).toBe(true);
     }
   });

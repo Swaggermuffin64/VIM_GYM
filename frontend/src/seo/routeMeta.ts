@@ -23,6 +23,7 @@ export const PUBLIC_ROUTES = [
   '/about',
   '/practice',
   '/multiplayer',
+  '/daily',
   '/privacy',
   '/terms',
 ] as const;
@@ -33,11 +34,13 @@ export type PublicRoute = (typeof PUBLIC_ROUTES)[number];
  * Public routes whose page cannot be rendered in Node, so the prerender
  * writes their <head> metadata over an empty #root instead of a full body.
  * /practice is the editor's own Ready screen, and that module imports
- * CodeMirror at top level. Crawlers that run JavaScript (Google) still see the
- * page; link unfurlers only read <head>, which is complete either way.
+ * CodeMirror at top level; /daily imports the same race engine. Crawlers that
+ * run JavaScript (Google) still see the page; link unfurlers only read <head>,
+ * which is complete either way.
  */
 export const HEAD_ONLY_ROUTES = [
   '/practice',
+  '/daily',
 ] as const satisfies readonly PublicRoute[];
 
 export type HeadOnlyRoute = (typeof HEAD_ONLY_ROUTES)[number];
@@ -72,6 +75,12 @@ export const ROUTE_META: Record<PublicRoute, RouteMeta> = {
     description:
       'Race other developers through Vim editing challenges in real time. Quick play matches you with an opponent in seconds and fastest correct motions win.',
     priority: 0.9,
+  },
+  '/daily': {
+    title: 'Race of the Day — Daily Vim Challenge | VIM_GYM',
+    description:
+      'One shared set of Vim tasks for everyone, three attempts, a live leaderboard, and a new race every day at midnight UTC. See who is fastest today.',
+    priority: 0.8,
   },
   // The legal pages are registered with Google OAuth and served without a
   // session. Listing them here gives them a real description and og: tags;

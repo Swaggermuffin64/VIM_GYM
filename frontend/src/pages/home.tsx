@@ -2,7 +2,8 @@
  * Home page (/) — the main menu, shown to everyone.
  *
  * Logged-out visitors (and search crawlers) see the same menu as members; the
- * daily panel simply invites them to sign in instead of showing live attempts.
+ * daily panel just has no live attempts to show, and its link lets the gated
+ * /daily route send them to sign in.
  * The build-time prerender renders HomeMenu directly (see PublicApp.tsx), so it
  * must stay free of browser-only imports.
  *
@@ -103,8 +104,8 @@ export function HomeMenu() {
  * menu. Uses the cached read, so bouncing between the menu and a race costs
  * one request per day rather than one per visit.
  *
- * Without a session the panel links to sign-in: /daily is gated, and the
- * login page is where challenge links land anyway.
+ * Visitors get the same 'Race now' link as members. /daily is gated, so the
+ * attempt itself is what sends them to sign in; the menu never blocks them.
  */
 function DailyPanel() {
   const { session } = useAuth();
@@ -132,7 +133,7 @@ function DailyPanel() {
   const outOfAttempts = info != null && info.attemptsRemaining === 0;
 
   return (
-    <Link to={session ? '/daily' : '/login'} style={styles.panelLink}>
+    <Link to="/daily" style={styles.panelLink}>
       <section style={styles.daily}>
         <div style={styles.eyebrow}>
           <span style={styles.liveDot} />
@@ -173,11 +174,7 @@ function DailyPanel() {
         )}
 
         <span style={styles.dailyCta}>
-          {!session
-            ? 'Sign in to race'
-            : outOfAttempts
-              ? "See today's board"
-              : 'Race now'}
+          {outOfAttempts ? "See today's board" : 'Race now'}
         </span>
 
         <div style={styles.dailyFoot}>

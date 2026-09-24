@@ -6,6 +6,12 @@
  * times, try-again, share link). The actual racing UI is RaceSessionPage from
  * practice.tsx, mounted only after an attempt slot is claimed -- visiting
  * this page never burns an attempt; clicking Start does.
+ *
+ * The page is public: share links (`/daily?challenge=<slug>`) land here, so a
+ * visitor sees today's race, the board and the challenger's taunt before
+ * signing in. Start is the gate -- for a visitor it goes to /login, carrying
+ * the challenge along so the taunt shows there too and the stashed slug
+ * brings them back here after OAuth.
  */
 import React, {
   useCallback,
@@ -14,7 +20,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
@@ -26,8 +32,10 @@ import {
   completeDailyAttempt,
   fetchDailyLeaderboard,
   createDailyShareLink,
+  fetchChallenge,
 } from '../api/daily';
 import type {
+  ChallengeInfo,
   DailyRaceInfo,
   DailyLeaderboardEntry,
   DailyLeaderboardData,
@@ -38,7 +46,12 @@ import type {
 } from '../racing/raceSessionConfig';
 import { RaceSessionPage } from './practice/PracticeEditor';
 import { SiteBanner } from '../components/SiteBanner';
-import { clearChallengeSlug } from '../lib/challengeRedirect';
+import { ChallengeTaunt } from '../components/ChallengeTaunt';
+import {
+  clearChallengeSlug,
+  isValidChallengeSlug,
+  stashChallengeSlug,
+} from '../lib/challengeRedirect';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 
 // ---------------------------------------------------------------------------
@@ -588,10 +601,16 @@ const styles: Record<string, React.CSSProperties> = {
 export default function DailyRacePage() {
   const navigate = useNavigate();
   const { session, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  // Set when the visitor arrived via a share link. See the module comment.
+  const rawSlug = searchParams.get('challenge');
+  const challengeSlug = isValidChallengeSlug(rawSlug) ? rawSlug : null;
+  const [challenge, setChallenge] = useState<ChallengeInfo | null>(null);
   // Seed from the in-memory race cache (warmed by the home page) so arriving
   // here paints the pre-race screen immediately instead of flashing a spinner.
+  // The cache only ever holds a member's view, so a visitor never reads it.
   const [phase, setPhase] = useState<Phase>(() => {
-    const cached = getCachedDailyRace();
+    const cached = session ? getCachedDailyRace() : null;
     return cached ? { name: 'preRace', info: cached } : { name: 'loading' };
   });
   const [leaderboard, setLeaderboard] = useState<DailyLeaderboardData>({
@@ -605,26 +624,43 @@ export default function DailyRacePage() {
     phase.name === 'preRace' && phase.info.attemptsRemaining === 0
   );
 
-  // This page is the destination of the challenge-share journey; clear the
-  // stashed slug so it can't redirect future navigation in this tab.
+  // This page is the destination of the challenge-share journey. A member
+  // has arrived, so the stashed slug is cleared before it can redirect any
+  // later navigation in this tab. A visitor is only halfway: stash the slug
+  // (before anything async, since OAuth can redirect at any time) so login
+  // and onboarding bring them back here.
   useEffect(() => {
-    clearChallengeSlug();
-  }, []);
+    if (session) {
+      clearChallengeSlug();
+    } else if (challengeSlug) {
+      stashChallengeSlug(challengeSlug);
+    }
+  }, [session, challengeSlug]);
+
+  useEffect(() => {
+    if (!challengeSlug) return;
+    let cancelled = false;
+    void fetchChallenge(challengeSlug).then((info) => {
+      if (!cancelled) setChallenge(info);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeSlug]);
 
   // ------- Fetch daily race info -------
 
   const loadInfo = useCallback(async () => {
-    if (!session?.access_token) return;
     // A cached race (from the home page, or from this page's own last load)
     // lands synchronously — no spinner. Mutations (starting or completing an
     // attempt) invalidate the cache, so a stale hit here can't happen.
-    const cached = getCachedDailyRace();
+    const cached = session ? getCachedDailyRace() : null;
     if (cached) {
       setPhase({ name: 'preRace', info: cached });
       return;
     }
     setPhase({ name: 'loading' });
-    const result = await fetchDailyRaceCached(session.access_token);
+    const result = await fetchDailyRaceCached(session?.access_token ?? null);
     if (result.status === 'ok') {
       setPhase({ name: 'preRace', info: result.info });
     } else {
@@ -644,10 +680,11 @@ export default function DailyRacePage() {
   // cache absorbs the repeat call when the phase flips to 'preRace'.
   useEffect(() => {
     if (phase.name !== 'preRace' && phase.name !== 'loading') return;
-    if (!session?.access_token) return;
-    void fetchDailyLeaderboard(session.access_token, undefined, 8).then(
-      setLeaderboard
-    );
+    void fetchDailyLeaderboard(
+      session?.access_token ?? null,
+      undefined,
+      8
+    ).then(setLeaderboard);
   }, [phase.name, session]);
 
   // ------- Start attempt handlers -------
@@ -690,10 +727,16 @@ export default function DailyRacePage() {
     [session, loadInfo]
   );
 
+  // Start is the sign-in gate for visitors. The challenge rides along so the
+  // login page can show the same taunt.
   const handleStart = useCallback(() => {
     if (phase.name !== 'preRace') return;
+    if (!session) {
+      navigate(challengeSlug ? `/login?challenge=${challengeSlug}` : '/login');
+      return;
+    }
     void beginAttempt(phase.info);
-  }, [phase, beginAttempt]);
+  }, [phase, session, challengeSlug, navigate, beginAttempt]);
 
   /**
    * Retry straight from the results screen. Re-reads the race info first so the
@@ -793,6 +836,17 @@ export default function DailyRacePage() {
 
           {phase.name === 'error' && (
             <div style={styles.errorText}>{phase.message}</div>
+          )}
+
+          {challenge && phase.name !== 'loading' && (
+            <ChallengeTaunt
+              challenge={challenge}
+              callToAction={
+                session
+                  ? 'Put them in their place.'
+                  : 'Start an attempt and put them in their place.'
+              }
+            />
           )}
 
           {phase.name === 'preRace' && (

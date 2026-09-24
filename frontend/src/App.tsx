@@ -1,4 +1,3 @@
-import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/home';
 import PracticeEditor from './pages/practice';
@@ -8,16 +7,10 @@ import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfService from './pages/terms';
 import ProfilePage from './pages/profile';
+import DailyRoute from './pages/dailyRoute';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
-import { BrandedLoading } from './components/BrandedLoading';
 import './App.css';
-
-// Lazy for the same reason as the practice and multiplayer routes: daily.tsx
-// statically imports the race engine (RaceSessionPage) from PracticeEditor,
-// so importing it eagerly here would pull CodeMirror back into the main chunk
-// and silently undo the editor's code split.
-const DailyRacePage = React.lazy(() => import('./pages/daily'));
 
 /* ------------------------------------------------------------------ */
 /*  Scratch previews (dev only)                                       */
@@ -69,16 +62,8 @@ function App() {
         <Route path="/about" element={<About />} />
         {/* Public marketing view; the page gates the editor itself. */}
         <Route path="/practice" element={<PracticeEditor />} />
-        <Route
-          path="/daily"
-          element={
-            <AuthGuard>
-              <Suspense fallback={<BrandedLoading />}>
-                <DailyRacePage />
-              </Suspense>
-            </AuthGuard>
-          }
-        />
+        {/* Public: share links land here; the page gates Start itself. */}
+        <Route path="/daily" element={<DailyRoute />} />
         {/* Public marketing view; the page gates the game itself. */}
         <Route path="/multiplayer" element={<MultiplayerPage />} />
         <Route

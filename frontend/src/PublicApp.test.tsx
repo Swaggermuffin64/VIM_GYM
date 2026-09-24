@@ -19,7 +19,7 @@ describe('PublicApp', () => {
     expect(
       screen.getByRole('heading', { name: /practice vim motions online/i })
     ).toBeDefined();
-    expect(screen.getByText('Sign in to race')).toBeDefined();
+    expect(screen.getByText('Race now')).toBeDefined();
   });
 
   it('renders the visitor lobby for /multiplayer', () => {

@@ -175,15 +175,15 @@ describe('HomePage for a visitor with no session', () => {
     AUTH.session = { access_token: 'tok' } as Session;
   });
 
-  it('shows the full menu with a sign-in daily panel', async () => {
+  it('shows the full menu; the daily link goes to /daily and the guard does the redirect', async () => {
     await act(async () => {
       renderHome();
     });
     expect(screen.getByText('Quick Play')).toBeTruthy();
     expect(screen.getByText('Practice')).toBeTruthy();
     expect(
-      screen.getByText('Sign in to race').closest('a')?.getAttribute('href')
-    ).toBe('/login');
+      screen.getByText('Race now').closest('a')?.getAttribute('href')
+    ).toBe('/daily');
     expect(mockFetchDailyRace).not.toHaveBeenCalled();
   });
 

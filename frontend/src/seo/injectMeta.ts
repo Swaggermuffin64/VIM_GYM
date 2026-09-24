@@ -1,7 +1,11 @@
 import { ROUTE_META, canonicalUrl, type PublicRoute } from './routeMeta';
 
-/** Escapes a string for safe use inside a double-quoted HTML attribute. */
-function escapeAttr(value: string): string {
+/**
+ * Escapes a string for safe use inside a double-quoted HTML attribute or as
+ * element text. Both contexts need &, < and > neutralised; attributes also
+ * need the quote.
+ */
+function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -35,8 +39,8 @@ export function injectMeta(
 ): string {
   const { title, description } = ROUTE_META[route];
   const url = canonicalUrl(route);
-  const d = escapeAttr(description);
-  const t = escapeAttr(title);
+  const d = escapeHtml(description);
+  const t = escapeHtml(title);
 
   const head = [
     `<meta name="description" content="${d}">`,
@@ -63,6 +67,6 @@ export function injectMeta(
   }
 
   return template
-    .replace(/<title>[\s\S]*?<\/title>/, `<title>${title}</title>\n    ${head}`)
+    .replace(/<title>[\s\S]*?<\/title>/, `<title>${t}</title>\n    ${head}`)
     .replace(ROOT_ANCHOR, `<div id="root">${stripHoistableTags(body)}</div>`);
 }

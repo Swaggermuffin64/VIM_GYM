@@ -67,6 +67,13 @@ describe('injectMeta', () => {
       };
       const out = injectMeta(TEMPLATE, '/', '<p>x</p>');
 
+      // The <title> element text must be escaped too, or a title containing
+      // </title> or a bare & would break the head.
+      expect(out).toContain(
+        '<title>A &quot;quoted&quot; &amp; &lt;dangerous&gt; title</title>'
+      );
+      expect(out).not.toContain('<title>A "quoted"');
+
       // The og:title content attribute must contain escaped forms
       expect(out).toContain(
         'content="A &quot;quoted&quot; &amp; &lt;dangerous&gt; title"'

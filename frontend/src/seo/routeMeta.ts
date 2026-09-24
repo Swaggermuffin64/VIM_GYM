@@ -23,6 +23,8 @@ export const PUBLIC_ROUTES = [
   '/about',
   '/practice',
   '/multiplayer',
+  '/privacy',
+  '/terms',
 ] as const;
 
 export type PublicRoute = (typeof PUBLIC_ROUTES)[number];
@@ -70,6 +72,21 @@ export const ROUTE_META: Record<PublicRoute, RouteMeta> = {
     description:
       'Race other developers through Vim editing challenges in real time. Quick play matches you with an opponent in seconds and fastest correct motions win.',
     priority: 0.9,
+  },
+  // The legal pages are registered with Google OAuth and served without a
+  // session. Listing them here gives them a real description and og: tags;
+  // otherwise they ship from the bare app shell with no metadata at all.
+  '/privacy': {
+    title: 'Privacy Policy | VIM_GYM',
+    description:
+      'What VIM_GYM collects when you sign in and play, why it is stored, and how to have it deleted. Plain English, no tracking beyond the game itself.',
+    priority: 0.3,
+  },
+  '/terms': {
+    title: 'Terms of Service | VIM_GYM',
+    description:
+      'The short terms for playing VIM_GYM: fair play in races, account conduct, and the as-is disclaimer for a free community project.',
+    priority: 0.3,
   },
 };
 

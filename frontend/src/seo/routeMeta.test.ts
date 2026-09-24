@@ -7,8 +7,15 @@ import {
 } from './routeMeta';
 
 describe('ROUTE_META', () => {
-  it('covers exactly the four public routes', () => {
-    expect(PUBLIC_ROUTES).toEqual(['/', '/about', '/practice', '/multiplayer']);
+  it('covers exactly the public routes', () => {
+    expect(PUBLIC_ROUTES).toEqual([
+      '/',
+      '/about',
+      '/practice',
+      '/multiplayer',
+      '/privacy',
+      '/terms',
+    ]);
     expect(Object.keys(ROUTE_META).sort()).toEqual([...PUBLIC_ROUTES].sort());
   });
 

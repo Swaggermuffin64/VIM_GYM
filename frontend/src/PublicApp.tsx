@@ -4,6 +4,8 @@ import { StaticRouter } from 'react-router';
 import { HomeMenu } from './pages/home';
 import { SignedOutLobby } from './pages/multiplayer';
 import About from './pages/about';
+import PrivacyPolicy from './pages/privacy';
+import TermsOfService from './pages/terms';
 import type { BodyPrerenderedRoute } from './seo/routeMeta';
 
 /**
@@ -19,6 +21,8 @@ const VIEWS: Record<BodyPrerenderedRoute, () => ReactElement> = {
   '/': () => <HomeMenu />,
   '/multiplayer': () => <SignedOutLobby />,
   '/about': () => <About />,
+  '/privacy': () => <PrivacyPolicy />,
+  '/terms': () => <TermsOfService />,
 };
 
 export function PublicApp({ route }: { route: BodyPrerenderedRoute }) {

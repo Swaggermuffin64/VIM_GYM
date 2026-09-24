@@ -32,16 +32,19 @@ VITE_MATCHMAKING_URL=ws://localhost:3002
 
 ## Public pages and prerendering
 
-`/`, `/about`, `/practice` and `/multiplayer` are public. Visitors see the
-same screens as members -- the home menu, the practice Ready screen, the
-multiplayer lobby -- and every button that would start a run or a race sends
-them to sign in instead. The per-route `<title>` and meta description are what
+`/`, `/about`, `/practice`, `/multiplayer`, `/privacy` and `/terms` are
+public. Visitors see the same screens as members -- the home menu, the
+practice Ready screen, the multiplayer lobby -- and every button that would
+start a run or a race sends them to sign in instead. The per-route `<title>` and meta description are what
 give each page its own search identity; the screens' own text is the body.
 The branch is on session state, never on user-agent, which would be cloaking
 and is a Google spam policy violation.
 
 `scripts/prerender.mts` renders the public screens to static HTML at build
-time, in Node. **Anything reachable from `src/PublicApp.tsx` must render
+time, in Node. Every other path (sign-in, daily, profile) is rewritten by
+`vercel.json` to the empty `app.html` shell; that rewrite must target `/app`,
+not `/app.html`, because `cleanUrls` strips the extension at build time and a
+`.html` destination 404s at the edge. **Anything reachable from `src/PublicApp.tsx` must render
 without a browser**: no CodeMirror, socket.io, Supabase, or `window` at module
 scope, or the build fails. The practice Ready screen lives inside the editor
 module, which imports CodeMirror, so `/practice` is listed in

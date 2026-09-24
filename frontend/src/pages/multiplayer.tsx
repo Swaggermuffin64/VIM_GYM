@@ -35,7 +35,9 @@ export function SignedOutLobby() {
     <div style={container}>
       <PageMeta route="/multiplayer" />
       <Lobby
-        isConnected={false}
+        // No socket exists for visitors; report connected so the lobby shows
+        // its usual green status light rather than 'Connecting...'.
+        isConnected={true}
         initialMode={mode}
         error={null}
         // The lobby hides the toggle for visitors; these satisfy the props.

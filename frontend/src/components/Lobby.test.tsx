@@ -75,7 +75,7 @@ function renderVisitorLobby(
   return render(
     <MemoryRouter>
       <Lobby
-        isConnected={false}
+        isConnected={true}
         initialMode={initialMode}
         error={null}
         relativeLineNumbersEnabled={false}
@@ -107,10 +107,9 @@ describe('Lobby for a visitor with no session', () => {
     expect(onSignInRequired).toHaveBeenCalledTimes(1);
   });
 
-  it('hides the connection status, since there is no socket', () => {
+  it('keeps the connection status light', () => {
     renderVisitorLobby('quick', vi.fn());
-    expect(screen.queryByText('Connected')).toBeNull();
-    expect(screen.queryByText('Connecting...')).toBeNull();
+    expect(screen.getByText('Connected')).toBeDefined();
   });
 });
 

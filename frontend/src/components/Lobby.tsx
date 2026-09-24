@@ -18,9 +18,8 @@ interface LobbyProps {
   onRetryConnection?: () => void;
   /**
    * Set when the visitor has no session. Every action that would start a game
-   * calls this instead (the route sends them to sign in), the connection
-   * status is hidden because no socket exists, and buttons stay enabled even
-   * though there is no player name yet.
+   * calls this instead (the route sends them to sign in) and buttons stay
+   * enabled even though there is no player name yet.
    */
   onSignInRequired?: () => void;
 }
@@ -483,20 +482,18 @@ export const Lobby: React.FC<LobbyProps> = ({
               <h1 style={styles.title}>{getTitle()}</h1>
               {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
 
-              {!onSignInRequired && (
-                <div style={styles.connectionStatus}>
-                  <div
-                    style={{
-                      ...styles.dot,
-                      background: getStatusColor(),
-                      boxShadow: `0 0 8px ${getStatusColor()}`,
-                    }}
-                  />
-                  <span style={{ color: getStatusColor() }}>
-                    {getStatusText()}
-                  </span>
-                </div>
-              )}
+              <div style={styles.connectionStatus}>
+                <div
+                  style={{
+                    ...styles.dot,
+                    background: getStatusColor(),
+                    boxShadow: `0 0 8px ${getStatusColor()}`,
+                  }}
+                />
+                <span style={{ color: getStatusColor() }}>
+                  {getStatusText()}
+                </span>
+              </div>
             </div>
 
             {errorBanner}
@@ -666,20 +663,18 @@ export const Lobby: React.FC<LobbyProps> = ({
               <h1 style={styles.title}>{getTitle()}</h1>
               {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
 
-              {!onSignInRequired && (
-                <div style={styles.connectionStatus}>
-                  <div
-                    style={{
-                      ...styles.dot,
-                      background: getStatusColor(),
-                      boxShadow: `0 0 8px ${getStatusColor()}`,
-                    }}
-                  />
-                  <span style={{ color: getStatusColor() }}>
-                    {getStatusText()}
-                  </span>
-                </div>
-              )}
+              <div style={styles.connectionStatus}>
+                <div
+                  style={{
+                    ...styles.dot,
+                    background: getStatusColor(),
+                    boxShadow: `0 0 8px ${getStatusColor()}`,
+                  }}
+                />
+                <span style={{ color: getStatusColor() }}>
+                  {getStatusText()}
+                </span>
+              </div>
             </div>
 
             {errorBanner}

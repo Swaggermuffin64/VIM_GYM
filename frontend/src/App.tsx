@@ -1,3 +1,4 @@
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/home';
 import PracticeEditor from './pages/practice';
@@ -7,10 +8,16 @@ import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfService from './pages/terms';
 import ProfilePage from './pages/profile';
-import DailyRacePage from './pages/daily';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
+import { BrandedLoading } from './components/BrandedLoading';
 import './App.css';
+
+// Lazy for the same reason as the practice and multiplayer routes: daily.tsx
+// statically imports the race engine (RaceSessionPage) from PracticeEditor,
+// so importing it eagerly here would pull CodeMirror back into the main chunk
+// and silently undo the editor's code split.
+const DailyRacePage = React.lazy(() => import('./pages/daily'));
 
 /* ------------------------------------------------------------------ */
 /*  Scratch previews (dev only)                                       */
@@ -66,7 +73,9 @@ function App() {
           path="/daily"
           element={
             <AuthGuard>
-              <DailyRacePage />
+              <Suspense fallback={<BrandedLoading />}>
+                <DailyRacePage />
+              </Suspense>
             </AuthGuard>
           }
         />

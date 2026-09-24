@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ROUTE_META, PUBLIC_ROUTES, isHeadOnlyRoute } from './routeMeta';
 
@@ -40,8 +40,8 @@ describe.skipIf(!built)('prerendered output', () => {
     );
   });
 
-  // The original defect: four URLs, one title.
-  it('emits four distinct titles', () => {
+  // The original defect: every public URL shared one title.
+  it('emits a distinct title per route', () => {
     const titles = PUBLIC_ROUTES.map(
       (r) => pages.get(r)!.match(/<title>(.*?)<\/title>/)![1]
     );
@@ -68,6 +68,14 @@ describe.skipIf(!built)('prerendered output', () => {
   it.each(PUBLIC_ROUTES)('%s does not inline the editor', (route) => {
     expect(pages.get(route)).not.toContain('codemirror-vim');
     expect(pages.get(route)).not.toContain('socket.io');
+  });
+
+  // Proves the client split held too. daily.tsx imports the race engine from
+  // PracticeEditor; if anything imports daily.tsx eagerly, Vite folds the
+  // editor (and CodeMirror) back into the main chunk and this file vanishes.
+  it('emits the editor as its own client chunk', () => {
+    const assets = readdirSync(resolve(buildDir, 'assets'));
+    expect(assets.some((f) => /^PracticeEditor-.*\.js$/.test(f))).toBe(true);
   });
 
   it('emits exactly one title tag per page', () => {

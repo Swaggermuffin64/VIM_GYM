@@ -422,8 +422,9 @@ export const Lobby: React.FC<LobbyProps> = ({
     return 'Multiplayer';
   };
 
+  // Quick Play has no subtitle: the title says it all.
   const getSubtitle = () => {
-    if (initialMode === 'quick') return 'Find an opponent instantly';
+    if (initialMode === 'quick') return null;
     if (initialMode === 'private') return 'Play with friends using a room code';
     return 'Race your friends with Vim motions';
   };
@@ -492,7 +493,7 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.container}>
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
-              <p style={styles.subtitle}>{getSubtitle()}</p>
+              {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
               {description && <p style={styles.description}>{description}</p>}
 
               {!onSignInRequired && (
@@ -673,7 +674,7 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.container}>
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
-              <p style={styles.subtitle}>{getSubtitle()}</p>
+              {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
               {description && <p style={styles.description}>{description}</p>}
 
               {!onSignInRequired && (
@@ -817,7 +818,7 @@ export const Lobby: React.FC<LobbyProps> = ({
         <div style={styles.container}>
           <div style={styles.header}>
             <h1 style={styles.title}>{getTitle()}</h1>
-            <p style={styles.subtitle}>{getSubtitle()}</p>
+            {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
             {description && <p style={styles.description}>{description}</p>}
           </div>
           <button style={styles.backButton} onClick={handleBack}>

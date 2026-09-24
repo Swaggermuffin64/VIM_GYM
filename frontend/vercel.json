@@ -24,7 +24,7 @@
       "destination": "https://vim-racing-server.fly.dev/s/:slug/og.png"
     },
     {
-      "source": "/((?!s/|assets/|sitemap\\.xml|robots\\.txt|favicon|practice|multiplayer|about|privacy|terms).*)",
+      "source": "/((?!s/|assets/|sitemap\\.xml|robots\\.txt|favicon|practice|multiplayer|about|daily|privacy|terms).*)",
       "destination": "/app"
     }
   ]

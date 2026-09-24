@@ -23,7 +23,7 @@ describe('buildSitemapXml', () => {
 
   // Gated routes have nothing to index and must not be advertised.
   it('excludes gated routes', () => {
-    for (const gated of ['/daily', '/profile', '/onboarding', '/login']) {
+    for (const gated of ['/profile', '/onboarding', '/login']) {
       expect(xml).not.toContain(`<loc>https://www.vimgym.app${gated}</loc>`);
     }
   });

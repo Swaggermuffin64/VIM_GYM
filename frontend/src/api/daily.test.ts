@@ -230,6 +230,34 @@ describe('fetchChallenge', () => {
   });
 });
 
+describe('visitor requests', () => {
+  it('fetchDailyRace sends no Authorization header without a token', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        race_date: '2026-08-16',
+        tasks: [],
+        attempts: [],
+        attempts_remaining: 3,
+        best_ms: null,
+      })
+    );
+    const result = await fetchDailyRace(null);
+    expect(result.status).toBe('ok');
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual({});
+  });
+
+  it('fetchDailyLeaderboard sends no Authorization header without a token', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, entries: [], total_racers: 0 })
+    );
+    await fetchDailyLeaderboard(null);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual({});
+  });
+});
+
 describe('fetchDailyLeaderboard', () => {
   it('returns an empty board on HTTP 500', async () => {
     fetchMock.mockResolvedValue(
@@ -467,6 +495,18 @@ describe('fetchDailyRaceCached', () => {
 
     invalidateDailyRaceCache();
     expect(getCachedDailyRace()).toBeNull();
+  });
+
+  // A visitor's race (no attempts) must not be handed to them after they
+  // sign in, so it is never cached; only a member's read is.
+  it('does not cache a visitor read', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(raceBody(TODAY)));
+
+    await fetchDailyRaceCached(null);
+    expect(getCachedDailyRace()).toBeNull();
+
+    await fetchDailyRaceCached(null);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('fetches once and serves later reads from memory', async () => {

@@ -97,7 +97,7 @@ afterEach(cleanup);
 /*  Tests                                                             */
 /* ------------------------------------------------------------------ */
 
-const PUBLIC_PATHS = ['/', '/about', '/practice', '/multiplayer'];
+const PUBLIC_PATHS = ['/', '/about', '/practice', '/multiplayer', '/daily'];
 
 describe('public routes when logged out', () => {
   it.each(PUBLIC_PATHS)(
@@ -125,9 +125,15 @@ describe('public routes when logged out', () => {
     expect(screen.queryByText('MULTIPLAYER GAME')).toBeNull();
   });
 
-  it('shows the menu with a sign-in daily panel at /', async () => {
+  // Share links land here; the page's own Start button is the sign-in gate.
+  it('renders the daily page at /daily without a session', async () => {
+    renderAt('/daily');
+    expect(await screen.findByText('DAILY PAGE')).toBeDefined();
+  });
+
+  it('shows the full menu at /, daily link included', async () => {
     renderAt('/');
-    expect(await screen.findByText('Sign in to race')).toBeDefined();
+    expect(await screen.findByText('Race now')).toBeDefined();
     expect(screen.getByText('Quick Play')).toBeDefined();
   });
 });
@@ -152,7 +158,7 @@ describe('public routes when logged in', () => {
 
 // These must behave exactly as they did before the refactor.
 describe('gated routes remain gated', () => {
-  it.each(['/daily', '/profile'])(
+  it.each(['/profile'])(
     'redirects %s to /login when logged out',
     async (path) => {
       renderAt(path);

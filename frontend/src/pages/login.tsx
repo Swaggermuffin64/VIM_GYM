@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
 import { fetchChallenge, type ChallengeInfo } from '../api/daily';
+import { ChallengeTaunt } from '../components/ChallengeTaunt';
 import {
   stashChallengeSlug,
   postAuthDestination,
@@ -196,39 +197,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.textPrimary,
     textDecoration: 'underline',
   },
-  // Challenge taunt banner sits above the login card to hook users arriving
-  // from a daily-race share link.
-  tauntBanner: {
-    width: '100%',
-    maxWidth: '860px',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '12px',
-    padding: '20px 28px',
-    marginBottom: '16px',
-    background: colors.bgDark,
-    position: 'relative' as const,
-    zIndex: 1,
-    textAlign: 'center' as const,
-    fontFamily: '"JetBrains Mono", monospace',
-  },
-  tauntHeadline: {
-    fontSize: '20px',
-    color: colors.textPrimary,
-    margin: '0 0 6px',
-    lineHeight: 1.5,
-  },
-  tauntDetail: {
-    fontSize: '15px',
-    color: colors.textSecondary,
-    margin: 0,
-    lineHeight: 1.5,
-  },
 };
-
-/** Format a race duration as seconds with one decimal, e.g. 15702 -> "15.7". */
-function formatSeconds(ms: number): string {
-  return (ms / 1000).toFixed(1);
-}
 
 /**
  * Login page. When the URL contains a `?challenge=<slug>` query param, the
@@ -265,17 +234,10 @@ export default function Login() {
       <div style={styles.bgGlow2} aria-hidden="true" />
 
       {challenge && (
-        <div style={styles.tauntBanner} role="status">
-          <p style={styles.tauntHeadline}>
-            <strong>{challenge.displayName}</strong> thinks they&#39;re better
-            than you <em>(at vim)</em>.
-          </p>
-          <p style={styles.tauntDetail}>
-            They finished today&#39;s daily race in{' '}
-            {formatSeconds(challenge.bestMs)} seconds. Sign in and put them in
-            their place.
-          </p>
-        </div>
+        <ChallengeTaunt
+          challenge={challenge}
+          callToAction="Sign in and put them in their place."
+        />
       )}
 
       <div className="login-card" style={styles.card}>

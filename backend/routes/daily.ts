@@ -12,7 +12,10 @@
  * the global practice board isolated from daily results.
  */
 import type { FastifyInstance } from 'fastify';
-import { requireSupabaseAuth } from '../auth/httpAuth.js';
+import {
+  requireSupabaseAuth,
+  tryResolveSupabaseUser,
+} from '../auth/httpAuth.js';
 import { utcDateKey } from '../daily/dailyDate.js';
 import { pickTasksFromCache } from '../taskPool.js';
 import { createGameSession, finishGameSession } from '../db/stats.js';
@@ -61,9 +64,12 @@ export async function registerDailyRoutes(
   // -------------------------------------------------------------------------
   // GET /api/daily — today's race info + user's attempts
   // -------------------------------------------------------------------------
+  // Public: the page is a landing target for share links, so visitors see
+  // today's race and the board before signing in. Without a token the
+  // response carries no attempts (a visitor has none); starting one still
+  // requires auth.
   fastify.get('/api/daily', async (request, reply) => {
-    const user = await requireSupabaseAuth(request, reply);
-    if (!user) return;
+    const user = await tryResolveSupabaseUser(request);
 
     const raceDate = utcDateKey(new Date());
     const race = await getOrCreateDailyRace(raceDate, pickTasksFromCache);
@@ -78,7 +84,7 @@ export async function registerDailyRoutes(
     // free restart with a fresh timer. Slots with no game attached are failed
     // starts (server error, lost response before attach): the start route
     // reuses them, so they are neither shown to the client nor counted.
-    const attempts = await getDailyAttempts(user.id, raceDate);
+    const attempts = user ? await getDailyAttempts(user.id, raceDate) : [];
     const spent = attempts.filter(
       (a) => a.gameId !== null || a.durationMs !== null
     );
@@ -290,8 +296,9 @@ export async function registerDailyRoutes(
   fastify.get<{ Querystring: { date?: string; limit?: string } }>(
     '/api/daily/leaderboard',
     async (request, reply) => {
-      const user = await requireSupabaseAuth(request, reply);
-      if (!user) return;
+      // Public for the same reason as GET /api/daily. The neighborhood rows
+      // are the one per-user part, and a visitor simply has none.
+      const user = await tryResolveSupabaseUser(request);
 
       const dateParam = request.query.date;
       let raceDate: string;
@@ -318,7 +325,7 @@ export async function registerDailyRoutes(
 
       // The user's rank+-1 rows, so a mid-pack racer still sees themself
       // (and their rival) when they fall outside the top entries.
-      const userInTop = entries.some((e) => e.userId === user.id);
+      const userInTop = !user || entries.some((e) => e.userId === user.id);
       const neighbors = userInTop
         ? []
         : await queryDailyNeighborhood(user.id, raceDate);

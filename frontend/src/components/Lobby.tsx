@@ -125,12 +125,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
   },
   description: {
-    fontSize: '14px',
-    color: colors.textSecondary,
+    fontSize: '17px',
+    color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.7,
-    maxWidth: '420px',
-    margin: '12px auto 0',
+    maxWidth: '480px',
+    margin: '16px auto 0',
   },
   connectionStatus: {
     display: 'inline-flex',

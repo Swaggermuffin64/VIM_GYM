@@ -299,12 +299,12 @@ const styles: Record<string, React.CSSProperties> = {
     margin: '8px 0 0',
   },
   description: {
-    fontSize: '15px',
-    color: colors.textSecondary,
+    fontSize: '18px',
+    color: colors.textPrimary,
     fontFamily: MONO,
     lineHeight: 1.7,
-    maxWidth: '560px',
-    margin: '20px auto 0',
+    maxWidth: '680px',
+    margin: '24px auto 0',
   },
   // Even columns so the seam between them lands under the centered title.
   split: {

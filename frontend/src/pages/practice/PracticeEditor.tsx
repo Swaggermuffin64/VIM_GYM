@@ -805,11 +805,11 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.6,
   },
   readyDescription: {
-    fontSize: '14px',
-    color: colors.textSecondary,
+    fontSize: '17px',
+    color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.7,
-    margin: '-32px 0 40px',
+    margin: '-28px 0 40px',
   },
   readyCard: {
     background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,

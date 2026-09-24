@@ -8,12 +8,14 @@ import {
   LegalPageLayout,
   legalStyles as s,
 } from '../components/LegalPageLayout';
+import { PageMeta } from '../seo/PageMeta';
 
 const CONTACT_EMAIL = 'gunnarlila2000@gmail.com';
 
 export default function TermsOfService() {
   return (
     <LegalPageLayout title="Terms of Service" lastUpdated="August 8, 2026">
+      <PageMeta route="/terms" />
       <p style={s.p}>
         By using VIM_GYM you agree to these terms. They&apos;re short — please
         actually read them.

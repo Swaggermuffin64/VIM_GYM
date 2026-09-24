@@ -1,6 +1,8 @@
 import React from 'react';
 import { colors } from '../theme';
 import { SiteBanner } from '../components/SiteBanner';
+import { PageMeta } from '../seo/PageMeta';
+import { ROUTE_META } from '../seo/routeMeta';
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -142,6 +144,14 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.7,
     margin: 0,
   },
+  pageHeading: {
+    fontSize: '40px',
+    fontWeight: 800,
+    color: colors.textPrimary,
+    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    letterSpacing: '-1.5px',
+    marginBottom: '48px',
+  },
   donateButton: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -163,14 +173,17 @@ const styles: Record<string, React.CSSProperties> = {
 function About() {
   return (
     <div style={styles.container}>
+      <PageMeta route="/about" />
       <SiteBanner />
 
-      <div style={styles.mainContent}>
+      <main style={styles.mainContent}>
         {/* Background glow effects */}
         <div style={styles.bgGlow1} />
         <div style={styles.bgGlow2} />
 
         <div style={styles.content}>
+          <h1 style={styles.pageHeading}>{ROUTE_META['/about'].title}</h1>
+
           {/* What Is VIM_GYM */}
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>What is VIM_GYM?</h2>
@@ -290,7 +303,7 @@ function About() {
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

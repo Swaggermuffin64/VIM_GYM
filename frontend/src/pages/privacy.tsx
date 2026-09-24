@@ -7,12 +7,14 @@ import {
   LegalPageLayout,
   legalStyles as s,
 } from '../components/LegalPageLayout';
+import { PageMeta } from '../seo/PageMeta';
 
 const CONTACT_EMAIL = 'gunnarlila2000@gmail.com';
 
 export default function PrivacyPolicy() {
   return (
     <LegalPageLayout title="Privacy Policy" lastUpdated="August 8, 2026">
+      <PageMeta route="/privacy" />
       <p style={s.p}>
         VIM_GYM is a free game for practicing Vim motions, run as an independent
         project. This policy describes what data we collect, why, and what we do

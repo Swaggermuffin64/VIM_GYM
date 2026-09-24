@@ -189,6 +189,23 @@ function DiscordIcon({ style }: { style?: React.CSSProperties }) {
   );
 }
 
+/**
+ * The account corner of the banner. Logged-out visitors -- including crawlers
+ * on the public marketing pages -- get a sign-in link rather than a profile
+ * menu they cannot use.
+ */
+function AccountSlot() {
+  const { session } = useAuth();
+  if (!session) {
+    return (
+      <Link to="/login" style={styles.navLink}>
+        SIGN IN
+      </Link>
+    );
+  }
+  return <AccountDropdown />;
+}
+
 export function SiteBanner() {
   return (
     <div style={styles.topBanner}>
@@ -225,7 +242,7 @@ export function SiteBanner() {
         >
           SUPPORT
         </a>
-        <AccountDropdown />
+        <AccountSlot />
       </div>
     </div>
   );

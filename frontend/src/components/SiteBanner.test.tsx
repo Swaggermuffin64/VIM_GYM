@@ -4,12 +4,16 @@
  * display name (capped with an ellipsis), and opening it reveals the
  * Profile link and Sign out action that used to be top-level nav items.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { cleanup, render as rtlRender, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
-const authState: { profile: { display_name: string } | null } = {
+const authState: {
+  session: unknown;
+  profile: { display_name: string } | null;
+} = {
+  session: { access_token: 'fake-token' },
   profile: { display_name: 'zaphod' },
 };
 vi.mock('../contexts/AuthContext', () => ({ useAuth: () => authState }));
@@ -35,8 +39,12 @@ afterEach(() => {
 });
 
 describe('SiteBanner account dropdown', () => {
-  it('shows the display name as the dropdown trigger', () => {
+  beforeEach(() => {
+    authState.session = { access_token: 'fake-token' };
     authState.profile = { display_name: 'zaphod' };
+  });
+
+  it('shows the display name as the dropdown trigger', () => {
     render();
     expect(screen.getByRole('button', { name: 'zaphod' })).toBeTruthy();
     // Profile/Sign out are inside the closed menu, not top-level items
@@ -77,5 +85,30 @@ describe('SiteBanner account dropdown', () => {
     expect(screen.getByRole('link', { name: /profile/i })).toBeTruthy();
     await user.click(document.body);
     expect(screen.queryByRole('link', { name: /profile/i })).toBeNull();
+  });
+});
+
+describe('SiteBanner when logged out', () => {
+  beforeEach(() => {
+    authState.session = null;
+    authState.profile = null;
+  });
+
+  it('shows a sign-in link instead of the account menu', () => {
+    render();
+    const signIn = screen.getByRole('link', { name: /sign in/i });
+    expect(signIn.getAttribute('href')).toBe('/login');
+  });
+
+  it('does not offer sign out', () => {
+    render();
+    expect(screen.queryByText(/sign out/i)).toBeNull();
+  });
+
+  // Internal links with descriptive anchor text are what Google turns into
+  // sitelink labels, so they must render for crawlers too.
+  it('still renders the About link', () => {
+    render();
+    expect(screen.getByRole('link', { name: /about/i })).toBeDefined();
   });
 });

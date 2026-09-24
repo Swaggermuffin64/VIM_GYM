@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { hasStoredSession } from '../lib/hasStoredSession';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -40,10 +41,16 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // A visitor with no persisted token is definitively logged out, so skip the
+  // loading screen entirely and let public content paint on the first frame.
+  // Anyone with a token keeps the previous behaviour: loading until verified.
+  const maybeSignedIn = hasStoredSession();
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(maybeSignedIn);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [profileStatus, setProfileStatus] = useState<ProfileStatus>('loading');
+  const [profileStatus, setProfileStatus] = useState<ProfileStatus>(
+    maybeSignedIn ? 'loading' : 'ready'
+  );
 
   useEffect(() => {
     // Load existing session on mount

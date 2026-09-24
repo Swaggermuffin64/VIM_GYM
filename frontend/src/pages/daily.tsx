@@ -36,7 +36,7 @@ import type {
   RaceSessionConfig,
   RaceCompletionInfo,
 } from '../racing/raceSessionConfig';
-import { RaceSessionPage } from './practice';
+import { RaceSessionPage } from './practice/PracticeEditor';
 import { SiteBanner } from '../components/SiteBanner';
 import { clearChallengeSlug } from '../lib/challengeRedirect';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
@@ -68,6 +68,15 @@ function formatTime(ms: number): string {
 // ---------------------------------------------------------------------------
 // Styles (follows practice.tsx ready-screen vocabulary)
 // ---------------------------------------------------------------------------
+
+/**
+ * Height held open for the results-screen extras block, in pixels, so the
+ * summary card is exactly as tall while the attempt is being scored as it is
+ * once the placing arrives. Set a little above the loaded content — one row of
+ * attempt tiles (~95px), the action row (~55px), the back link (~26px) and the
+ * 28px gaps between them — so neither state ever resizes the card.
+ */
+const EXTRAS_RESERVED_HEIGHT = 248;
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
@@ -444,9 +453,22 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '28px',
     width: '100%',
     marginTop: '8px',
+    // Same height whether the placing has arrived or not — see
+    // EXTRAS_RESERVED_HEIGHT.
+    minHeight: `${EXTRAS_RESERVED_HEIGHT}px`,
+  },
+  // The spinner shown in that reserved space while the placing is in flight.
+  extrasSpinner: {
+    width: '36px',
+    height: '36px',
+    border: `3px solid ${colors.border}`,
+    borderTopColor: colors.primary,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
   },
   attemptGrid: {
     display: 'grid',
@@ -723,11 +745,13 @@ export default function DailyRacePage() {
       allowSameTasksReplay: false,
       renderCompletionExtras: (
         completionInfo: RaceCompletionInfo | null,
-        finalTimeMs: number
+        finalTimeMs: number,
+        isAwaitingCompletionInfo: boolean
       ) => {
         return (
           <DailyCompletionExtras
             completionInfo={completionInfo}
+            isAwaitingCompletionInfo={isAwaitingCompletionInfo}
             raceDate={info.raceDate}
             loadedAttempts={info.attempts}
             justFinished={{ attemptNumber, durationMs: finalTimeMs }}
@@ -1142,6 +1166,7 @@ function finishedAttemptsIncluding(
  */
 export function DailyCompletionExtras({
   completionInfo,
+  isAwaitingCompletionInfo = false,
   raceDate,
   loadedAttempts,
   justFinished,
@@ -1149,6 +1174,8 @@ export function DailyCompletionExtras({
   onBackToLeaderboard,
 }: {
   completionInfo: RaceCompletionInfo | null;
+  /** True while the finished attempt is still being submitted for placing. */
+  isAwaitingCompletionInfo?: boolean;
   /** The date of the race that was just finished, for the share link. */
   raceDate: string;
   loadedAttempts: DailyRaceInfo['attempts'];
@@ -1156,6 +1183,22 @@ export function DailyCompletionExtras({
   onTryAgain: () => void;
   onBackToLeaderboard: () => void;
 }) {
+  // The placing decides how many attempt slots are left, so there is nothing
+  // real to draw until it lands. Spin in the reserved space rather than
+  // rendering an empty card that resizes when the response arrives.
+  if (isAwaitingCompletionInfo) {
+    return (
+      <div style={styles.extrasContainer}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div
+          style={styles.extrasSpinner}
+          role="status"
+          aria-label="Scoring your run"
+        />
+      </div>
+    );
+  }
+
   // A null completionInfo means completeDailyAttempt failed (network blip,
   // expired token). This overlay is the only UI on screen at that point, so
   // it must still render the local attempt times and an exit — only the

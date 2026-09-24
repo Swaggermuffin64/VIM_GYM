@@ -2,6 +2,7 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { peekChallengeSlug } from '../lib/challengeRedirect';
+import { BrandedLoading } from './BrandedLoading';
 
 /**
  * Requires authentication and completed onboarding.
@@ -21,29 +22,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   // Branded loading screen for the cold-start case (hard refresh / first
   // visit) so the auth check doesn't look like a broken black screen.
   if (loading || (session && profileStatus === 'loading')) {
-    return (
-      <div
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: '#000000',
-        }}
-      >
-        <span
-          style={{
-            color: '#3f3f46',
-            fontSize: '20px',
-            fontWeight: 700,
-            fontFamily: '"JetBrains Mono", monospace',
-            letterSpacing: '1px',
-          }}
-        >
-          VIM_GYM
-        </span>
-      </div>
-    );
+    return <BrandedLoading />;
   }
   if (!session || profileStatus === 'rejected') {
     return <Navigate to="/login" replace />;

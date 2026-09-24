@@ -67,15 +67,18 @@ function makeConfig(overrides: Partial<RaceSessionConfig>): RaceSessionConfig {
 function renderSummary({
   config,
   completionInfo = null,
+  isAwaitingCompletionInfo = false,
 }: {
   config: RaceSessionConfig;
   completionInfo?: RaceCompletionInfo | null;
+  isAwaitingCompletionInfo?: boolean;
 }) {
   return rtlRender(
     <MemoryRouter>
       <SessionCompleteSummary
         config={config}
         completionInfo={completionInfo}
+        isAwaitingCompletionInfo={isAwaitingCompletionInfo}
         finalTimeMs={12300}
         taskSummaries={[makeTaskSummary('t1')]}
         onRestartSameTasks={() => {}}
@@ -134,7 +137,19 @@ describe('SessionCompleteSummary', () => {
   it('passes the final time to the mode completion extras', () => {
     const renderCompletionExtras = vi.fn(() => null);
     renderSummary({ config: makeConfig({ renderCompletionExtras }) });
-    expect(renderCompletionExtras).toHaveBeenCalledWith(null, 12300);
+    expect(renderCompletionExtras).toHaveBeenCalledWith(null, 12300, false);
+  });
+
+  // Regression: the extras used to render nothing until submitCompletion
+  // resolved, so the results card grew when the response landed. The mode gets
+  // told the submission is in flight so it can hold the space instead.
+  it('tells the mode completion extras when the submission is still in flight', () => {
+    const renderCompletionExtras = vi.fn(() => null);
+    renderSummary({
+      config: makeConfig({ renderCompletionExtras }),
+      isAwaitingCompletionInfo: true,
+    });
+    expect(renderCompletionExtras).toHaveBeenCalledWith(null, 12300, true);
   });
 
   it('hides the restart buttons when the mode disallows them', () => {

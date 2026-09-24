@@ -55,10 +55,13 @@ export interface RaceSessionConfig {
   /**
    * Extra results-overlay content (daily: attempt times + share + back to
    * leaderboard). Receives the run's total time so modes can list it alongside
-   * times they already knew about.
+   * times they already knew about, and whether submitCompletion is still in
+   * flight so the mode can show a loading state instead of empty space that
+   * fills in (and resizes the results card) when the response lands.
    */
   renderCompletionExtras?(
     info: RaceCompletionInfo | null,
-    finalTimeMs: number
+    finalTimeMs: number,
+    isAwaitingCompletionInfo: boolean
   ): React.ReactNode;
 }

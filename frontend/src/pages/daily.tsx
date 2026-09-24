@@ -6,6 +6,12 @@
  * times, try-again, share link). The actual racing UI is RaceSessionPage from
  * practice.tsx, mounted only after an attempt slot is claimed -- visiting
  * this page never burns an attempt; clicking Start does.
+ *
+ * The page is public: share links (`/daily?challenge=<slug>`) land here, so a
+ * visitor sees today's race, the board and the challenger's taunt before
+ * signing in. Start is the gate -- for a visitor it goes to /login, carrying
+ * the challenge along so the taunt shows there too and the stashed slug
+ * brings them back here after OAuth.
  */
 import React, {
   useCallback,
@@ -14,7 +20,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
@@ -26,8 +32,10 @@ import {
   completeDailyAttempt,
   fetchDailyLeaderboard,
   createDailyShareLink,
+  fetchChallenge,
 } from '../api/daily';
 import type {
+  ChallengeInfo,
   DailyRaceInfo,
   DailyLeaderboardEntry,
   DailyLeaderboardData,
@@ -36,9 +44,14 @@ import type {
   RaceSessionConfig,
   RaceCompletionInfo,
 } from '../racing/raceSessionConfig';
-import { RaceSessionPage } from './practice';
+import { RaceSessionPage } from './practice/PracticeEditor';
 import { SiteBanner } from '../components/SiteBanner';
-import { clearChallengeSlug } from '../lib/challengeRedirect';
+import { ChallengeTaunt } from '../components/ChallengeTaunt';
+import {
+  clearChallengeSlug,
+  isValidChallengeSlug,
+  stashChallengeSlug,
+} from '../lib/challengeRedirect';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +81,15 @@ function formatTime(ms: number): string {
 // ---------------------------------------------------------------------------
 // Styles (follows practice.tsx ready-screen vocabulary)
 // ---------------------------------------------------------------------------
+
+/**
+ * Height held open for the results-screen extras block, in pixels, so the
+ * summary card is exactly as tall while the attempt is being scored as it is
+ * once the placing arrives. Set a little above the loaded content — one row of
+ * attempt tiles (~95px), the action row (~55px), the back link (~26px) and the
+ * 28px gaps between them — so neither state ever resizes the card.
+ */
+const EXTRAS_RESERVED_HEIGHT = 248;
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
@@ -444,9 +466,22 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '28px',
     width: '100%',
     marginTop: '8px',
+    // Same height whether the placing has arrived or not — see
+    // EXTRAS_RESERVED_HEIGHT.
+    minHeight: `${EXTRAS_RESERVED_HEIGHT}px`,
+  },
+  // The spinner shown in that reserved space while the placing is in flight.
+  extrasSpinner: {
+    width: '36px',
+    height: '36px',
+    border: `3px solid ${colors.border}`,
+    borderTopColor: colors.primary,
+    borderRadius: '50%',
+    animation: 'spin 0.8s linear infinite',
   },
   attemptGrid: {
     display: 'grid',
@@ -566,10 +601,16 @@ const styles: Record<string, React.CSSProperties> = {
 export default function DailyRacePage() {
   const navigate = useNavigate();
   const { session, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  // Set when the visitor arrived via a share link. See the module comment.
+  const rawSlug = searchParams.get('challenge');
+  const challengeSlug = isValidChallengeSlug(rawSlug) ? rawSlug : null;
+  const [challenge, setChallenge] = useState<ChallengeInfo | null>(null);
   // Seed from the in-memory race cache (warmed by the home page) so arriving
   // here paints the pre-race screen immediately instead of flashing a spinner.
+  // The cache only ever holds a member's view, so a visitor never reads it.
   const [phase, setPhase] = useState<Phase>(() => {
-    const cached = getCachedDailyRace();
+    const cached = session ? getCachedDailyRace() : null;
     return cached ? { name: 'preRace', info: cached } : { name: 'loading' };
   });
   const [leaderboard, setLeaderboard] = useState<DailyLeaderboardData>({
@@ -583,26 +624,43 @@ export default function DailyRacePage() {
     phase.name === 'preRace' && phase.info.attemptsRemaining === 0
   );
 
-  // This page is the destination of the challenge-share journey; clear the
-  // stashed slug so it can't redirect future navigation in this tab.
+  // This page is the destination of the challenge-share journey. A member
+  // has arrived, so the stashed slug is cleared before it can redirect any
+  // later navigation in this tab. A visitor is only halfway: stash the slug
+  // (before anything async, since OAuth can redirect at any time) so login
+  // and onboarding bring them back here.
   useEffect(() => {
-    clearChallengeSlug();
-  }, []);
+    if (session) {
+      clearChallengeSlug();
+    } else if (challengeSlug) {
+      stashChallengeSlug(challengeSlug);
+    }
+  }, [session, challengeSlug]);
+
+  useEffect(() => {
+    if (!challengeSlug) return;
+    let cancelled = false;
+    void fetchChallenge(challengeSlug).then((info) => {
+      if (!cancelled) setChallenge(info);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [challengeSlug]);
 
   // ------- Fetch daily race info -------
 
   const loadInfo = useCallback(async () => {
-    if (!session?.access_token) return;
     // A cached race (from the home page, or from this page's own last load)
     // lands synchronously — no spinner. Mutations (starting or completing an
     // attempt) invalidate the cache, so a stale hit here can't happen.
-    const cached = getCachedDailyRace();
+    const cached = session ? getCachedDailyRace() : null;
     if (cached) {
       setPhase({ name: 'preRace', info: cached });
       return;
     }
     setPhase({ name: 'loading' });
-    const result = await fetchDailyRaceCached(session.access_token);
+    const result = await fetchDailyRaceCached(session?.access_token ?? null);
     if (result.status === 'ok') {
       setPhase({ name: 'preRace', info: result.info });
     } else {
@@ -622,10 +680,11 @@ export default function DailyRacePage() {
   // cache absorbs the repeat call when the phase flips to 'preRace'.
   useEffect(() => {
     if (phase.name !== 'preRace' && phase.name !== 'loading') return;
-    if (!session?.access_token) return;
-    void fetchDailyLeaderboard(session.access_token, undefined, 8).then(
-      setLeaderboard
-    );
+    void fetchDailyLeaderboard(
+      session?.access_token ?? null,
+      undefined,
+      8
+    ).then(setLeaderboard);
   }, [phase.name, session]);
 
   // ------- Start attempt handlers -------
@@ -668,10 +727,16 @@ export default function DailyRacePage() {
     [session, loadInfo]
   );
 
+  // Start is the sign-in gate for visitors. The challenge rides along so the
+  // login page can show the same taunt.
   const handleStart = useCallback(() => {
     if (phase.name !== 'preRace') return;
+    if (!session) {
+      navigate(challengeSlug ? `/login?challenge=${challengeSlug}` : '/login');
+      return;
+    }
     void beginAttempt(phase.info);
-  }, [phase, beginAttempt]);
+  }, [phase, session, challengeSlug, navigate, beginAttempt]);
 
   /**
    * Retry straight from the results screen. Re-reads the race info first so the
@@ -723,11 +788,13 @@ export default function DailyRacePage() {
       allowSameTasksReplay: false,
       renderCompletionExtras: (
         completionInfo: RaceCompletionInfo | null,
-        finalTimeMs: number
+        finalTimeMs: number,
+        isAwaitingCompletionInfo: boolean
       ) => {
         return (
           <DailyCompletionExtras
             completionInfo={completionInfo}
+            isAwaitingCompletionInfo={isAwaitingCompletionInfo}
             raceDate={info.raceDate}
             loadedAttempts={info.attempts}
             justFinished={{ attemptNumber, durationMs: finalTimeMs }}
@@ -769,6 +836,17 @@ export default function DailyRacePage() {
 
           {phase.name === 'error' && (
             <div style={styles.errorText}>{phase.message}</div>
+          )}
+
+          {challenge && phase.name !== 'loading' && (
+            <ChallengeTaunt
+              challenge={challenge}
+              callToAction={
+                session
+                  ? 'Put them in their place.'
+                  : 'Start an attempt and put them in their place.'
+              }
+            />
           )}
 
           {phase.name === 'preRace' && (
@@ -1142,6 +1220,7 @@ function finishedAttemptsIncluding(
  */
 export function DailyCompletionExtras({
   completionInfo,
+  isAwaitingCompletionInfo = false,
   raceDate,
   loadedAttempts,
   justFinished,
@@ -1149,6 +1228,8 @@ export function DailyCompletionExtras({
   onBackToLeaderboard,
 }: {
   completionInfo: RaceCompletionInfo | null;
+  /** True while the finished attempt is still being submitted for placing. */
+  isAwaitingCompletionInfo?: boolean;
   /** The date of the race that was just finished, for the share link. */
   raceDate: string;
   loadedAttempts: DailyRaceInfo['attempts'];
@@ -1156,6 +1237,22 @@ export function DailyCompletionExtras({
   onTryAgain: () => void;
   onBackToLeaderboard: () => void;
 }) {
+  // The placing decides how many attempt slots are left, so there is nothing
+  // real to draw until it lands. Spin in the reserved space rather than
+  // rendering an empty card that resizes when the response arrives.
+  if (isAwaitingCompletionInfo) {
+    return (
+      <div style={styles.extrasContainer}>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <div
+          style={styles.extrasSpinner}
+          role="status"
+          aria-label="Scoring your run"
+        />
+      </div>
+    );
+  }
+
   // A null completionInfo means completeDailyAttempt failed (network blip,
   // expired token). This overlay is the only UI on screen at that point, so
   // it must still render the local attempt times and an exit — only the

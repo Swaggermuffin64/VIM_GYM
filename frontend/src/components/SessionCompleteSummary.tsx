@@ -21,6 +21,7 @@ import { SummaryTaskSandbox } from './SummaryTaskSandbox';
 export function SessionCompleteSummary({
   config,
   completionInfo,
+  isAwaitingCompletionInfo = false,
   finalTimeMs,
   taskSummaries,
   onRestartSameTasks,
@@ -28,6 +29,8 @@ export function SessionCompleteSummary({
 }: {
   config: RaceSessionConfig;
   completionInfo: RaceCompletionInfo | null;
+  /** True while submitCompletion is still running, so completionInfo is not final. */
+  isAwaitingCompletionInfo?: boolean;
   finalTimeMs: number;
   taskSummaries: TaskSummary[];
   onRestartSameTasks: () => void;
@@ -161,7 +164,11 @@ export function SessionCompleteSummary({
             ))}
           </div>
         )}
-        {config.renderCompletionExtras?.(completionInfo, finalTimeMs)}
+        {config.renderCompletionExtras?.(
+          completionInfo,
+          finalTimeMs,
+          isAwaitingCompletionInfo
+        )}
         {config.showTaskBreakdown && (
           <div style={styles.completeButtons}>
             {config.allowSameTasksReplay && (

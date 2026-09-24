@@ -47,7 +47,7 @@ describe('GET /s/:slug', () => {
     expect(res.body).toContain(
       'Jackson finished the VIMGYM daily race in 61.3 seconds'
     );
-    expect(res.body).toContain('/login?challenge=a1B2c3D4e5');
+    expect(res.body).toContain('/daily?challenge=a1B2c3D4e5');
   });
 
   it('HTML-escapes a hostile display name', async () => {

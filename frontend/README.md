@@ -29,3 +29,33 @@ Create a `.env` file in the frontend directory:
 VITE_BACKEND_URL=http://localhost:3001
 VITE_MATCHMAKING_URL=ws://localhost:3002
 ```
+
+## Public pages and prerendering
+
+`/`, `/about`, `/practice`, `/multiplayer`, `/daily`, `/privacy` and
+`/terms` are public. Visitors see the same screens as members -- the home
+menu, the practice Ready screen, the multiplayer lobby, the daily pre-race
+screen -- and every button that would start a run or a race sends them to
+sign in instead. Daily share links land on `/daily?challenge=<slug>`, which
+shows the challenger's taunt; the Start button carries the slug to `/login`
+and the stashed slug brings the new member back to `/daily` afterwards. The per-route `<title>` and meta description are what
+give each page its own search identity; the screens' own text is the body.
+The branch is on session state, never on user-agent, which would be cloaking
+and is a Google spam policy violation.
+
+`scripts/prerender.mts` renders the public screens to static HTML at build
+time, in Node. Every other path (sign-in, daily, profile) is rewritten by
+`vercel.json` to the empty `app.html` shell; that rewrite must target `/app`,
+not `/app.html`, because `cleanUrls` strips the extension at build time and a
+`.html` destination 404s at the edge. **Anything reachable from `src/PublicApp.tsx` must render
+without a browser**: no CodeMirror, socket.io, Supabase, or `window` at module
+scope, or the build fails. The practice Ready screen lives inside the editor
+module, which imports CodeMirror, so `/practice` is listed in
+`HEAD_ONLY_ROUTES` and gets its metadata over an empty root; the client fills
+in the body. Google renders JavaScript, and link unfurlers only read `<head>`.
+
+Per-route titles and descriptions live in one place, `src/seo/routeMeta.ts`.
+Add a route there and it flows to the page metadata, the prerender, and
+sitemap.xml automatically. Titles and descriptions must be unique per route;
+`routeMeta.test.ts` enforces it, because identical metadata across pages is
+what caused Google to collapse our search results in the first place.

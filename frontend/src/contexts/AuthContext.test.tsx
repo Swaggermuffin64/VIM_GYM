@@ -256,3 +256,40 @@ describe('AuthProvider profile fetching', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+it('resolves immediately when no session token is stored', () => {
+  window.localStorage.clear();
+  getSession.mockResolvedValue({ data: { session: null } });
+  const seen: boolean[] = [];
+  function Probe() {
+    const { loading } = useAuth();
+    seen.push(loading);
+    return null;
+  }
+  render(
+    <AuthProvider>
+      <Probe />
+    </AuthProvider>
+  );
+  // Never shows the loading state at all for a logged-out visitor.
+  expect(seen[0]).toBe(false);
+  window.localStorage.clear();
+});
+
+it('starts in loading state when a session token is stored', () => {
+  window.localStorage.setItem('sb-abcdef-auth-token', '{"access_token":"x"}');
+  getSession.mockResolvedValue({ data: { session: null } });
+  const seen: boolean[] = [];
+  function Probe() {
+    const { loading } = useAuth();
+    seen.push(loading);
+    return null;
+  }
+  render(
+    <AuthProvider>
+      <Probe />
+    </AuthProvider>
+  );
+  expect(seen[0]).toBe(true);
+  window.localStorage.clear();
+});

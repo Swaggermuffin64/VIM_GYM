@@ -62,7 +62,7 @@ export type ShareLinkResult =
   | { status: 'ok'; url: string }
   | { status: 'error' };
 
-/** Public challenge info shown on the login taunt screen. */
+/** Public challenge info shown in the taunt banner on /daily and /login. */
 export interface ChallengeInfo {
   displayName: string;
   rank: number;
@@ -120,14 +120,16 @@ export function getCachedDailyRace(): DailyRaceInfo | null {
  * See getCachedDailyRace for the freshness rule.
  */
 export async function fetchDailyRaceCached(
-  accessToken: string
+  accessToken: string | null
 ): Promise<FetchDailyResult> {
   const cached = getCachedDailyRace();
   if (cached) {
     return { status: 'ok', info: cached };
   }
   const result = await fetchDailyRace(accessToken);
-  if (result.status === 'ok') cachedRace = result.info;
+  // Only a member's view is worth keeping: it carries their attempts, and
+  // a visitor's (no attempts) must never be served to them after sign-in.
+  if (result.status === 'ok' && accessToken) cachedRace = result.info;
   return result;
 }
 
@@ -143,17 +145,24 @@ export function invalidateDailyRaceCache(): void {
 // API functions
 // ---------------------------------------------------------------------------
 
+/** Bearer header when a token is present; visitors send none. */
+function authHeaders(accessToken: string | null | undefined): HeadersInit {
+  return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
+}
+
 /**
  * Fetch today's daily race info and the current user's attempts.
  * Maps the backend's snake_case keys to the camelCase DailyRaceInfo shape.
  * Always hits the network — see fetchDailyRaceCached for the display path.
+ * The endpoint is public: without a token it returns the race with no
+ * attempts, which is what a visitor landing from a share link sees.
  */
 export async function fetchDailyRace(
-  accessToken: string
+  accessToken: string | null
 ): Promise<FetchDailyResult> {
   try {
     const res = await fetch(`${API_BASE}/api/daily`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: authHeaders(accessToken),
     });
 
     const body = safeParseJson(await res.text());
@@ -331,7 +340,7 @@ export function invalidateDailyLeaderboardCache(): void {
  * from a 60-second in-memory cache. Error responses are not cached.
  */
 export async function fetchDailyLeaderboard(
-  accessToken: string,
+  accessToken: string | null,
   date?: string,
   limit?: number
 ): Promise<DailyLeaderboardData> {
@@ -353,7 +362,7 @@ export async function fetchDailyLeaderboard(
 
 /** Network fetch behind fetchDailyLeaderboard. Returns null on any error. */
 async function fetchDailyLeaderboardFromNetwork(
-  accessToken: string,
+  accessToken: string | null,
   date?: string,
   limit?: number
 ): Promise<DailyLeaderboardData | null> {
@@ -363,7 +372,7 @@ async function fetchDailyLeaderboardFromNetwork(
     if (limit !== undefined) params.set('limit', String(limit));
     const query = params.size > 0 ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/api/daily/leaderboard${query}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: authHeaders(accessToken),
     });
 
     const body = safeParseJson(await res.text());

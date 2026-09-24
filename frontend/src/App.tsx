@@ -1,13 +1,13 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/home';
 import PracticeEditor from './pages/practice';
-import MultiplayerGame from './pages/multiplayer';
+import MultiplayerPage from './pages/multiplayer';
 import About from './pages/about';
 import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfService from './pages/terms';
 import ProfilePage from './pages/profile';
-import DailyRacePage from './pages/daily';
+import DailyRoute from './pages/dailyRoute';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
 import './App.css';
@@ -24,10 +24,13 @@ import './App.css';
  * These files are gitignored, so this glob legitimately matches nothing in a
  * clean checkout; discovering them beats importing them by name, which would
  * break the build for anyone who doesn't have them. The whole block is
- * compiled out of production builds.
+ * compiled out of production builds. Previews are also skipped under vitest
+ * (import.meta.env.VITEST) — they are a dev-server affordance that tests
+ * should not mount, and their transitive imports (CodeMirror, etc.) would
+ * otherwise bloat the test worker.
  */
 const previewRoutes = Object.entries(
-  import.meta.env.DEV
+  import.meta.env.DEV && !import.meta.env.VITEST
     ? import.meta.glob<{ default: React.ComponentType }>(
         './pages/*.preview.tsx',
         { eager: true }
@@ -53,46 +56,16 @@ function App() {
         {/* Public legal pages — registered with Google OAuth, so no AuthGuard */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
-        <Route
-          path="/"
-          element={
-            <AuthGuard>
-              <HomePage />
-            </AuthGuard>
-          }
-        />
-        <Route
-          path="/about"
-          element={
-            <AuthGuard>
-              <About />
-            </AuthGuard>
-          }
-        />
-        <Route
-          path="/practice"
-          element={
-            <AuthGuard>
-              <PracticeEditor />
-            </AuthGuard>
-          }
-        />
-        <Route
-          path="/daily"
-          element={
-            <AuthGuard>
-              <DailyRacePage />
-            </AuthGuard>
-          }
-        />
-        <Route
-          path="/multiplayer"
-          element={
-            <AuthGuard>
-              <MultiplayerGame />
-            </AuthGuard>
-          }
-        />
+        {/* Public landing page; HomePage gates the signed-in menu itself. */}
+        <Route path="/" element={<HomePage />} />
+        {/* Public: indexable marketing copy, no session required. */}
+        <Route path="/about" element={<About />} />
+        {/* Public marketing view; the page gates the editor itself. */}
+        <Route path="/practice" element={<PracticeEditor />} />
+        {/* Public: share links land here; the page gates Start itself. */}
+        <Route path="/daily" element={<DailyRoute />} />
+        {/* Public marketing view; the page gates the game itself. */}
+        <Route path="/multiplayer" element={<MultiplayerPage />} />
         <Route
           path="/profile"
           element={
@@ -110,14 +83,7 @@ function App() {
           }
         />
         {/* Keep old route for backwards compatibility */}
-        <Route
-          path="/vim-editor"
-          element={
-            <AuthGuard>
-              <PracticeEditor />
-            </AuthGuard>
-          }
-        />
+        <Route path="/vim-editor" element={<PracticeEditor />} />
       </Routes>
     </Router>
   );

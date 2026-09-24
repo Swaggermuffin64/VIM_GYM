@@ -12,6 +12,11 @@ const CHALLENGE_SLUG_KEY = 'vimgym.challengeSlug';
 /** Only alphanumeric, exactly 10 characters. */
 const SLUG_PATTERN = /^[0-9A-Za-z]{10}$/;
 
+/** True for a well-formed share slug; anything else is ignored everywhere. */
+export function isValidChallengeSlug(slug: string | null): slug is string {
+  return slug !== null && SLUG_PATTERN.test(slug);
+}
+
 /**
  * Stash the challenge slug in sessionStorage so it survives the OAuth redirect.
  * Invalid slugs are silently ignored.

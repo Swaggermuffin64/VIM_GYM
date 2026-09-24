@@ -1,4 +1,19 @@
 {
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "vimgym.app" }],
+      "destination": "https://www.vimgym.app/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/app",
+      "destination": "/",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/s/:slug",
@@ -7,6 +22,10 @@
     {
       "source": "/s/:slug/og.png",
       "destination": "https://vim-racing-server.fly.dev/s/:slug/og.png"
+    },
+    {
+      "source": "/((?!s/|assets/|sitemap\\.xml|robots\\.txt|favicon|practice|multiplayer|about|daily|privacy|terms).*)",
+      "destination": "/app"
     }
   ]
 }

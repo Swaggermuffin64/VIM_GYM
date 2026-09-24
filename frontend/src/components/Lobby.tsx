@@ -16,6 +16,12 @@ interface LobbyProps {
   onCancelQuickMatch?: () => void;
   /** Retry the game-server handshake after it was refused (server full, etc). */
   onRetryConnection?: () => void;
+  /**
+   * Set when the visitor has no session. Every action that would start a game
+   * calls this instead (the route sends them to sign in) and buttons stay
+   * enabled even though there is no player name yet.
+   */
+  onSignInRequired?: () => void;
 }
 
 const colors = {
@@ -92,7 +98,7 @@ const styles: Record<string, React.CSSProperties> = {
     pointerEvents: 'none' as const,
   },
   container: {
-    maxWidth: '480px',
+    maxWidth: '560px',
     margin: '0 auto',
     padding: '64px 32px',
     position: 'relative' as const,
@@ -103,7 +109,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '48px',
   },
   title: {
-    fontSize: '42px',
+    fontSize: '52px',
     fontWeight: 800,
     color: colors.textPrimary,
     marginBottom: '12px',
@@ -111,7 +117,7 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '-1px',
   },
   subtitle: {
-    fontSize: '16px',
+    fontSize: '19px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
@@ -130,39 +136,10 @@ const styles: Record<string, React.CSSProperties> = {
     height: '8px',
     borderRadius: '50%',
   },
-  card: {
-    background: `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '16px',
-    padding: '28px',
-    marginBottom: '20px',
-  },
-  cardTitle: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: colors.textMuted,
-    marginBottom: '16px',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '1.5px',
-  },
-  input: {
-    width: '100%',
-    padding: '14px 18px',
-    fontSize: '16px',
-    fontFamily: '"JetBrains Mono", monospace',
-    background: colors.bgDark,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
-    color: colors.textPrimary,
-    marginBottom: '0',
-    boxSizing: 'border-box' as const,
-    outline: 'none',
-    transition: 'border-color 0.2s ease',
-  },
   button: {
     width: '100%',
-    padding: '16px 24px',
-    fontSize: '15px',
+    padding: '20px 28px',
+    fontSize: '18px',
     fontWeight: 600,
     color: colors.bgDark,
     background: colors.accent,
@@ -219,19 +196,50 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
   },
+  // Back is navigation, not an action: plain text so it never competes with
+  // the real choices above it.
   backButton: {
-    width: '100%',
-    padding: '14px 24px',
-    fontSize: '14px',
+    display: 'block',
+    margin: '28px auto 0',
+    padding: '8px 12px',
+    fontSize: '16px',
     fontWeight: 500,
     background: 'transparent',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '10px',
+    border: 'none',
     color: colors.textMuted,
     cursor: 'pointer',
     fontFamily: '"JetBrains Mono", monospace',
-    transition: 'all 0.2s ease',
-    marginTop: '12px',
+    transition: 'color 0.2s ease',
+  },
+  joinRow: {
+    display: 'flex',
+    gap: '12px',
+    alignItems: 'stretch',
+  },
+  joinInput: {
+    flex: 1,
+    minWidth: 0,
+    padding: '16px 20px',
+    fontSize: '18px',
+    fontFamily: '"JetBrains Mono", monospace',
+    background: colors.bgDark,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '10px',
+    color: colors.textPrimary,
+    boxSizing: 'border-box' as const,
+    outline: 'none',
+    transition: 'border-color 0.2s ease',
+  },
+  joinButton: {
+    width: 'auto',
+    flexShrink: 0,
+    padding: '0 32px',
+  },
+  roomCodeError: {
+    color: colors.error,
+    fontSize: '14px',
+    marginTop: '10px',
+    textAlign: 'left' as const,
   },
   playerBadge: {
     display: 'inline-block',
@@ -251,7 +259,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '12px',
   },
   quickPlayStatusText: {
-    fontSize: '14px',
+    fontSize: '17px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
@@ -266,7 +274,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   optionToggleLabel: {
     color: colors.textSecondary,
-    fontSize: '13px',
+    fontSize: '16px',
     fontWeight: 600,
     fontFamily: '"JetBrains Mono", monospace',
     letterSpacing: '0.3px',
@@ -274,8 +282,8 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   optionToggleCheckbox: {
-    width: '16px',
-    height: '16px',
+    width: '20px',
+    height: '20px',
     margin: 0,
     cursor: 'pointer',
     borderRadius: '4px',
@@ -315,15 +323,11 @@ export const Lobby: React.FC<LobbyProps> = ({
   onQuickMatch,
   onCancelQuickMatch,
   onRetryConnection,
+  onSignInRequired,
 }) => {
   const navigate = useNavigate();
   const [roomCode, setRoomCode] = useState('');
   const [roomCodeError, setRoomCodeError] = useState<string | null>(null);
-
-  // For private mode, track if we're joining (create is immediate)
-  const [privateSubMode, setPrivateSubMode] = useState<'select' | 'join'>(
-    'select'
-  );
 
   // Show a friendly nudge after waiting 10+ seconds in quick match
   const [showLongWaitMessage, setShowLongWaitMessage] = useState(false);
@@ -341,6 +345,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   }, [isQuickMatchWaiting]);
 
   const handleCreate = () => {
+    if (onSignInRequired) return onSignInRequired();
     if (playerName.trim()) {
       onCreateRoom(playerName.trim());
     }
@@ -356,6 +361,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   };
 
   const handleJoin = () => {
+    if (onSignInRequired) return onSignInRequired();
     const trimmed = roomCode.trim();
     if (!playerName.trim() || !trimmed) return;
     if (!isValidRoomCode(trimmed)) {
@@ -367,13 +373,21 @@ export const Lobby: React.FC<LobbyProps> = ({
   };
 
   const handleQuickMatch = () => {
+    if (onSignInRequired) return onSignInRequired();
     if (playerName.trim()) {
       onQuickMatch(playerName.trim());
     }
   };
 
   const isLoading = isConnecting;
-  const canInteract = isConnected;
+  const canInteract = isConnected || onSignInRequired !== undefined;
+  const hasPlayerName =
+    playerName.trim() !== '' || onSignInRequired !== undefined;
+  const joinDisabled =
+    !canInteract ||
+    !hasPlayerName ||
+    isLoading ||
+    (roomCode.trim() === '' && onSignInRequired === undefined);
 
   // The server refused the handshake and Socket.IO will not retry it, so the
   // status must not keep claiming we are connecting.
@@ -399,7 +413,7 @@ export const Lobby: React.FC<LobbyProps> = ({
   };
 
   const getSubtitle = () => {
-    if (initialMode === 'quick') return 'Find an opponent instantly';
+    if (initialMode === 'quick') return 'Race a random opponent in VIM';
     if (initialMode === 'private') return 'Play with friends using a room code';
     return 'Race your friends with Vim motions';
   };
@@ -468,7 +482,7 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.container}>
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
-              <p style={styles.subtitle}>{getSubtitle()}</p>
+              {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
 
               <div style={styles.connectionStatus}>
                 <div
@@ -580,38 +594,41 @@ export const Lobby: React.FC<LobbyProps> = ({
               </div>
             ) : (
               <>
-                <label style={styles.optionToggleRow}>
-                  <span style={styles.optionToggleLabel}>
-                    Start with Relative Line Numbers
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Toggle relative line numbers"
-                    aria-pressed={relativeLineNumbersEnabled}
-                    onClick={() =>
-                      onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
-                    }
-                    style={{
-                      ...styles.optionToggleCheckbox,
-                      ...(relativeLineNumbersEnabled
-                        ? styles.optionToggleCheckboxChecked
-                        : {}),
-                    }}
-                  >
-                    ✓
-                  </button>
-                </label>
+                {/* The setting only matters once a race can start; visitors have no race. */}
+                {!onSignInRequired && (
+                  <label style={styles.optionToggleRow}>
+                    <span style={styles.optionToggleLabel}>
+                      Start with Relative Line Numbers
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Toggle relative line numbers"
+                      aria-pressed={relativeLineNumbersEnabled}
+                      onClick={() =>
+                        onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
+                      }
+                      style={{
+                        ...styles.optionToggleCheckbox,
+                        ...(relativeLineNumbersEnabled
+                          ? styles.optionToggleCheckboxChecked
+                          : {}),
+                      }}
+                    >
+                      ✓
+                    </button>
+                  </label>
+                )}
 
                 <button
                   style={{
                     ...styles.button,
                     background: `linear-gradient(135deg, ${colors.success} 0%, #059669 100%)`,
-                    ...(!canInteract || !playerName.trim()
+                    ...(!canInteract || !hasPlayerName
                       ? styles.buttonDisabled
                       : {}),
                   }}
                   onClick={handleQuickMatch}
-                  disabled={!canInteract || !playerName.trim()}
+                  disabled={!canInteract || !hasPlayerName}
                 >
                   Find Match
                 </button>
@@ -646,7 +663,7 @@ export const Lobby: React.FC<LobbyProps> = ({
           <div style={styles.container}>
             <div style={styles.header}>
               <h1 style={styles.title}>{getTitle()}</h1>
-              <p style={styles.subtitle}>{getSubtitle()}</p>
+              {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
 
               <div style={styles.connectionStatus}>
                 <div
@@ -664,107 +681,85 @@ export const Lobby: React.FC<LobbyProps> = ({
 
             {errorBanner}
 
-            <label style={styles.optionToggleRow}>
-              <span style={styles.optionToggleLabel}>
-                Start with Relative Line Numbers
-              </span>
-              <button
-                type="button"
-                aria-label="Toggle relative line numbers"
-                aria-pressed={relativeLineNumbersEnabled}
-                onClick={() =>
-                  onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
-                }
-                style={{
-                  ...styles.optionToggleCheckbox,
-                  ...(relativeLineNumbersEnabled
-                    ? styles.optionToggleCheckboxChecked
-                    : {}),
-                }}
-              >
-                ✓
-              </button>
-            </label>
-
-            {/* Create or Join buttons */}
-            {privateSubMode === 'select' && (
-              <>
+            {/* The setting only matters once a race can start; visitors have no race. */}
+            {!onSignInRequired && (
+              <label style={styles.optionToggleRow}>
+                <span style={styles.optionToggleLabel}>
+                  Start with Relative Line Numbers
+                </span>
                 <button
+                  type="button"
+                  aria-label="Toggle relative line numbers"
+                  aria-pressed={relativeLineNumbersEnabled}
+                  onClick={() =>
+                    onRelativeLineNumbersChange(!relativeLineNumbersEnabled)
+                  }
                   style={{
-                    ...styles.button,
-                    marginBottom: '12px',
-                    ...(!canInteract || !playerName.trim() || isLoading
-                      ? styles.buttonDisabled
+                    ...styles.optionToggleCheckbox,
+                    ...(relativeLineNumbersEnabled
+                      ? styles.optionToggleCheckboxChecked
                       : {}),
                   }}
-                  onClick={handleCreate}
-                  disabled={!canInteract || !playerName.trim() || isLoading}
                 >
-                  {isLoading ? 'Creating...' : 'Create Room'}
+                  ✓
                 </button>
-                <button
-                  style={{
-                    ...styles.button,
-                    ...styles.buttonOutline,
-                    ...(!canInteract || !playerName.trim() || isLoading
-                      ? styles.buttonDisabled
-                      : {}),
-                  }}
-                  onClick={() => playerName.trim() && setPrivateSubMode('join')}
-                  disabled={!canInteract || !playerName.trim() || isLoading}
-                >
-                  Join Room
-                </button>
-              </>
+              </label>
             )}
 
-            {/* Join Room */}
-            {privateSubMode === 'join' && (
-              <>
-                <div style={{ ...styles.card, marginBottom: '16px' }}>
-                  <div style={styles.cardTitle}>Room Code</div>
-                  <input
-                    type="text"
-                    placeholder="Paste room ID here..."
-                    value={roomCode}
-                    onChange={(e) => handleRoomCodeChange(e.target.value)}
-                    style={styles.input}
-                    maxLength={20}
-                  />
-                  {roomCodeError && (
-                    <div
-                      style={{
-                        color: colors.error,
-                        fontSize: '12px',
-                        marginTop: '6px',
-                      }}
-                    >
-                      {roomCodeError}
-                    </div>
-                  )}
-                </div>
-                <button
-                  style={{
-                    ...styles.button,
-                    ...(!roomCode.trim() || isLoading
-                      ? styles.buttonDisabled
-                      : {}),
-                  }}
-                  onClick={handleJoin}
-                  disabled={!canInteract || !roomCode.trim() || isLoading}
-                >
-                  {isLoading ? 'Joining...' : 'Join Room'}
-                </button>
-              </>
+            {/* Create is the primary action; joining is a code field beside
+                an outline button, so the two read as different things. */}
+            <button
+              style={{
+                ...styles.button,
+                ...(!canInteract || !hasPlayerName || isLoading
+                  ? styles.buttonDisabled
+                  : {}),
+              }}
+              onClick={handleCreate}
+              disabled={!canInteract || !hasPlayerName || isLoading}
+            >
+              {isLoading ? 'Creating...' : 'Create a room'}
+            </button>
+
+            <div style={styles.divider}>
+              <div style={styles.dividerLine} />
+              <span style={styles.dividerText}>or join one</span>
+              <div style={styles.dividerLine} />
+            </div>
+
+            <div style={styles.joinRow}>
+              <input
+                type="text"
+                aria-label="Room code"
+                placeholder="Room code"
+                value={roomCode}
+                onChange={(e) => handleRoomCodeChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleJoin();
+                }}
+                style={styles.joinInput}
+                maxLength={20}
+              />
+              <button
+                style={{
+                  ...styles.button,
+                  ...styles.buttonOutline,
+                  ...styles.joinButton,
+                  ...(joinDisabled ? styles.buttonDisabled : {}),
+                }}
+                onClick={handleJoin}
+                disabled={joinDisabled}
+              >
+                {isLoading ? 'Joining...' : 'Join'}
+              </button>
+            </div>
+            {roomCodeError && (
+              <div style={styles.roomCodeError}>{roomCodeError}</div>
             )}
 
             <button
               style={styles.backButton}
-              onClick={
-                privateSubMode === 'select'
-                  ? handleBack
-                  : () => setPrivateSubMode('select')
-              }
+              onClick={handleBack}
               disabled={isLoading}
             >
               ← Back
@@ -787,7 +782,7 @@ export const Lobby: React.FC<LobbyProps> = ({
         <div style={styles.container}>
           <div style={styles.header}>
             <h1 style={styles.title}>{getTitle()}</h1>
-            <p style={styles.subtitle}>{getSubtitle()}</p>
+            {getSubtitle() && <p style={styles.subtitle}>{getSubtitle()}</p>}
           </div>
           <button style={styles.backButton} onClick={handleBack}>
             ← Back to Home

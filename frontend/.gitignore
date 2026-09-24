@@ -10,6 +10,7 @@
 
 # production
 /build
+/build-ssr
 
 # scratch preview screens — auto-mounted at /preview/<name> in dev by App.tsx,
 # kept local so throwaway layout experiments never reach the repo

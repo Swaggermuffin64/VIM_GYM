@@ -8,7 +8,7 @@ import { cleanup, render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 
-const AUTH = {
+const AUTH: { session: Session | null; [k: string]: unknown } = {
   session: { access_token: 'tok' } as Session,
   user: { id: 'me-123' } as { id: string },
   profile: null,
@@ -162,5 +162,36 @@ describe('HomePage', () => {
     });
     expect(screen.getByText(/New race in/)).toBeTruthy();
     expect(screen.getByText(/^\d{2}:\d{2}:\d{2}$/)).toBeTruthy();
+  });
+});
+
+// The same menu serves visitors; only the daily panel and a short
+// description change. Nothing here may fetch with a token it does not have.
+describe('HomePage for a visitor with no session', () => {
+  beforeEach(() => {
+    AUTH.session = null;
+  });
+  afterEach(() => {
+    AUTH.session = { access_token: 'tok' } as Session;
+  });
+
+  it('shows the full menu; the daily link goes to /daily and the guard does the redirect', async () => {
+    await act(async () => {
+      renderHome();
+    });
+    expect(screen.getByText('Quick Play')).toBeTruthy();
+    expect(screen.getByText('Practice')).toBeTruthy();
+    expect(
+      screen.getByText('Race now').closest('a')?.getAttribute('href')
+    ).toBe('/daily');
+    expect(mockFetchDailyRace).not.toHaveBeenCalled();
+  });
+
+  it('sets the home page metadata', async () => {
+    const { ROUTE_META } = await import('../seo/routeMeta');
+    await act(async () => {
+      renderHome();
+    });
+    expect(document.title).toBe(ROUTE_META['/'].title);
   });
 });

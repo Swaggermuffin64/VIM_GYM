@@ -411,9 +411,8 @@ export const Lobby: React.FC<LobbyProps> = ({
     return 'Multiplayer';
   };
 
-  // Quick Play has no subtitle: the title says it all.
   const getSubtitle = () => {
-    if (initialMode === 'quick') return null;
+    if (initialMode === 'quick') return 'Race a random opponent in VIM';
     if (initialMode === 'private') return 'Play with friends using a room code';
     return 'Race your friends with Vim motions';
   };

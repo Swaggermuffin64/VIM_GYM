@@ -101,7 +101,7 @@ const styles: Record<string, React.CSSProperties> = {
     pointerEvents: 'none' as const,
   },
   container: {
-    maxWidth: '480px',
+    maxWidth: '560px',
     margin: '0 auto',
     padding: '64px 32px',
     position: 'relative' as const,
@@ -112,7 +112,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '48px',
   },
   title: {
-    fontSize: '42px',
+    fontSize: '52px',
     fontWeight: 800,
     color: colors.textPrimary,
     marginBottom: '12px',
@@ -120,16 +120,16 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '-1px',
   },
   subtitle: {
-    fontSize: '16px',
+    fontSize: '19px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
   description: {
-    fontSize: '17px',
+    fontSize: '20px',
     color: colors.textPrimary,
     fontFamily: '"JetBrains Mono", monospace',
     lineHeight: 1.7,
-    maxWidth: '480px',
+    maxWidth: '560px',
     margin: '16px auto 0',
   },
   connectionStatus: {
@@ -164,8 +164,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   input: {
     width: '100%',
-    padding: '14px 18px',
-    fontSize: '16px',
+    padding: '16px 20px',
+    fontSize: '18px',
     fontFamily: '"JetBrains Mono", monospace',
     background: colors.bgDark,
     border: `1px solid ${colors.border}`,
@@ -178,8 +178,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   button: {
     width: '100%',
-    padding: '16px 24px',
-    fontSize: '15px',
+    padding: '20px 28px',
+    fontSize: '18px',
     fontWeight: 600,
     color: colors.bgDark,
     background: colors.accent,
@@ -238,8 +238,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   backButton: {
     width: '100%',
-    padding: '14px 24px',
-    fontSize: '14px',
+    padding: '16px 28px',
+    fontSize: '16px',
     fontWeight: 500,
     background: 'transparent',
     border: `1px solid ${colors.border}`,
@@ -268,7 +268,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: '12px',
   },
   quickPlayStatusText: {
-    fontSize: '14px',
+    fontSize: '17px',
     color: colors.textSecondary,
     fontFamily: '"JetBrains Mono", monospace',
   },
@@ -283,7 +283,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   optionToggleLabel: {
     color: colors.textSecondary,
-    fontSize: '13px',
+    fontSize: '16px',
     fontWeight: 600,
     fontFamily: '"JetBrains Mono", monospace',
     letterSpacing: '0.3px',
@@ -291,8 +291,8 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
   },
   optionToggleCheckbox: {
-    width: '16px',
-    height: '16px',
+    width: '20px',
+    height: '20px',
     margin: 0,
     cursor: 'pointer',
     borderRadius: '4px',

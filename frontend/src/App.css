@@ -107,3 +107,16 @@ code {
     transform: rotate(360deg);
   }
 }
+
+/* BrandedLoading spinner (see components/BrandedLoading.tsx) */
+@keyframes branded-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branded-loading-spinner {
+    animation: none !important;
+  }
+}

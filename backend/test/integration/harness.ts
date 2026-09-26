@@ -8,6 +8,7 @@
  * can run in parallel without colliding.
  */
 import { execSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -68,13 +69,15 @@ export interface TestDatabase {
 }
 
 export async function startTestDatabase(): Promise<TestDatabase> {
-  const port = 55500 + Math.floor(Math.random() * 400);
-  const containerName = `vimracing-it-${port}`;
+  const containerName = `vimracing-it-${randomBytes(4).toString('hex')}`;
+  // Let Docker choose a free host port. Guessing one ourselves collided with
+  // the OS's ephemeral range on CI runners ("address already in use").
   execSync(
-    `docker run --rm -d --name ${containerName} -e POSTGRES_PASSWORD=t -p ${port}:5432 postgres:16`,
+    `docker run --rm -d --name ${containerName} -e POSTGRES_PASSWORD=t -p 127.0.0.1::5432 postgres:16`,
     { stdio: 'pipe' }
   );
-  const url = `postgres://postgres:t@localhost:${port}/postgres`;
+  const port = publishedHostPort(containerName);
+  const url = `postgres://postgres:t@127.0.0.1:${port}/postgres`;
 
   const client = await waitForReady(url, containerName);
 
@@ -97,6 +100,22 @@ export async function startTestDatabase(): Promise<TestDatabase> {
       execSync(`docker stop ${containerName}`, { stdio: 'pipe' });
     },
   };
+}
+
+/** Ask Docker which host port it bound to the container's Postgres port. */
+function publishedHostPort(containerName: string): number {
+  const mapping = execSync(`docker port ${containerName} 5432/tcp`, {
+    stdio: 'pipe',
+  })
+    .toString()
+    .trim();
+  // e.g. "127.0.0.1:55123" (one line per address family; take the first).
+  const port = Number(mapping.split('\n')[0]?.split(':').pop());
+  if (!Number.isInteger(port) || port <= 0) {
+    execSync(`docker stop ${containerName}`, { stdio: 'pipe' });
+    throw new Error(`Could not read published port from "${mapping}"`);
+  }
+  return port;
 }
 
 function readMigration(name: string): string {

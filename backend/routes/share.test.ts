@@ -170,6 +170,12 @@ describe('GET /s/:slug og:image tags', () => {
     expect(res.body).toContain('og:image:width" content="1200"');
     expect(res.body).toContain('og:image:height" content="630"');
     expect(res.body).toContain('summary_large_image');
+    // Slack reads the Twitter card set ahead of Open Graph; an incomplete
+    // set (card + image but no title/description) drops to the thumbnail
+    // layout, so the card must be complete.
+    expect(res.body).toContain('twitter:title" content="Jackson finished');
+    expect(res.body).toContain('twitter:description" content="They think');
+    expect(res.body).toContain('og:image:alt" content="Jackson finished');
     expect(res.body).toContain('twitter:image:width" content="1200"');
     expect(res.body).toContain('twitter:image:height" content="630"');
     expect(res.body).toContain('name="description"');

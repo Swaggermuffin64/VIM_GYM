@@ -16,3 +16,11 @@ describe('BrandedLoading', () => {
     expect(screen.getByRole('status')).toBeDefined();
   });
 });
+
+describe('BrandedLoading spinner', () => {
+  it('shows a spinning ring that is hidden from assistive tech', () => {
+    render(<BrandedLoading />);
+    const ring = screen.getByTestId('branded-loading-spinner');
+    expect(ring.getAttribute('aria-hidden')).toBe('true');
+  });
+});

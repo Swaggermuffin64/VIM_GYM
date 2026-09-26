@@ -17,7 +17,7 @@ import {
   incrementShareLinkClicks,
   queryDailyPlacing,
 } from '../db/daily.js';
-import { SHARE_LINK_BASE_URL } from '../config.js';
+import { SHARE_CANONICAL_ORIGIN, SHARE_LINK_BASE_URL } from '../config.js';
 import { buildShareCardSvg, renderShareCardPng } from '../share/ogImage.js';
 import { isKnownCrawler } from '../share/crawlerDetection.js';
 
@@ -122,7 +122,10 @@ export async function registerShareRoutes(
       // Land on the race itself; /daily is public and shows the taunt, and
       // its Start button is what sends a visitor to sign in.
       const target = `${SHARE_LINK_BASE_URL}/daily?challenge=${slug}`;
-      const imageUrl = `${SHARE_LINK_BASE_URL}/s/${slug}/og.png`;
+      // Crawlers must reach the card image without a redirect, or Slack
+      // drops to its thumbnail layout; see SHARE_CANONICAL_ORIGIN.
+      const canonicalUrl = `${SHARE_CANONICAL_ORIGIN}/s/${slug}`;
+      const imageUrl = `${SHARE_CANONICAL_ORIGIN}/s/${slug}/og.png`;
 
       const html = `<!doctype html>
 <html lang="en">
@@ -133,14 +136,18 @@ export async function registerShareRoutes(
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:type" content="website">
-<meta property="og:url" content="${escapeHtml(`${SHARE_LINK_BASE_URL}/s/${slug}`)}">
+<meta property="og:url" content="${escapeHtml(canonicalUrl)}">
 <meta property="og:site_name" content="VIMGYM">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="${escapeHtml(imageUrl)}">
+<meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${escapeHtml(imageUrl)}">
+<meta name="twitter:image:width" content="1200">
+<meta name="twitter:image:height" content="630">
 <meta http-equiv="refresh" content="0;url=${escapeHtml(target)}">
 </head>
 <body>

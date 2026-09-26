@@ -132,6 +132,9 @@ beforeAll(async () => {
     cwd: BACKEND_DIR,
     env: {
       ...process.env,
+      // Set PORT as well: a developer dotfile PORT would otherwise outrank
+      // BACKEND_PORT and the server would bind the dev port instead.
+      PORT: String(backendPort),
       BACKEND_PORT: String(backendPort),
       DATABASE_URL: db.url,
       SUPABASE_JWT_SECRET: TEST_JWT_SECRET,

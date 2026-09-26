@@ -98,3 +98,13 @@ export const DAILY_EAGER_CREATE = process.env.DAILY_EAGER_CREATE === 'true';
  */
 export const SHARE_LINK_BASE_URL =
   process.env.SHARE_LINK_BASE_URL?.trim() || 'https://vimgym.app';
+
+/**
+ * Origin that serves share pages and card images with no redirect hop.
+ * The apex `vimgym.app` 307s to `www`, and link-unfurl crawlers (Slack in
+ * particular) fall back to a small thumbnail when the og:image URL does not
+ * answer directly. og:url and og:image are minted under this origin; the
+ * short links people copy stay on SHARE_LINK_BASE_URL.
+ */
+export const SHARE_CANONICAL_ORIGIN =
+  process.env.SHARE_CANONICAL_ORIGIN?.trim() || 'https://www.vimgym.app';

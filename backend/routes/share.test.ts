@@ -163,12 +163,45 @@ describe('GET /s/:slug og:image tags', () => {
     const app = await buildServer();
     const res = await app.inject({ method: 'GET', url: '/s/a1B2c3D4e5' });
 
-    expect(res.body).toContain('/s/a1B2c3D4e5/og.png');
+    expect(res.body).toContain(
+      'og:image" content="https://www.vimgym.app/s/a1B2c3D4e5/og.png"'
+    );
+    expect(res.body).toContain('og:image:type" content="image/png"');
     expect(res.body).toContain('og:image:width" content="1200"');
     expect(res.body).toContain('og:image:height" content="630"');
     expect(res.body).toContain('summary_large_image');
+    expect(res.body).toContain('twitter:image:width" content="1200"');
+    expect(res.body).toContain('twitter:image:height" content="630"');
     expect(res.body).toContain('name="description"');
     expect(res.body).toContain('og:locale');
+  });
+
+  it('mints og:url and og:image on the redirect-free canonical origin', async () => {
+    vi.mocked(daily.getShareInfo).mockResolvedValue({
+      userId: 'u1',
+      displayName: 'Jackson',
+      raceDate: '2026-08-16',
+    });
+    vi.mocked(daily.queryDailyPlacing).mockResolvedValue({
+      rank: 4,
+      totalRacers: 212,
+      bestMs: 61_300,
+    });
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/s/a1B2c3D4e5' });
+
+    // The apex short link 307s to www; crawlers must not hit that hop when
+    // fetching the card image or Slack renders only a cropped thumbnail.
+    expect(res.body).toContain(
+      'og:url" content="https://www.vimgym.app/s/a1B2c3D4e5"'
+    );
+    expect(res.body).not.toContain(
+      'content="https://vimgym.app/s/a1B2c3D4e5/og.png"'
+    );
+    // Humans still land on the short-link origin.
+    expect(res.body).toContain(
+      'url=https://vimgym.app/daily?challenge=a1B2c3D4e5'
+    );
   });
 });
 

@@ -96,8 +96,10 @@ export const DAILY_EAGER_CREATE = process.env.DAILY_EAGER_CREATE === 'true';
  * `/s/*` from this origin to the backend's share endpoint, so the links look
  * like they belong to the main app domain.
  */
-export const SHARE_LINK_BASE_URL =
-  process.env.SHARE_LINK_BASE_URL?.trim() || 'https://vimgym.app';
+export const SHARE_LINK_BASE_URL = originFromEnv(
+  process.env.SHARE_LINK_BASE_URL,
+  'https://vimgym.app'
+);
 
 /**
  * Origin that serves share pages and card images with no redirect hop.
@@ -106,5 +108,19 @@ export const SHARE_LINK_BASE_URL =
  * answer directly. og:url and og:image are minted under this origin; the
  * short links people copy stay on SHARE_LINK_BASE_URL.
  */
-export const SHARE_CANONICAL_ORIGIN =
-  process.env.SHARE_CANONICAL_ORIGIN?.trim() || 'https://www.vimgym.app';
+export const SHARE_CANONICAL_ORIGIN = originFromEnv(
+  process.env.SHARE_CANONICAL_ORIGIN,
+  'https://www.vimgym.app'
+);
+
+/**
+ * Read an origin from an env var, falling back to `fallback` when unset or
+ * blank. Trailing slashes are stripped so callers can append `/s/<slug>`
+ * without producing `//s/...`, which the Vercel `/s/*` rewrite would miss.
+ */
+export function originFromEnv(
+  value: string | undefined,
+  fallback: string
+): string {
+  return (value?.trim() || fallback).replace(/\/+$/, '');
+}

@@ -144,8 +144,12 @@ export async function registerShareRoutes(
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${escapeHtml(title)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(description)}">
 <meta name="twitter:image" content="${escapeHtml(imageUrl)}">
+<meta name="twitter:image:alt" content="${escapeHtml(title)}">
 <meta name="twitter:image:width" content="1200">
 <meta name="twitter:image:height" content="630">
 <meta http-equiv="refresh" content="0;url=${escapeHtml(target)}">

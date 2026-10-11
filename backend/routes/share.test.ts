@@ -45,7 +45,10 @@ describe('GET /s/:slug', () => {
     expect(res.headers['content-type']).toContain('text/html');
     expect(res.body).toContain('og:title');
     expect(res.body).toContain(
-      'Jackson finished the VIMGYM daily race in 61.3 seconds'
+      'Jackson finished the VIM GYM daily race in 61.3 seconds'
+    );
+    expect(res.body).toContain(
+      '<meta property="og:site_name" content="VIM GYM">'
     );
     expect(res.body).toContain('/daily?challenge=a1B2c3D4e5');
   });

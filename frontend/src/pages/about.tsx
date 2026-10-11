@@ -184,14 +184,14 @@ function About() {
         <div style={styles.content}>
           <h1 style={styles.pageHeading}>{ROUTE_META['/about'].title}</h1>
 
-          {/* What Is VIM_GYM */}
+          {/* What Is VIM GYM */}
           <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>What is VIM_GYM?</h2>
+            <h2 style={styles.sectionTitle}>What is VIM GYM?</h2>
             <p style={styles.sectionText}>
-              Sharpen your Vim motions by racing yourself or others! VIM_GYM is
+              Sharpen your Vim motions by racing yourself or others! VIM GYM is
               an game designed for developers to learn + speed up their Vim
               editing skills. Whether you&apos;re a beginner learning the basics
-              or an experienced user looking to push your speed, VIM_GYM tests
+              or an experienced user looking to push your speed, VIM GYM tests
               your navigation, editing, and deletion ability in code
               environments.
             </p>
@@ -219,7 +219,7 @@ function About() {
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>Future</h2>
             <p style={styles.sectionText}>
-              VIM_GYM is actively being developed. Here&apos;s what&apos;s on
+              VIM GYM is actively being developed. Here&apos;s what&apos;s on
               the roadmap:
             </p>
             <div style={styles.roadmap}>
@@ -274,7 +274,7 @@ function About() {
           <div style={styles.section}>
             <h2 style={styles.sectionTitle}>Support</h2>
             <p style={styles.sectionText}>
-              VIM_GYM is free and will always stay free. But as the project
+              VIM GYM is free and will always stay free. But as the project
               grows, so will the cost of servers. I&apos;m looking into many
               ways to sustain it and donations were the fastest and simplest.
             </p>
@@ -298,7 +298,7 @@ function About() {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                Support VIM_GYM
+                Support VIM GYM
               </a>
             </div>
           </div>

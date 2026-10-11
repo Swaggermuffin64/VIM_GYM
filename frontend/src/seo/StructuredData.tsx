@@ -2,6 +2,8 @@ import {
   CANONICAL_ORIGIN,
   PUBLIC_ROUTES,
   ROUTE_META,
+  SITE_NAME,
+  SITE_NAME_ALTERNATES,
   canonicalUrl,
 } from './routeMeta';
 
@@ -19,7 +21,8 @@ export function StructuredData() {
       '@type': 'WebSite',
       '@id': `${CANONICAL_ORIGIN}/#website`,
       url: CANONICAL_ORIGIN,
-      name: 'VIM_GYM',
+      name: SITE_NAME,
+      alternateName: [...SITE_NAME_ALTERNATES],
       description: ROUTE_META['/'].description,
     },
     ...PUBLIC_ROUTES.map((route) => ({

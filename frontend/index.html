@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon/favicon.ico" />
+    <!-- Google Search picks the site logo from these; it needs a square icon in a multiple of 48px. -->
+    <link rel="icon" href="/vimgym-favicon/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/vimgym-favicon/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/vimgym-favicon/favicon-96.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/vimgym-favicon/favicon-48.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#000000" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -11,9 +15,9 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&display=optional"
     />
-    <link rel="apple-touch-icon" href="/favicon/favicon.ico" />
+    <link rel="apple-touch-icon" href="/vimgym-favicon/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
-    <title>VIM_GYM</title>
+    <title>VIM GYM</title>
     <!-- Inline critical CSS: hides the mobile overlay before index.css (loaded via JS module import) can apply, avoiding a flash of its content on first paint. -->
     <style>
       #mobile-overlay {
@@ -41,8 +45,8 @@
         </svg>
         <div id="mobile-overlay-title">VIM_GYM</div>
         <p id="mobile-overlay-msg">
-          Practice VIM motions by racing online. Best experienced on desktop —
-          open on a computer to play.
+          VIM GYM: practice Vim motions by racing online. Best experienced on
+          desktop — open on a computer to play.
         </p>
       </div>
     </div>

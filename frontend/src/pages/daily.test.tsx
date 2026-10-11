@@ -1038,7 +1038,7 @@ describe('DailyCompletionExtras', () => {
     // Preview headline mirrors the backend og:title: name + best time.
     expect(
       within(dialog).getByText(
-        /finished the VIMGYM daily race in 38\.4 seconds/
+        /finished the VIM GYM daily race in 38\.4 seconds/
       )
     ).toBeTruthy();
   });

@@ -1304,9 +1304,9 @@ function FlexShareModal({
             the large card image — the same og.png recipients actually see,
             served from the minted link (see backend/routes/share.ts). */}
         <div style={styles.previewCard}>
-          <div style={styles.previewHost}>VIMGYM · vimgym.app</div>
+          <div style={styles.previewHost}>VIM GYM · vimgym.app</div>
           <div style={styles.previewTitle}>
-            {name} finished the VIMGYM daily race in {timeLine}
+            {name} finished the VIM GYM daily race in {timeLine}
           </div>
           <div style={styles.previewDesc}>
             They think they&apos;re better than you (at vim). Race today&apos;s

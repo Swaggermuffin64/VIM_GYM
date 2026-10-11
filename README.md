@@ -1,4 +1,4 @@
-# VIM_GYM
+# VIM GYM
 
 Competitive vim motion racing. Practice alone or race others in real time.
 

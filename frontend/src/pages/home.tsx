@@ -71,11 +71,14 @@ export function HomeMenu() {
 
       <div style={styles.mainContent}>
         <div style={styles.content}>
-          {/* Keyword-bearing heading for search crawlers; the visible wordmark
-              below is the branded one. */}
-          <h1 style={styles.srOnly}>Practice Vim Motions Online — VIM_GYM</h1>
+          {/* The page's only <h1>, for search crawlers. Google reads the h1 as
+              one signal for the site's name, so the visible wordmark below
+              (spelled with an underscore) is deliberately not a heading. */}
+          <h1 style={styles.srOnly}>VIM GYM — Practice Vim Motions Online</h1>
           <header style={styles.header}>
-            <h1 style={styles.title}>VIM_GYM</h1>
+            <div style={styles.title} aria-hidden="true">
+              VIM_GYM
+            </div>
             <p style={styles.subtitle}>Train your Vim muscles.</p>
           </header>
 

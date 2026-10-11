@@ -1169,7 +1169,7 @@ const MultiplayerGame: React.FC = () => {
 
       <div style={styles.raceContainer}>
         <div style={styles.header}>
-          <div style={styles.title}>Vim Racing</div>
+          <div style={styles.title}>VIM_GYM</div>
           <div style={styles.timer}>{formatTime(elapsedTime)}</div>
           <button style={styles.leaveButton} onClick={leaveRoom}>
             Leave

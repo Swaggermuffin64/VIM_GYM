@@ -1,4 +1,9 @@
-import { ROUTE_META, canonicalUrl, type PublicRoute } from './routeMeta';
+import {
+  ROUTE_META,
+  SITE_NAME,
+  canonicalUrl,
+  type PublicRoute,
+} from './routeMeta';
 
 /**
  * Escapes a string for safe use inside a double-quoted HTML attribute or as
@@ -49,7 +54,7 @@ export function injectMeta(
     `<meta property="og:description" content="${d}">`,
     `<meta property="og:url" content="${url}">`,
     `<meta property="og:type" content="website">`,
-    `<meta property="og:site_name" content="VIM_GYM">`,
+    `<meta property="og:site_name" content="${SITE_NAME}">`,
     `<meta name="twitter:card" content="summary">`,
     `<meta name="twitter:title" content="${t}">`,
     `<meta name="twitter:description" content="${d}">`,

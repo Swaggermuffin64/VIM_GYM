@@ -79,4 +79,24 @@ describe('LeaderboardTable', () => {
     ).toBeTruthy();
     expect(mockFetch).toHaveBeenCalled();
   });
+
+  // The modal is built on the shared LeaderboardModalFrame; this pins the
+  // home board's own contents (the time-range filter) inside it.
+  it('opens the full leaderboard dialog from View More', async () => {
+    await act(async () => {
+      renderBoard();
+    });
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'View More' }).click();
+    });
+
+    const dialog = screen.getByRole('dialog', { name: 'Leaderboard' });
+    expect(dialog.textContent).toContain('This Week');
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Close' }).click();
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });

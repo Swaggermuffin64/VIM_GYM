@@ -266,7 +266,12 @@ describe('fetchDailyLeaderboard', () => {
 
     const result = await fetchDailyLeaderboard('tok');
 
-    expect(result).toEqual({ entries: [], neighborhood: null, totalRacers: 0 });
+    expect(result).toEqual({
+      entries: [],
+      neighborhood: null,
+      lastPlace: null,
+      totalRacers: 0,
+    });
   });
 
   it('maps snake_case entries, neighborhood, and total_racers', async () => {
@@ -318,6 +323,36 @@ describe('fetchDailyLeaderboard', () => {
           bestMs: 9000,
         },
       ],
+      lastPlace: null,
+    });
+  });
+
+  it('maps last_place to the slowest racer, and to null when absent', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        race_date: '2026-08-16',
+        total_racers: 16,
+        entries: [],
+        neighborhood: null,
+        last_place: {
+          user_id: 'slow-1',
+          display_name: 'normie_mode',
+          avatar_url: null,
+          best_ms: 72350,
+          rank: 16,
+        },
+      })
+    );
+
+    const result = await fetchDailyLeaderboard('tok', '2026-08-16');
+
+    expect(result.lastPlace).toEqual({
+      rank: 16,
+      userId: 'slow-1',
+      displayName: 'normie_mode',
+      avatarUrl: null,
+      bestMs: 72350,
     });
   });
 

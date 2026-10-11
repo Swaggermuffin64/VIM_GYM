@@ -31,10 +31,20 @@ import {
   completeDailyAttempt,
   queryDailyLeaderboard,
   queryDailyNeighborhood,
+  queryDailyLastPlace,
   countDailyRacers,
   queryDailyPlacing,
   getOrCreateShareLink,
 } from '../db/daily.js';
+
+/** Rows returned by GET /api/daily/leaderboard when no limit is given. */
+const DEFAULT_LEADERBOARD_LIMIT = 30;
+
+/**
+ * Most rows GET /api/daily/leaderboard will return. High enough for the
+ * daily page's full-leaderboard dialog to fetch the whole field in one request.
+ */
+const MAX_LEADERBOARD_LIMIT = 1000;
 
 /**
  * Drop the optimal-solution fields from a task before it goes over the wire.
@@ -314,10 +324,15 @@ export async function registerDailyRoutes(
       }
 
       const limitRaw =
-        request.query.limit !== undefined ? Number(request.query.limit) : 30;
+        request.query.limit !== undefined
+          ? Number(request.query.limit)
+          : DEFAULT_LEADERBOARD_LIMIT;
       const limit = Math.max(
         1,
-        Math.min(100, Number.isFinite(limitRaw) ? limitRaw : 30)
+        Math.min(
+          MAX_LEADERBOARD_LIMIT,
+          Number.isFinite(limitRaw) ? limitRaw : DEFAULT_LEADERBOARD_LIMIT
+        )
       );
 
       const entries = await queryDailyLeaderboard(raceDate, limit);
@@ -329,6 +344,13 @@ export async function registerDailyRoutes(
       const neighbors = userInTop
         ? []
         : await queryDailyNeighborhood(user.id, raceDate);
+
+      // The slowest racer, so the client can close a top-N list with last
+      // place. Redundant when the entries already reach the end of the field.
+      const lastPlace =
+        totalRacers > entries.length
+          ? await queryDailyLastPlace(raceDate)
+          : null;
 
       const toWire = (e: (typeof entries)[number]) => ({
         user_id: e.userId,
@@ -344,6 +366,7 @@ export async function registerDailyRoutes(
         total_racers: totalRacers,
         entries: entries.map(toWire),
         neighborhood: neighbors.length > 0 ? neighbors.map(toWire) : null,
+        last_place: lastPlace ? toWire(lastPlace) : null,
       };
     }
   );

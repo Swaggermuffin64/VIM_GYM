@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { colors } from '../theme';
 import { fetchMainLeaderboard } from '../api/leaderboard';
+import { LeaderboardModalFrame } from './LeaderboardModalFrame';
 import type {
   MainLeaderboardEntry as LeaderboardEntry,
   MainLeaderboardPlayModeFilter as PlayModeFilter,
@@ -366,6 +367,10 @@ function StatusMessage({
 /*  Full leaderboard modal                                            */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The home board's "View More" dialog: the top 30 runs across all modes,
+ * filterable by time range, inside the shared leaderboard modal frame.
+ */
 function LeaderboardModal({ onClose }: { onClose: () => void }) {
   const [timeRange, setTimeRange] = useState<TimeRange>('all_time');
   const { entries, loading, error, databaseConfigured } = useLeaderboardData(
@@ -379,90 +384,16 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
   const modalRows: (LeaderboardEntry | null)[] = [...entries];
   while (modalRows.length < MIN_MODAL_ROWS) modalRows.push(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 9999,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0,0,0,0.7)',
-        backdropFilter: 'blur(4px)',
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        style={{
-          background: colors.bgDark,
-          border: `1px solid ${colors.border}`,
-          borderRadius: '16px',
-          padding: '28px 32px',
-          width: '90vw',
-          minWidth: '700px',
-          maxWidth: '900px',
-          maxHeight: '85vh',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
+    <LeaderboardModalFrame
+      title="Leaderboard"
+      onClose={onClose}
+      controls={
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            marginBottom: '20px',
-          }}
-        >
-          <h2
-            style={{
-              ...mono,
-              margin: 0,
-              fontSize: '20px',
-              fontWeight: 700,
-              color: colors.textPrimary,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-            }}
-          >
-            Leaderboard
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              ...mono,
-              background: 'none',
-              border: 'none',
-              color: colors.textMuted,
-              fontSize: '22px',
-              cursor: 'pointer',
-              padding: '4px 8px',
-              lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '16px',
           }}
         >
           <ToggleRow
@@ -500,42 +431,40 @@ function LeaderboardModal({ onClose }: { onClose: () => void }) {
             Replayed tasks are not eligible for the leaderboard.
           </p>
         </div>
-
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {error && (
-            <StatusMessage
-              loading={false}
-              error={error}
-              databaseConfigured={databaseConfigured}
-            />
-          )}
-          {!error && !databaseConfigured && (
-            <StatusMessage
-              loading={false}
-              error={null}
-              databaseConfigured={false}
-            />
-          )}
-          {!error && databaseConfigured && (
-            <div
-              style={{
-                opacity: loading ? 0.5 : 1,
-                transition: 'opacity 0.15s ease',
-              }}
-            >
-              <EntryTable
-                rows={modalRows}
-                showMode
-                showDate
-                loadingReplay={loadingReplay}
-                onReplay={(id) => void handleReplay(id)}
-                fontSize="14px"
-              />
-            </div>
-          )}
+      }
+    >
+      {error && (
+        <StatusMessage
+          loading={false}
+          error={error}
+          databaseConfigured={databaseConfigured}
+        />
+      )}
+      {!error && !databaseConfigured && (
+        <StatusMessage
+          loading={false}
+          error={null}
+          databaseConfigured={false}
+        />
+      )}
+      {!error && databaseConfigured && (
+        <div
+          style={{
+            opacity: loading ? 0.5 : 1,
+            transition: 'opacity 0.15s ease',
+          }}
+        >
+          <EntryTable
+            rows={modalRows}
+            showMode
+            showDate
+            loadingReplay={loadingReplay}
+            onReplay={(id) => void handleReplay(id)}
+            fontSize="14px"
+          />
         </div>
-      </div>
-    </div>
+      )}
+    </LeaderboardModalFrame>
   );
 }
 

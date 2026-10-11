@@ -298,6 +298,8 @@ export interface DailyLeaderboardData {
   entries: DailyLeaderboardEntry[];
   /** The user's rank±1 rows when they fall outside `entries`, else null. */
   neighborhood: DailyLeaderboardEntry[] | null;
+  /** The slowest racer when the field runs past `entries`, else null. */
+  lastPlace: DailyLeaderboardEntry | null;
   /** Total finishers today — `entries` is only the top slice. */
   totalRacers: number;
 }
@@ -305,6 +307,7 @@ export interface DailyLeaderboardData {
 const EMPTY_LEADERBOARD: DailyLeaderboardData = {
   entries: [],
   neighborhood: null,
+  lastPlace: null,
   totalRacers: 0,
 };
 
@@ -394,6 +397,8 @@ async function fetchDailyLeaderboardFromNetwork(
     return {
       entries: mapLeaderboardEntries(b.entries),
       neighborhood,
+      lastPlace:
+        mapLeaderboardEntries(b.last_place ? [b.last_place] : [])[0] ?? null,
       totalRacers: typeof b.total_racers === 'number' ? b.total_racers : 0,
     };
   } catch (err) {

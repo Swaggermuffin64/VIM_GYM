@@ -20,6 +20,7 @@ import {
   completeDailyAttempt,
   queryDailyLeaderboard,
   queryDailyNeighborhood,
+  queryDailyLastPlace,
   countDailyRacers,
   queryDailyPlacing,
   getOrCreateShareLink,
@@ -68,6 +69,46 @@ describe('getDailyAttempts', () => {
       { attemptNumber: 1, durationMs: null, completedAt: null, gameId: 55 },
       { attemptNumber: 2, durationMs: null, completedAt: null, gameId: null },
     ]);
+  });
+});
+
+describe('queryDailyLastPlace', () => {
+  it("returns the slowest racer's row with numeric time and rank", async () => {
+    poolAvailable = true;
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          user_id: 'slow-1',
+          display_name: 'normie_mode',
+          avatar_url: null,
+          best_ms: '72350',
+          rank: '16',
+        },
+      ],
+    });
+
+    await expect(queryDailyLastPlace('2026-08-16')).resolves.toEqual({
+      userId: 'slow-1',
+      displayName: 'normie_mode',
+      avatarUrl: null,
+      bestMs: 72350,
+      rank: 16,
+    });
+  });
+
+  it('returns null when nobody has finished', async () => {
+    poolAvailable = true;
+    mockQuery.mockResolvedValue({ rows: [] });
+
+    await expect(queryDailyLastPlace('2026-08-16')).resolves.toBeNull();
+  });
+
+  it('returns null instead of throwing when the query fails', async () => {
+    poolAvailable = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockQuery.mockRejectedValue(new Error('boom'));
+
+    await expect(queryDailyLastPlace('2026-08-16')).resolves.toBeNull();
   });
 });
 
@@ -196,6 +237,7 @@ describe('daily db functions without DATABASE_URL', () => {
     await expect(queryDailyNeighborhood(uid, '2026-08-16')).resolves.toEqual(
       []
     );
+    await expect(queryDailyLastPlace('2026-08-16')).resolves.toBeNull();
     await expect(countDailyRacers('2026-08-16')).resolves.toBe(0);
     await expect(queryDailyPlacing(uid, '2026-08-16')).resolves.toBeNull();
     await expect(getOrCreateShareLink(uid, '2026-08-16')).resolves.toBeNull();

@@ -47,6 +47,7 @@ import type {
 import { RaceSessionPage } from './practice/PracticeEditor';
 import { SiteBanner } from '../components/SiteBanner';
 import { ChallengeTaunt } from '../components/ChallengeTaunt';
+import { LeaderboardModalFrame } from '../components/LeaderboardModalFrame';
 import {
   clearChallengeSlug,
   isValidChallengeSlug,
@@ -90,6 +91,15 @@ function formatTime(ms: number): string {
  * 28px gaps between them — so neither state ever resizes the card.
  */
 const EXTRAS_RESERVED_HEIGHT = 248;
+
+/** Rows the leaderboard rail lists; the full-leaderboard dialog has the rest. */
+const TOP_RACERS_ROW_COUNT = 8;
+
+/**
+ * Rows requested for the full-leaderboard dialog. Matches the most the leaderboard
+ * endpoint will return (MAX_LEADERBOARD_LIMIT in backend/routes/daily.ts).
+ */
+const ALL_RACERS_ROW_LIMIT = 1000;
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
@@ -391,9 +401,33 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: '12px',
     padding: '24px',
     maxHeight: '600px',
-    overflowY: 'auto',
     alignSelf: 'center',
     width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  // Only the rows scroll, so the racer count and the full-leaderboard button
+  // stay in view on a short window.
+  railRows: {
+    overflowY: 'auto',
+    minHeight: 0,
+  },
+  railCount: {
+    color: colors.textMuted,
+    fontSize: '14px',
+    fontFamily: '"JetBrains Mono", monospace',
+  },
+  fullLeaderboardButton: {
+    marginTop: '12px',
+    padding: '10px 14px',
+    fontSize: '14px',
+    fontWeight: 600,
+    background: 'transparent',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+    color: colors.textSecondary,
+    cursor: 'pointer',
+    fontFamily: '"JetBrains Mono", monospace',
   },
   railHead: {
     display: 'flex',
@@ -616,6 +650,7 @@ export default function DailyRacePage() {
   const [leaderboard, setLeaderboard] = useState<DailyLeaderboardData>({
     entries: [],
     neighborhood: null,
+    lastPlace: null,
     totalRacers: 0,
   });
   // Only counts while the user is out of attempts — that's the one state where
@@ -674,16 +709,16 @@ export default function DailyRacePage() {
 
   // ------- Fetch leaderboard when on preRace -------
 
-  // Top 8 keeps the rail height fixed; the pinned neighborhood covers
-  // anyone ranked below that. Fetched during 'loading' too, in parallel with
-  // the race info rather than serialized behind it; the API client's TTL
-  // cache absorbs the repeat call when the phase flips to 'preRace'.
+  // The rail shows the top slice and last place; the full-leaderboard dialog
+  // fetches the rest itself. Fetched during 'loading' too, in parallel with the race info
+  // rather than serialized behind it; the API client's TTL cache absorbs the
+  // repeat call when the phase flips to 'preRace'.
   useEffect(() => {
     if (phase.name !== 'preRace' && phase.name !== 'loading') return;
     void fetchDailyLeaderboard(
       session?.access_token ?? null,
       undefined,
-      8
+      TOP_RACERS_ROW_COUNT
     ).then(setLeaderboard);
   }, [phase.name, session]);
 
@@ -853,6 +888,7 @@ export default function DailyRacePage() {
             <PreRaceScreen
               info={phase.info}
               leaderboard={leaderboard}
+              accessToken={session?.access_token ?? null}
               countdown={countdown}
               userId={user?.id ?? null}
               onStart={handleStart}
@@ -871,11 +907,13 @@ export default function DailyRacePage() {
 
 /**
  * Pre-race screen showing date, attempt dots, start button or countdown,
- * best time, and leaderboard panel.
+ * best time, and leaderboard panel. The panel lists the top slice and opens
+ * DailyFullLeaderboardModal for the whole field.
  */
 function PreRaceScreen({
   info,
   leaderboard,
+  accessToken,
   countdown,
   userId,
   onStart,
@@ -883,6 +921,8 @@ function PreRaceScreen({
 }: {
   info: DailyRaceInfo;
   leaderboard: DailyLeaderboardData;
+  /** Passed on to the full-leaderboard dialog's fetch; null for a visitor. */
+  accessToken: string | null;
   countdown: string;
   userId: string | null;
   onStart: () => void;
@@ -891,6 +931,9 @@ function PreRaceScreen({
   const usedCount = info.attempts.length;
   const totalSlots = usedCount + info.attemptsRemaining;
   const outOfAttempts = info.attemptsRemaining === 0;
+  const [fullLeaderboardOpen, setFullLeaderboardOpen] = useState(false);
+  const hasUnlistedRacers =
+    leaderboard.totalRacers > leaderboard.entries.length;
 
   return (
     <div className="daily-split" style={styles.split}>
@@ -958,43 +1001,142 @@ function PreRaceScreen({
       <aside style={styles.rail}>
         <div style={styles.railHead}>
           <span style={styles.leaderboardTitle}>Leaderboard</span>
+          {leaderboard.totalRacers > 0 && (
+            <span style={styles.railCount}>
+              {formatRacerCount(leaderboard.totalRacers)}
+            </span>
+          )}
         </div>
         {leaderboard.entries.length === 0 ? (
           <div style={styles.leaderboardEmpty}>No entries yet</div>
         ) : (
-          <>
-            {leaderboard.entries.map((entry) => (
-              <LeaderboardRow
-                key={entry.userId}
-                entry={entry}
-                userId={userId}
-              />
-            ))}
-            {leaderboard.neighborhood && (
-              <>
-                <div style={styles.railDivider} aria-hidden="true">
-                  ···
-                </div>
-                {leaderboard.neighborhood.map((entry) => (
-                  <LeaderboardRow
-                    key={entry.userId}
-                    entry={entry}
-                    userId={userId}
-                  />
-                ))}
-              </>
-            )}
-          </>
+          <div style={styles.railRows}>
+            <LeaderboardRows
+              entries={leaderboard.entries}
+              entriesBelowDivider={
+                leaderboard.lastPlace ? [leaderboard.lastPlace] : null
+              }
+              userId={userId}
+            />
+          </div>
+        )}
+        {hasUnlistedRacers && (
+          <button
+            style={styles.fullLeaderboardButton}
+            onClick={() => setFullLeaderboardOpen(true)}
+          >
+            Show full leaderboard
+          </button>
         )}
       </aside>
+
+      {fullLeaderboardOpen && (
+        <DailyFullLeaderboardModal
+          accessToken={accessToken}
+          userId={userId}
+          onClose={() => setFullLeaderboardOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
 /**
+ * The dialog behind the rail's "Show full leaderboard": every racer who has
+ * finished today, in the same frame the home page's full leaderboard uses.
+ * Fetches the whole field itself when opened, so the page only ever pays for
+ * the top slice until someone asks for more.
+ */
+function DailyFullLeaderboardModal({
+  accessToken,
+  userId,
+  onClose,
+}: {
+  accessToken: string | null;
+  userId: string | null;
+  onClose: () => void;
+}) {
+  // null until the field arrives.
+  const [board, setBoard] = useState<DailyLeaderboardData | null>(null);
+
+  useEffect(() => {
+    let closed = false;
+    void fetchDailyLeaderboard(
+      accessToken,
+      undefined,
+      ALL_RACERS_ROW_LIMIT
+    ).then((fetched) => {
+      if (!closed) setBoard(fetched);
+    });
+    return () => {
+      closed = true;
+    };
+  }, [accessToken]);
+
+  return (
+    <LeaderboardModalFrame
+      title="Leaderboard"
+      titleDetail={board ? formatRacerCount(board.totalRacers) : undefined}
+      width="narrow"
+      onClose={onClose}
+    >
+      {board === null ? (
+        <div style={styles.leaderboardEmpty}>Loading…</div>
+      ) : board.entries.length === 0 ? (
+        <div style={styles.leaderboardEmpty}>No entries yet</div>
+      ) : (
+        <LeaderboardRows
+          entries={board.entries}
+          entriesBelowDivider={board.neighborhood}
+          userId={userId}
+        />
+      )}
+    </LeaderboardModalFrame>
+  );
+}
+
+/**
+ * A run of board rows, optionally followed by a "···" divider and more rows
+ * from further down the field. The rail puts last place below the divider;
+ * the full-leaderboard dialog puts the signed-in user's rank±1 rows there in
+ * the rare case the field is too large to list whole.
+ */
+function LeaderboardRows({
+  entries,
+  entriesBelowDivider,
+  userId,
+}: {
+  entries: DailyLeaderboardEntry[];
+  entriesBelowDivider: DailyLeaderboardEntry[] | null;
+  userId: string | null;
+}) {
+  return (
+    <>
+      {entries.map((entry) => (
+        <LeaderboardRow key={entry.userId} entry={entry} userId={userId} />
+      ))}
+      {entriesBelowDivider && (
+        <>
+          <div style={styles.railDivider} aria-hidden="true">
+            ···
+          </div>
+          {entriesBelowDivider.map((entry) => (
+            <LeaderboardRow key={entry.userId} entry={entry} userId={userId} />
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
+/** The size of today's field in words: "1 racer", "312 racers". */
+function formatRacerCount(totalRacers: number): string {
+  return `${totalRacers} ${totalRacers === 1 ? 'racer' : 'racers'}`;
+}
+
+/**
  * A single board row: rank, name, time. The signed-in user's row is
- * highlighted and marked aria-current. Shared by the top list and the
- * pinned neighborhood.
+ * highlighted and marked aria-current.
  */
 function LeaderboardRow({
   entry,

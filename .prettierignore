@@ -5,6 +5,7 @@ node_modules
 # Builds & caches
 **/dist
 **/build
+**/build-ssr
 **/.vite
 **/coverage
 
@@ -12,3 +13,6 @@ node_modules
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# Local-only preview pages (gitignored)
+frontend/src/pages/*.preview.tsx

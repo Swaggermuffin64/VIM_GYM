@@ -128,6 +128,11 @@ function makeInfo(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** A leaderboard row as the API client returns it. */
+function boardEntry(rank: number, userId: string, displayName: string) {
+  return { rank, userId, displayName, avatarUrl: null, bestMs: rank * 1000 };
+}
+
 // ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
@@ -145,6 +150,7 @@ beforeEach(() => {
   mockFetchDailyLeaderboard.mockResolvedValue({
     entries: [],
     neighborhood: null,
+    lastPlace: null,
     totalRacers: 0,
   });
   mockCompleteDailyAttempt.mockResolvedValue({
@@ -456,26 +462,57 @@ describe('DailyRacePage', () => {
     ).toBeTruthy();
   });
 
-  // The rail header is just the title now — no field-size count beside it.
-  it('does not show a racer count in the leaderboard header', async () => {
+  // The rail header states the size of the field, since the rows below it
+  // are only the top slice.
+  it('shows the total racer count in the leaderboard header', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       neighborhood: null,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
+    expect(screen.getByText('312 racers')).toBeTruthy();
+  });
+
+  it('uses the singular for a field of one racer', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      neighborhood: null,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
+    expect(screen.getByText('1 racer')).toBeTruthy();
+  });
+
+  it('shows no racer count or full-leaderboard button before anyone has finished', async () => {
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('No entries yet')).toBeTruthy();
+
+    expect(screen.queryByText(/\d+ racers?/i)).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /full leaderboard/i })
+    ).toBeNull();
+  });
+
+  it('offers no full-leaderboard button when every racer is already listed', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 2,
+      neighborhood: null,
       entries: [
-        {
-          rank: 1,
-          userId: 'other-1',
-          displayName: 'speedster',
-          avatarUrl: null,
-          bestMs: 3000,
-        },
-        {
-          rank: 2,
-          userId: 'me-123',
-          displayName: 'testuser',
-          avatarUrl: null,
-          bestMs: 5000,
-        },
+        boardEntry(1, 'other-1', 'speedster'),
+        boardEntry(2, 'me-123', 'testuser'),
       ],
     });
 
@@ -484,38 +521,118 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(screen.queryByText(/\d+ racers?/i)).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /full leaderboard/i })
+    ).toBeNull();
   });
 
-  // Pinned neighborhood: divider + user's rank±1 rows below the top list.
-  it('renders the divider and pinned neighborhood when the user is outside the top', async () => {
+  describe('the full leaderboard dialog', () => {
+    const TOP_SLICE = {
+      totalRacers: 10,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: null,
+      lastPlace: boardEntry(10, 'me-123', 'testuser'),
+    };
+    const WHOLE_FIELD = {
+      totalRacers: 10,
+      entries: [
+        boardEntry(1, 'other-1', 'speedster'),
+        boardEntry(9, 'other-9', 'midpacker'),
+        boardEntry(10, 'me-123', 'testuser'),
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    };
+
+    /** Serves the top slice to the rail and the whole field to the dialog. */
+    function serveBoardByLimit() {
+      mockFetchDailyLeaderboard.mockImplementation(
+        async (_token: unknown, _date: unknown, limit: number) =>
+          limit === 8 ? TOP_SLICE : WHOLE_FIELD
+      );
+    }
+
+    async function renderAndOpenFullLeaderboard() {
+      serveBoardByLimit();
+      await act(async () => {
+        renderDaily();
+      });
+      const showFull = await screen.findByRole('button', {
+        name: 'Show full leaderboard',
+      });
+      await act(async () => {
+        showFull.click();
+      });
+      return screen.getByRole('dialog', { name: 'Leaderboard' });
+    }
+
+    it('keeps racers outside the top slice out of the rail', async () => {
+      serveBoardByLimit();
+      await act(async () => {
+        renderDaily();
+      });
+      expect(await screen.findByText('speedster')).toBeTruthy();
+
+      expect(screen.queryByText('midpacker')).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('opens a dialog that fetches the whole field and lists every racer', async () => {
+      const dialog = await renderAndOpenFullLeaderboard();
+
+      expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
+        'tok',
+        undefined,
+        1000
+      );
+      expect(await within(dialog).findByText('midpacker')).toBeTruthy();
+      expect(within(dialog).getByText('speedster')).toBeTruthy();
+      expect(within(dialog).queryByText('···')).toBeNull();
+    });
+
+    it('states the racer count in the dialog', async () => {
+      const dialog = await renderAndOpenFullLeaderboard();
+
+      expect(within(dialog).getByText('10 racers')).toBeTruthy();
+    });
+
+    it("highlights the signed-in user's row in the dialog", async () => {
+      const dialog = await renderAndOpenFullLeaderboard();
+      await within(dialog).findByText('midpacker');
+
+      const ownRow = within(dialog)
+        .getByText('testuser')
+        .closest('[aria-current]');
+      expect(ownRow).not.toBeNull();
+    });
+
+    it('leaves the rail on the top slice while the dialog is open', async () => {
+      await renderAndOpenFullLeaderboard();
+      await screen.findByText('midpacker');
+
+      expect(screen.getByText('···')).toBeTruthy();
+      expect(screen.getAllByText('midpacker')).toHaveLength(1);
+    });
+
+    it('closes the dialog from its close button', async () => {
+      await renderAndOpenFullLeaderboard();
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'Close' }).click();
+      });
+
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByText('midpacker')).toBeNull();
+    });
+  });
+
+  // The rail closes with the slowest racer: top entries, a divider, last place.
+  it('renders a divider and the last-place row below the top entries', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
-      entries: [
-        {
-          rank: 1,
-          userId: 'other-1',
-          displayName: 'speedster',
-          avatarUrl: null,
-          bestMs: 3000,
-        },
-      ],
-      neighborhood: [
-        {
-          rank: 46,
-          userId: 'other-46',
-          displayName: 'yank_bank',
-          avatarUrl: null,
-          bestMs: 57900,
-        },
-        {
-          rank: 47,
-          userId: 'me-123',
-          displayName: 'testuser',
-          avatarUrl: null,
-          bestMs: 58700,
-        },
-      ],
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: null,
+      lastPlace: boardEntry(312, 'other-312', 'normie_mode'),
     });
 
     await act(async () => {
@@ -524,9 +641,63 @@ describe('DailyRacePage', () => {
     expect(await screen.findByText('speedster')).toBeTruthy();
 
     expect(screen.getByText('···')).toBeTruthy();
-    expect(screen.getByText('yank_bank')).toBeTruthy();
+    expect(screen.getByText('normie_mode')).toBeTruthy();
+    expect(screen.getByText('#312')).toBeTruthy();
+  });
+
+  it('highlights the last-place row when it is the signed-in user', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 312,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: null,
+      lastPlace: boardEntry(312, 'me-123', 'testuser'),
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
     const ownRow = screen.getByText('testuser').closest('[aria-current]');
     expect(ownRow).not.toBeNull();
+  });
+
+  it('shows no divider when every racer is already listed', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
+    expect(screen.queryByText('···')).toBeNull();
+  });
+
+  // The rail is top entries plus last place only; a mid-pack user finds
+  // their own row in the full-leaderboard dialog.
+  it("leaves the user's rank neighborhood out of the rail", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 312,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: [
+        boardEntry(46, 'other-46', 'yank_bank'),
+        boardEntry(47, 'me-123', 'testuser'),
+      ],
+      lastPlace: boardEntry(312, 'other-312', 'normie_mode'),
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+
+    expect(screen.queryByText('yank_bank')).toBeNull();
+    expect(screen.queryByText('testuser')).toBeNull();
   });
 
   // 6. Leaderboard renders entries with the signed-in user's row highlighted.

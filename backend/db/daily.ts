@@ -491,6 +491,63 @@ export async function queryDailyNeighborhood(
 }
 
 /**
+ * Returns the slowest racer's leaderboard row for a race date, ranked the same
+ * way as queryDailyLeaderboard. When several racers tie for the slowest time
+ * the lowest user id is returned, so repeat calls agree. Returns null when
+ * nobody has finished, or on no pool/error.
+ *
+ * Called by routes/daily.ts so the daily page's rail can close with last
+ * place beneath its top entries.
+ */
+export async function queryDailyLastPlace(raceDate: string): Promise<{
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  bestMs: number;
+  rank: number;
+} | null> {
+  const pool = getPool();
+  if (!pool) {
+    logSkip('queryDailyLastPlace');
+    return null;
+  }
+  try {
+    const res = await pool.query<{
+      user_id: string;
+      display_name: string;
+      avatar_url: string | null;
+      best_ms: string;
+      rank: string;
+    }>(
+      `SELECT user_id, display_name, avatar_url, best_ms,
+              RANK() OVER (ORDER BY best_ms ASC) AS rank
+         FROM (
+           SELECT da.user_id, p.display_name, p.avatar_url,
+                  MIN(da.duration_ms) AS best_ms
+             FROM daily_attempts da JOIN profiles p ON p.id = da.user_id
+            WHERE da.race_date = $1 AND da.duration_ms IS NOT NULL
+            GROUP BY da.user_id, p.display_name, p.avatar_url
+         ) sub
+        ORDER BY best_ms DESC, user_id ASC
+        LIMIT 1`,
+      [raceDate]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    return {
+      userId: row.user_id,
+      displayName: row.display_name,
+      avatarUrl: row.avatar_url,
+      bestMs: Number(row.best_ms),
+      rank: Number(row.rank),
+    };
+  } catch (err) {
+    logError('queryDailyLastPlace', err);
+    return null;
+  }
+}
+
+/**
  * Returns the number of users with at least one finished attempt for a race
  * date. Used for the "N racers" board header; the fetched top-N row count
  * understates the field once it exceeds the display limit.

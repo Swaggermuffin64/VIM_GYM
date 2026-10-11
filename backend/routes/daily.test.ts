@@ -12,6 +12,7 @@ vi.mock('../db/daily.js', () => ({
   completeDailyAttempt: vi.fn(),
   queryDailyLeaderboard: vi.fn(),
   queryDailyNeighborhood: vi.fn(),
+  queryDailyLastPlace: vi.fn(),
   countDailyRacers: vi.fn(),
   queryDailyPlacing: vi.fn(),
   getOrCreateShareLink: vi.fn(),
@@ -564,6 +565,78 @@ describe('GET /api/daily/leaderboard', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().neighborhood).toBeNull();
+  });
+
+  // The rail closes with the slowest racer, below the top entries.
+  it('includes last_place when the field is larger than the entries returned', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(47);
+    vi.mocked(daily.queryDailyNeighborhood).mockResolvedValue([]);
+    vi.mocked(daily.queryDailyLastPlace).mockResolvedValue(NEIGHBORS[1]!);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-08-16',
+    });
+
+    expect(daily.queryDailyLastPlace).toHaveBeenCalledWith('2026-08-16');
+    expect(res.json().last_place).toEqual({
+      user_id: 'user-1',
+      display_name: 'me',
+      avatar_url: null,
+      best_ms: 58700,
+      rank: 47,
+    });
+  });
+
+  it('returns a null last_place, without looking it up, when every racer is in the entries', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([
+      { ...TOP_ENTRY, userId: 'user-1' },
+    ]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(1);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard',
+    });
+
+    expect(res.json().last_place).toBeNull();
+    expect(daily.queryDailyLastPlace).not.toHaveBeenCalled();
+  });
+
+  // The daily page's full-leaderboard dialog asks for the whole field in one call.
+  it('honors a row limit above the old 100-row ceiling', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(312);
+
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-08-16&limit=1000',
+    });
+
+    expect(daily.queryDailyLeaderboard).toHaveBeenCalledWith(
+      '2026-08-16',
+      1000
+    );
+  });
+
+  it('clamps an oversized row limit to 1000', async () => {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([TOP_ENTRY]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(312);
+
+    const app = await buildServer();
+    await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-08-16&limit=50000',
+    });
+
+    expect(daily.queryDailyLeaderboard).toHaveBeenCalledWith(
+      '2026-08-16',
+      1000
+    );
   });
 });
 

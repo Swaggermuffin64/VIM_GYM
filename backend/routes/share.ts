@@ -48,11 +48,11 @@ function notFoundHtml(): string {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Challenge not found — VIMGYM</title>
-<meta property="og:title" content="Challenge not found — VIMGYM">
+<title>Challenge not found — VIM GYM</title>
+<meta property="og:title" content="Challenge not found — VIM GYM">
 <meta property="og:description" content="This challenge has expired or does not exist.">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="VIMGYM">
+<meta property="og:site_name" content="VIM GYM">
 <meta name="twitter:card" content="summary">
 </head>
 <body>
@@ -117,7 +117,7 @@ export async function registerShareRoutes(
 
       const name = info.displayName;
 
-      const title = `${name} finished the VIMGYM daily race in ${formatSeconds(placing.bestMs)} seconds`;
+      const title = `${name} finished the VIM GYM daily race in ${formatSeconds(placing.bestMs)} seconds`;
       const description = `They think they're better than you (at vim). Race today's daily and prove them wrong.`;
       // Land on the race itself; /daily is public and shows the taunt, and
       // its Start button is what sends a visitor to sign in.
@@ -137,7 +137,7 @@ export async function registerShareRoutes(
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:type" content="website">
 <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
-<meta property="og:site_name" content="VIMGYM">
+<meta property="og:site_name" content="VIM GYM">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="${escapeHtml(imageUrl)}">
 <meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}">
@@ -155,7 +155,7 @@ export async function registerShareRoutes(
 <meta http-equiv="refresh" content="0;url=${escapeHtml(target)}">
 </head>
 <body>
-<p>Redirecting to <a href="${escapeHtml(target)}">VIMGYM</a>…</p>
+<p>Redirecting to <a href="${escapeHtml(target)}">VIM GYM</a>…</p>
 <script>window.location.replace(${JSON.stringify(target)});</script>
 </body>
 </html>`;

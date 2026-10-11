@@ -36,6 +36,10 @@ describe('injectMeta', () => {
     expect(html).not.toContain('<title>VIM_GYM</title>');
   });
 
+  it('adds the two-word site name as og:site_name', () => {
+    expect(html).toContain('<meta property="og:site_name" content="VIM GYM">');
+  });
+
   it('adds the route description', () => {
     expect(html).toContain(
       `<meta name="description" content="${ROUTE_META['/practice'].description}">`

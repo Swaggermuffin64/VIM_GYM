@@ -48,7 +48,7 @@ describe('About page content', () => {
         <About />
       </MemoryRouter>
     );
-    expect(screen.getByText(/What is VIM_GYM\?/i)).toBeDefined();
+    expect(screen.getByText(/What is VIM GYM\?/i)).toBeDefined();
   });
 
   it('sets the about page title', () => {

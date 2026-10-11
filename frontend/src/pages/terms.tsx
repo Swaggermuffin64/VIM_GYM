@@ -17,13 +17,13 @@ export default function TermsOfService() {
     <LegalPageLayout title="Terms of Service" lastUpdated="August 8, 2026">
       <PageMeta route="/terms" />
       <p style={s.p}>
-        By using VIM_GYM you agree to these terms. They&apos;re short — please
+        By using VIM GYM you agree to these terms. They&apos;re short — please
         actually read them.
       </p>
 
       <h2 style={s.h2}>The service</h2>
       <p style={s.p}>
-        VIM_GYM is a free game for practicing Vim motions. It&apos;s provided
+        VIM GYM is a free game for practicing Vim motions. It&apos;s provided
         &quot;as is&quot;, without warranties of any kind. It&apos;s a hobby
         project: we don&apos;t guarantee uptime, and features may change or
         disappear.
@@ -60,13 +60,13 @@ export default function TermsOfService() {
 
       <h2 style={s.h2}>Content and code</h2>
       <p style={s.p}>
-        The VIM_GYM source code is open source on GitHub under its own license.
+        The VIM GYM source code is open source on GitHub under its own license.
         These terms cover the hosted service, not the code.
       </p>
 
       <h2 style={s.h2}>Liability</h2>
       <p style={s.p}>
-        To the maximum extent permitted by law, VIM_GYM and its operator are not
+        To the maximum extent permitted by law, VIM GYM and its operator are not
         liable for any indirect or consequential damages arising from use of the
         service. The service is free; our total liability is limited to the
         amount you paid us, which is zero.
@@ -74,7 +74,7 @@ export default function TermsOfService() {
 
       <h2 style={s.h2}>Termination</h2>
       <p style={s.p}>
-        You can stop using VIM_GYM at any time and request account deletion (see
+        You can stop using VIM GYM at any time and request account deletion (see
         the Privacy Policy). We may suspend accounts that violate these terms.
       </p>
 

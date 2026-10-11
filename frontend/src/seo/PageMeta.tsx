@@ -1,4 +1,9 @@
-import { ROUTE_META, canonicalUrl, type PublicRoute } from './routeMeta';
+import {
+  ROUTE_META,
+  SITE_NAME,
+  canonicalUrl,
+  type PublicRoute,
+} from './routeMeta';
 
 /**
  * Per-route <head> metadata for a public page.
@@ -22,7 +27,7 @@ export function PageMeta({ route }: { route: PublicRoute }) {
       <meta property="og:description" content={description} />
       <meta property="og:url" content={url} />
       <meta property="og:type" content="website" />
-      <meta property="og:site_name" content="VIM_GYM" />
+      <meta property="og:site_name" content={SITE_NAME} />
 
       <meta name="twitter:card" content="summary" />
       <meta name="twitter:title" content={title} />

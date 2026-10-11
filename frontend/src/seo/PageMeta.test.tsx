@@ -32,6 +32,11 @@ describe('PageMeta', () => {
     );
   });
 
+  it('sets the Open Graph site name to the two-word brand', () => {
+    render(<PageMeta route="/" />);
+    expect(head('meta[property="og:site_name"]')).toBe('VIM GYM');
+  });
+
   it('sets Open Graph tags matching the route metadata', () => {
     render(<PageMeta route="/about" />);
     expect(head('meta[property="og:title"]')).toBe(ROUTE_META['/about'].title);

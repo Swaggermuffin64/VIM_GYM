@@ -3,6 +3,7 @@ import {
   ROUTE_META,
   PUBLIC_ROUTES,
   CANONICAL_ORIGIN,
+  SITE_NAME,
   canonicalUrl,
 } from './routeMeta';
 
@@ -50,6 +51,30 @@ describe('ROUTE_META', () => {
       const { description } = ROUTE_META[route];
       expect(description.length).toBeGreaterThanOrEqual(120);
       expect(description.length).toBeLessThanOrEqual(160);
+    }
+  });
+
+  // Regression guard: the brand was only ever written "VIM_GYM" or "VIMGYM",
+  // which search engines read as one word, so the site never matched the
+  // two-word search "vim gym".
+  it('names the site as two separate words', () => {
+    expect(SITE_NAME).toBe('VIM GYM');
+  });
+
+  it('puts the two-word site name in every title', () => {
+    for (const route of PUBLIC_ROUTES) {
+      expect(ROUTE_META[route].title).toContain(SITE_NAME);
+    }
+  });
+
+  it('opens the home description with the two-word site name', () => {
+    expect(ROUTE_META['/'].description.startsWith(SITE_NAME)).toBe(true);
+  });
+
+  it('never writes the site name as a single word in search metadata', () => {
+    for (const route of PUBLIC_ROUTES) {
+      const { title, description } = ROUTE_META[route];
+      expect(`${title} ${description}`).not.toMatch(/VIM_GYM|VIMGYM/i);
     }
   });
 

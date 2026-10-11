@@ -8,6 +8,18 @@
  * exact defect this table exists to prevent, and routeMeta.test.ts enforces it.
  */
 
+/**
+ * The site's name as search engines and link previews should read it.
+ *
+ * Deliberately two words. Spelled "VIM_GYM" or "VIMGYM" it is a single token
+ * to a search engine, so the site matched "vimgym" but never "vim gym". The
+ * underscore survives only in the visible wordmark, which is a logo.
+ */
+export const SITE_NAME = 'VIM GYM';
+
+/** One-word spellings people may still search for; see StructuredData. */
+export const SITE_NAME_ALTERNATES = ['VIM_GYM', 'VIMGYM', 'VimGym'] as const;
+
 /** The one host we want indexed. The apex domain 301s here. */
 export const CANONICAL_ORIGIN = 'https://www.vimgym.app';
 
@@ -53,31 +65,31 @@ export function isHeadOnlyRoute(route: PublicRoute): route is HeadOnlyRoute {
 
 export const ROUTE_META: Record<PublicRoute, RouteMeta> = {
   '/': {
-    title: 'VIM_GYM — Practice Vim Motions by Racing',
+    title: 'VIM GYM — Practice Vim Motions by Racing',
     description:
-      'Learn Vim motions by racing the clock and other people. Daily challenges, multiplayer races, and drills that build real muscle memory. Free to play.',
+      'VIM GYM is where you learn Vim motions by racing the clock and other people. Daily challenges, multiplayer races, and drills. Free to play.',
     priority: 1.0,
   },
   '/about': {
-    title: 'About VIM_GYM — Why Practice Vim Motions',
+    title: 'About VIM GYM — Why Practice Vim Motions',
     description:
-      'What VIM_GYM is, why Vim motions are worth drilling, and where the project is headed. Built to make practising Vim feel like a game instead of a chore.',
+      'What VIM GYM is, why Vim motions are worth drilling, and where the project is headed. Built to make practising Vim feel like a game instead of a chore.',
     priority: 0.7,
   },
   '/practice': {
-    title: 'Vim Practice Mode — Drill Motions Solo | VIM_GYM',
+    title: 'Vim Practice Mode — Drill Motions Solo | VIM GYM',
     description:
       'Drill Vim motions solo at your own pace. Targeted exercises with instant feedback on the optimal keystrokes, so you stop reaching for the arrow keys.',
     priority: 0.9,
   },
   '/multiplayer': {
-    title: 'Vim Multiplayer Races — Quick Play | VIM_GYM',
+    title: 'Vim Multiplayer Races — Quick Play | VIM GYM',
     description:
       'Race other developers through Vim editing challenges in real time. Quick play matches you with an opponent in seconds and fastest correct motions win.',
     priority: 0.9,
   },
   '/daily': {
-    title: 'Race of the Day — Daily Vim Challenge | VIM_GYM',
+    title: 'Race of the Day — Daily Vim Challenge | VIM GYM',
     description:
       'One shared set of Vim tasks for everyone, three attempts, a live leaderboard, and a new race every day at midnight UTC. See who is fastest today.',
     priority: 0.8,
@@ -86,15 +98,15 @@ export const ROUTE_META: Record<PublicRoute, RouteMeta> = {
   // session. Listing them here gives them a real description and og: tags;
   // otherwise they ship from the bare app shell with no metadata at all.
   '/privacy': {
-    title: 'Privacy Policy | VIM_GYM',
+    title: 'Privacy Policy | VIM GYM',
     description:
-      'What VIM_GYM collects when you sign in and play, why it is stored, and how to have it deleted. Plain English, no tracking beyond the game itself.',
+      'What VIM GYM collects when you sign in and play, why it is stored, and how to have it deleted. Plain English, no tracking beyond the game itself.',
     priority: 0.3,
   },
   '/terms': {
-    title: 'Terms of Service | VIM_GYM',
+    title: 'Terms of Service | VIM GYM',
     description:
-      'The short terms for playing VIM_GYM: fair play in races, account conduct, and the as-is disclaimer for a free community project.',
+      'The short terms for playing VIM GYM: fair play in races, account conduct, and the as-is disclaimer for a free community project.',
     priority: 0.3,
   },
 };

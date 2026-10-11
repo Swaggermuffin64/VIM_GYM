@@ -21,7 +21,16 @@ describe('StructuredData', () => {
       (n: { '@type': string }) => n['@type'] === 'WebSite'
     );
     expect(site.url).toBe('https://www.vimgym.app');
-    expect(site.name).toBe('VIM_GYM');
+    expect(site.name).toBe('VIM GYM');
+  });
+
+  // The one-word spellings stay discoverable as alternates of the real name.
+  it('declares the one-word spellings as alternate site names', () => {
+    const data = parsed();
+    const site = data['@graph'].find(
+      (n: { '@type': string }) => n['@type'] === 'WebSite'
+    );
+    expect(site.alternateName).toEqual(['VIM_GYM', 'VIMGYM', 'VimGym']);
   });
 
   it('lists every public route as a navigation element', () => {

@@ -28,4 +28,12 @@ describe('index.html', () => {
     const titles = html.match(/<title>/g) ?? [];
     expect(titles.length).toBe(1);
   });
+
+  it('writes the fallback title as the two-word site name', () => {
+    expect(html).toContain('<title>VIM GYM</title>');
+  });
+
+  it('names the site in the mobile overlay message', () => {
+    expect(html).toMatch(/VIM GYM: practice Vim motions/);
+  });
 });

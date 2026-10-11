@@ -31,6 +31,6 @@ describe('PublicApp', () => {
 
   it('renders the about view for /about', () => {
     render(<PublicApp route="/about" />);
-    expect(screen.getByText(/What is VIM_GYM\?/i)).toBeDefined();
+    expect(screen.getByText(/What is VIM GYM\?/i)).toBeDefined();
   });
 });

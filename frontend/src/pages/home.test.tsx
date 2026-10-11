@@ -87,8 +87,20 @@ describe('HomePage', () => {
       renderHome();
     });
     expect(
-      screen.getByRole('heading', { name: /Practice Vim Motions Online/i })
+      screen.getByRole('heading', {
+        name: /VIM GYM — Practice Vim Motions Online/i,
+      })
     ).toBeTruthy();
+  });
+
+  // Regression: the "VIM_GYM" wordmark was a second <h1>, giving Google a
+  // different spelling of the site name than the title and structured data.
+  it('has exactly one top-level heading, so the site name is unambiguous', async () => {
+    await act(async () => {
+      renderHome();
+    });
+    expect(screen.getAllByRole('heading', { level: 1 }).length).toBe(1);
+    expect(screen.getByText('VIM_GYM').tagName).not.toBe('H1');
   });
 
   it("shows today's real attempts once the daily race loads", async () => {

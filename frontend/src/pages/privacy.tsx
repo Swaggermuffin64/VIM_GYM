@@ -1,6 +1,6 @@
 /**
  * Public privacy policy page (/privacy). Plain-English description of what
- * VIM_GYM actually collects and stores; the URL is registered on the Google
+ * VIM GYM actually collects and stores; the URL is registered on the Google
  * OAuth consent screen, so it must stay reachable without signing in.
  */
 import {
@@ -16,7 +16,7 @@ export default function PrivacyPolicy() {
     <LegalPageLayout title="Privacy Policy" lastUpdated="August 8, 2026">
       <PageMeta route="/privacy" />
       <p style={s.p}>
-        VIM_GYM is a free game for practicing Vim motions, run as an independent
+        VIM GYM is a free game for practicing Vim motions, run as an independent
         project. This policy describes what data we collect, why, and what we do
         with it — in plain English, because that&apos;s all there is to it.
       </p>
@@ -74,7 +74,7 @@ export default function PrivacyPolicy() {
 
       <h2 style={s.h2}>Children</h2>
       <p style={s.p}>
-        VIM_GYM is not directed at children under 13, and we don&apos;t
+        VIM GYM is not directed at children under 13, and we don&apos;t
         knowingly collect data from them.
       </p>
 

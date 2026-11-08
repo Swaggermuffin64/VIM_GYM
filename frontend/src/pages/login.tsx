@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
 import { fetchChallenge, type ChallengeInfo } from '../api/daily';
@@ -222,6 +222,12 @@ export default function Login() {
   if (session) return <Navigate to={postAuthDestination()} replace />;
 
   const signIn = (provider: 'github' | 'google') => {
+    if (!isSupabaseConfigured) {
+      window.alert(
+        'Sign-in is disabled: set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in frontend/.env.'
+      );
+      return;
+    }
     supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: window.location.origin },

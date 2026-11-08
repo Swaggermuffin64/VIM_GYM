@@ -10,6 +10,7 @@ import ProfilePage from './pages/profile';
 import DailyRoute from './pages/dailyRoute';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
+import { BadgeToast } from './components/BadgeToast';
 import './App.css';
 
 /* ------------------------------------------------------------------ */
@@ -85,6 +86,7 @@ function App() {
         {/* Keep old route for backwards compatibility */}
         <Route path="/vim-editor" element={<PracticeEditor />} />
       </Routes>
+      <BadgeToast />
     </Router>
   );
 }

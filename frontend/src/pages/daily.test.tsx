@@ -130,7 +130,18 @@ function makeInfo(overrides: Record<string, unknown> = {}) {
 
 /** A leaderboard row as the API client returns it. */
 function boardEntry(rank: number, userId: string, displayName: string) {
-  return { rank, userId, displayName, avatarUrl: null, bestMs: rank * 1000 };
+  return {
+    rank,
+    userId,
+    displayName,
+    avatarUrl: null,
+    bestMs: rank * 1000,
+    efficiency: null,
+    optimalKeys: null,
+    actualKeys: null,
+    efficiencyMs: null,
+    badges: null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -583,7 +594,8 @@ describe('DailyRacePage', () => {
       expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
         'tok',
         undefined,
-        1000
+        1000,
+        'speed'
       );
       expect(await within(dialog).findByText('midpacker')).toBeTruthy();
       expect(within(dialog).getByText('speedster')).toBeTruthy();
@@ -762,7 +774,12 @@ describe('DailyRacePage for a visitor with no session', () => {
     });
     expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
     expect(mockFetchDailyRace).toHaveBeenCalledWith(null);
-    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(null, undefined, 8);
+    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
+      null,
+      undefined,
+      8,
+      'speed'
+    );
     expect(mockGetCachedDailyRace).not.toHaveBeenCalled();
   });
 
@@ -1041,5 +1058,146 @@ describe('DailyCompletionExtras', () => {
         /finished the VIM GYM daily race in 38\.4 seconds/
       )
     ).toBeTruthy();
+  });
+});
+
+describe('DailyRacePage efficiency board', () => {
+  it('re-sorts by key efficiency, with every metric on each row', async () => {
+    mockFetchDailyLeaderboard.mockImplementation(
+      (_token: unknown, _date: unknown, _limit: unknown, board: unknown) =>
+        Promise.resolve({
+          totalRacers: 1,
+          neighborhood: null,
+          lastPlace: null,
+          entries: [
+            board === 'efficiency'
+              ? {
+                  ...boardEntry(1, 'other-1', 'golfer'),
+                  bestMs: 38100,
+                  efficiency: 0.875,
+                  optimalKeys: 42,
+                  actualKeys: 48,
+                  efficiencyMs: 41200,
+                }
+              : boardEntry(1, 'other-1', 'speedster'),
+          ],
+        })
+    );
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Speed' }).getAttribute('aria-pressed')
+    ).toBe('true');
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Key Efficiency' }).click();
+    });
+
+    expect(await screen.findByText('golfer')).toBeTruthy();
+    expect(mockFetchDailyLeaderboard).toHaveBeenLastCalledWith(
+      'tok',
+      undefined,
+      8,
+      'efficiency'
+    );
+    expect(screen.getByText('Keys')).toBeTruthy();
+    expect(screen.getByText('/42').parentElement?.textContent).toBe('48/42');
+    expect(screen.getByText('87.5%')).toBeTruthy();
+    // Time is the best run; the efficient run's own time is in the tooltip.
+    expect(screen.getByText('38.1s')).toBeTruthy();
+    expect(
+      screen.getByTitle('48 keys used, 42 optimal · 87.5% · on a 41.2s run')
+    ).toBeTruthy();
+    expect(screen.queryByText('speedster')).toBeNull();
+  });
+
+  it('explains the key columns in a tip', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      neighborhood: null,
+      lastPlace: null,
+      entries: [boardEntry(1, 'other-1', 'golfer')],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('golfer');
+    expect(screen.getByText('Time')).toBeTruthy();
+    await act(async () => {
+      screen.getByRole('button', { name: 'Key Efficiency' }).click();
+    });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    const tipButton = screen.getByRole('button', {
+      name: 'How efficiency is scored',
+    });
+    await act(async () => {
+      tipButton.focus();
+    });
+    expect(screen.getByRole('tooltip').textContent).toContain(
+      'used 50 keystrokes where'
+    );
+    await act(async () => {
+      tipButton.blur();
+    });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('opens the full leaderboard on the selected board', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 20,
+      neighborhood: null,
+      lastPlace: null,
+      entries: [boardEntry(1, 'other-1', 'golfer')],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('golfer');
+    await act(async () => {
+      screen.getByRole('button', { name: 'Key Efficiency' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: /full leaderboard/i }).click();
+    });
+
+    expect(mockFetchDailyLeaderboard).toHaveBeenLastCalledWith(
+      'tok',
+      undefined,
+      1000,
+      'efficiency'
+    );
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        'Leaderboard by key efficiency'
+      )
+    ).toBeTruthy();
+  });
+
+  it("shows a racer's badge chips beside their name", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      neighborhood: null,
+      lastPlace: null,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 12, podiumStreak: 0, wins: 3 },
+        },
+      ],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('speedster');
+
+    expect(screen.getByLabelText('12-day streak').textContent).toBe('STRK12');
+    expect(screen.getByLabelText('3 daily wins').textContent).toBe('WIN3');
   });
 });

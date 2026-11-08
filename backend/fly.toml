@@ -6,6 +6,9 @@ primary_region = "iad"
 
 [env]
   PORT = "3001"
+  # Enables the startup env check (loadEnv.ts): the server refuses to boot
+  # without MATCH_TOKEN_SECRET, DATABASE_URL and Supabase auth secrets.
+  NODE_ENV = "production"
   FRONTEND_URL = "https://vimgym.app,https://www.vimgym.app"
   # Production is the sole eager creator of the Race of the Day (in-process
   # rollover scheduler at 0:00 UTC, plus on boot). Local dev shares the

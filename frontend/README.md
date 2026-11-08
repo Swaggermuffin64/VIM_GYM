@@ -23,7 +23,7 @@ npm run dev
 
 ## Environment Variables
 
-Create a `.env` file in the frontend directory:
+Copy the template (`cp .env.example .env`); `npm run dev` refuses to start without it:
 
 ```bash
 VITE_BACKEND_URL=http://localhost:3001

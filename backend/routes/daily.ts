@@ -3,7 +3,8 @@
  *
  * Provides HTTP endpoints for the "Race of the Day" feature: fetching today's
  * race and tasks, starting/completing attempts (capped at 3 per day),
- * viewing the daily leaderboard, and generating shareable result links.
+ * viewing the speed and efficiency leaderboards, the user's daily badges and
+ * placing history, and generating shareable result links.
  *
  * All endpoints require Supabase authentication. Handler logic stays thin:
  * persistence is delegated to `db/daily.ts`, timing validation to
@@ -36,6 +37,19 @@ import {
   queryDailyPlacing,
   getOrCreateShareLink,
 } from '../db/daily.js';
+import {
+  queryEfficiencyBoard,
+  queryDailyHistory,
+  getSeenBadges,
+  addSeenBadges,
+} from '../db/dailyResults.js';
+import {
+  chipsByUser,
+  isBadgeId,
+  summarizeDailyHistory,
+  type EarnedBadge,
+  type Placing,
+} from '../daily/badges.js';
 
 /** Rows returned by GET /api/daily/leaderboard when no limit is given. */
 const DEFAULT_LEADERBOARD_LIMIT = 30;
@@ -61,6 +75,99 @@ function withoutSolutionHints<
   void recommendedSequence;
   void recommendedWeight;
   return rest;
+}
+
+/** One leaderboard row before wire mapping, from either board. */
+interface BoardRow {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  /** Speed board: the racer's best time. Efficiency board: that attempt's time. */
+  bestMs: number;
+  rank: number;
+  /** Efficiency board only, 0..1. */
+  efficiency?: number;
+  /** Efficiency board only: that attempt's optimal and actual key totals. */
+  optimalKeys?: number;
+  actualKeys?: number;
+}
+
+/** The rows one leaderboard response shows: top slice plus extras. */
+interface BoardSlice {
+  entries: BoardRow[];
+  /** The viewer's rank±1 rows when they fall outside `entries`. */
+  neighborhood: BoardRow[] | null;
+  /** The last-ranked racer when the field runs past `entries`. */
+  lastPlace: BoardRow | null;
+  totalRacers: number;
+}
+
+/** The speed board's slice, from the per-view queries in db/daily.ts. */
+async function speedBoardSlice(
+  raceDate: string,
+  limit: number,
+  userId: string | null
+): Promise<BoardSlice> {
+  const entries = await queryDailyLeaderboard(raceDate, limit);
+  const totalRacers = await countDailyRacers(raceDate);
+
+  // The user's rank+-1 rows, so a mid-pack racer still sees themself
+  // (and their rival) when they fall outside the top entries.
+  const userInTop = !userId || entries.some((e) => e.userId === userId);
+  const neighborhood = userInTop
+    ? null
+    : await queryDailyNeighborhood(userId, raceDate);
+
+  // The slowest racer, so the client can close a top-N list with last
+  // place. Redundant when the entries already reach the end of the field.
+  const lastPlace =
+    totalRacers > entries.length ? await queryDailyLastPlace(raceDate) : null;
+
+  return { entries, neighborhood, lastPlace, totalRacers };
+}
+
+/** Most rows a neighborhood can hold (rank ties can widen rank±1). */
+const NEIGHBORHOOD_MAX_ROWS = 5;
+
+/**
+ * The efficiency board's slice. The whole field comes back in one query, so
+ * the same three views the speed board queries separately are cut from it.
+ */
+async function efficiencyBoardSlice(
+  raceDate: string,
+  limit: number,
+  userId: string | null
+): Promise<BoardSlice> {
+  const field = (await queryEfficiencyBoard(raceDate)).map(
+    (r): BoardRow => ({
+      userId: r.userId,
+      displayName: r.displayName,
+      avatarUrl: r.avatarUrl,
+      bestMs: r.durationMs,
+      rank: r.rank,
+      efficiency: r.efficiency,
+      optimalKeys: r.optimalKeys,
+      actualKeys: r.actualKeys,
+    })
+  );
+  const entries = field.slice(0, limit);
+
+  let neighborhood: BoardRow[] | null = null;
+  const own = userId ? field.find((r) => r.userId === userId) : undefined;
+  if (own && !entries.includes(own)) {
+    neighborhood = field
+      .filter((r) => Math.abs(r.rank - own.rank) <= 1)
+      .slice(0, NEIGHBORHOOD_MAX_ROWS);
+  }
+
+  // Matches queryDailyLastPlace: among racers tied for last, the lowest id.
+  const lastRank = field[field.length - 1]?.rank;
+  const lastPlace =
+    field.length > entries.length
+      ? field.find((r) => r.rank === lastRank)!
+      : null;
+
+  return { entries, neighborhood, lastPlace, totalRacers: field.length };
 }
 
 /**
@@ -303,71 +410,189 @@ export async function registerDailyRoutes(
   // -------------------------------------------------------------------------
   // GET /api/daily/leaderboard — top finishers for a given date
   // -------------------------------------------------------------------------
-  fastify.get<{ Querystring: { date?: string; limit?: string } }>(
-    '/api/daily/leaderboard',
-    async (request, reply) => {
-      // Public for the same reason as GET /api/daily. The neighborhood rows
-      // are the one per-user part, and a visitor simply has none.
-      const user = await tryResolveSupabaseUser(request);
+  // `board=speed` (default) ranks each racer's best time; `board=efficiency`
+  // ranks each racer's most keystroke-efficient attempt (db/dailyResults.ts).
+  // The board only picks the order: every row carries both the racer's best
+  // time and their most efficient attempt (efficiency, key totals, and that
+  // attempt's time), plus their badge chips (streak, podium streak, wins).
+  fastify.get<{
+    Querystring: { date?: string; limit?: string; board?: string };
+  }>('/api/daily/leaderboard', async (request, reply) => {
+    // Public for the same reason as GET /api/daily. The neighborhood rows
+    // are the one per-user part, and a visitor simply has none.
+    const user = await tryResolveSupabaseUser(request);
 
-      const dateParam = request.query.date;
-      let raceDate: string;
-      if (dateParam !== undefined) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-          return reply
-            .status(400)
-            .send({ success: false, error: 'invalid_date_format' });
-        }
-        raceDate = dateParam;
-      } else {
-        raceDate = utcDateKey(new Date());
+    const dateParam = request.query.date;
+    let raceDate: string;
+    if (dateParam !== undefined) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        return reply
+          .status(400)
+          .send({ success: false, error: 'invalid_date_format' });
       }
+      raceDate = dateParam;
+    } else {
+      raceDate = utcDateKey(new Date());
+    }
 
-      const limitRaw =
-        request.query.limit !== undefined
-          ? Number(request.query.limit)
-          : DEFAULT_LEADERBOARD_LIMIT;
-      const limit = Math.max(
-        1,
-        Math.min(
-          MAX_LEADERBOARD_LIMIT,
-          Number.isFinite(limitRaw) ? limitRaw : DEFAULT_LEADERBOARD_LIMIT
-        )
-      );
+    const board = request.query.board ?? 'speed';
+    if (board !== 'speed' && board !== 'efficiency') {
+      return reply.status(400).send({ success: false, error: 'invalid_board' });
+    }
 
-      const entries = await queryDailyLeaderboard(raceDate, limit);
-      const totalRacers = await countDailyRacers(raceDate);
+    const limitRaw =
+      request.query.limit !== undefined
+        ? Number(request.query.limit)
+        : DEFAULT_LEADERBOARD_LIMIT;
+    const limit = Math.max(
+      1,
+      Math.min(
+        MAX_LEADERBOARD_LIMIT,
+        Number.isFinite(limitRaw) ? limitRaw : DEFAULT_LEADERBOARD_LIMIT
+      )
+    );
 
-      // The user's rank+-1 rows, so a mid-pack racer still sees themself
-      // (and their rival) when they fall outside the top entries.
-      const userInTop = !user || entries.some((e) => e.userId === user.id);
-      const neighbors = userInTop
-        ? []
-        : await queryDailyNeighborhood(user.id, raceDate);
+    const slice =
+      board === 'speed'
+        ? await speedBoardSlice(raceDate, limit, user?.id ?? null)
+        : await efficiencyBoardSlice(raceDate, limit, user?.id ?? null);
 
-      // The slowest racer, so the client can close a top-N list with last
-      // place. Redundant when the entries already reach the end of the field.
-      const lastPlace =
-        totalRacers > entries.length
-          ? await queryDailyLastPlace(raceDate)
-          : null;
+    // Chips are computed only for the racers on the returned rows.
+    const shown = [
+      ...slice.entries,
+      ...(slice.neighborhood ?? []),
+      ...(slice.lastPlace ? [slice.lastPlace] : []),
+    ];
+    const history = await queryDailyHistory([
+      ...new Set(shown.map((e) => e.userId)),
+    ]);
+    const chips = chipsByUser(history, utcDateKey(new Date()));
+    // Each shown racer's result for this race: fills in the metric the
+    // board's own query doesn't carry.
+    const dayResult = new Map(
+      history.filter((d) => d.raceDate === raceDate).map((d) => [d.userId, d])
+    );
 
-      const toWire = (e: (typeof entries)[number]) => ({
+    const toWire = (e: BoardRow) => {
+      const c = chips.get(e.userId);
+      const day = dayResult.get(e.userId);
+      // On the efficiency board e.bestMs is the efficient attempt's time.
+      const effMs = e.efficiency !== undefined ? e.bestMs : null;
+      return {
         user_id: e.userId,
         display_name: e.displayName,
         avatar_url: e.avatarUrl,
-        best_ms: e.bestMs,
+        best_ms: day?.bestMs ?? e.bestMs,
         rank: e.rank,
-      });
-
-      return {
-        success: true,
-        race_date: raceDate,
-        total_racers: totalRacers,
-        entries: entries.map(toWire),
-        neighborhood: neighbors.length > 0 ? neighbors.map(toWire) : null,
-        last_place: lastPlace ? toWire(lastPlace) : null,
+        efficiency: e.efficiency ?? day?.efficiency ?? null,
+        optimal_keys: e.optimalKeys ?? day?.optimalKeys ?? null,
+        actual_keys: e.actualKeys ?? day?.actualKeys ?? null,
+        efficiency_ms: effMs ?? day?.efficiencyMs ?? null,
+        badges: c
+          ? { streak: c.streak, podium_streak: c.podiumStreak, wins: c.wins }
+          : null,
       };
+    };
+
+    return {
+      success: true,
+      race_date: raceDate,
+      board,
+      total_racers: slice.totalRacers,
+      entries: slice.entries.map(toWire),
+      neighborhood:
+        slice.neighborhood && slice.neighborhood.length > 0
+          ? slice.neighborhood.map(toWire)
+          : null,
+      last_place: slice.lastPlace ? toWire(slice.lastPlace) : null,
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/daily/profile — the user's daily badges, streaks, and placings
+  // -------------------------------------------------------------------------
+  fastify.get('/api/daily/profile', async (request, reply) => {
+    const user = await requireSupabaseAuth(request, reply);
+    if (!user) return;
+
+    const [history, seen] = await Promise.all([
+      queryDailyHistory([user.id]),
+      getSeenBadges(user.id),
+    ]);
+    const summary = summarizeDailyHistory(history, utcDateKey(new Date()));
+    // Unknown seen state (db error) shows nothing as new rather than
+    // re-announcing every badge.
+    const unseen =
+      seen === null ? [] : summary.badges.filter((b) => !seen.includes(b.id));
+
+    const badgeToWire = (b: EarnedBadge) => ({
+      id: b.id,
+      earned_on: b.earnedOn,
+    });
+    const placingToWire = (p: Placing | null) =>
+      p ? { rank: p.rank, racers: p.racers, race_date: p.raceDate } : null;
+    const { personalBests: pb, streaks, counters } = summary;
+
+    return {
+      success: true,
+      badges: summary.badges.map(badgeToWire),
+      unseen_badges: unseen.map(badgeToWire),
+      streaks: {
+        participation: streaks.participation,
+        podium: streaks.podium,
+      },
+      counters: {
+        days_raced: counters.daysRaced,
+        speed_wins: counters.speedWins,
+        efficiency_wins: counters.efficiencyWins,
+        podiums: counters.podiums,
+      },
+      personal_bests: {
+        best_speed_placing: placingToWire(pb.bestSpeedPlacing),
+        best_efficiency_placing: placingToWire(pb.bestEfficiencyPlacing),
+        fastest: pb.fastest
+          ? { ms: pb.fastest.ms, race_date: pb.fastest.raceDate }
+          : null,
+        most_efficient: pb.mostEfficient
+          ? {
+              efficiency: pb.mostEfficient.efficiency,
+              race_date: pb.mostEfficient.raceDate,
+            }
+          : null,
+      },
+      recent: summary.recent.map((d) => ({
+        race_date: d.raceDate,
+        best_ms: d.bestMs,
+        speed_rank: d.speedRank,
+        racers: d.racers,
+        efficiency: d.efficiency,
+        efficiency_rank: d.efficiencyRank,
+        efficiency_racers: d.efficiencyRacers,
+      })),
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/daily/badges/seen — acknowledge badges shown in the toast
+  // -------------------------------------------------------------------------
+  fastify.post<{ Body: { badge_ids?: unknown } | null }>(
+    '/api/daily/badges/seen',
+    async (request, reply) => {
+      const user = await requireSupabaseAuth(request, reply);
+      if (!user) return;
+
+      const ids = request.body?.badge_ids;
+      if (!Array.isArray(ids) || ids.length === 0 || !ids.every(isBadgeId)) {
+        return reply
+          .status(400)
+          .send({ success: false, error: 'invalid_badge_ids' });
+      }
+
+      const ok = await addSeenBadges(user.id, ids);
+      if (!ok) {
+        return reply.status(500).send({ success: false, error: 'db_error' });
+      }
+      return { success: true };
     }
   );
 

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.ts",
   "scripts": {
-    "dev": "tsc && tsx watch index.ts",
+    "dev": "npm run build && tsx watch index.ts",
     "build": "tsc && cp codeSnippets.json dist/",
     "generate-snippets": "tsx ./scripts/generateSnippets.ts",
     "start": "node dist/index.js",

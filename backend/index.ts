@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';

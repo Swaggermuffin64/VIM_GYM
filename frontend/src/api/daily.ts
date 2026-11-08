@@ -49,13 +49,38 @@ export type CompleteAttemptResult =
   | { status: 'ok'; placing: DailyPlacing }
   | { status: 'error' };
 
+/** Which ranking a daily leaderboard shows. */
+export type DailyBoard = 'speed' | 'efficiency';
+
+/** A racer's badge summary, shown as chips beside their name. */
+export interface BadgeChips {
+  /** Current participation streak, in days. */
+  streak: number;
+  /** Current podium (top 3 on either board) streak, in days. */
+  podiumStreak: number;
+  /** #1 finishes on closed days, both boards combined. */
+  wins: number;
+}
+
 /** A single row in the daily leaderboard. */
 export interface DailyLeaderboardEntry {
   rank: number;
   userId: string;
   displayName: string;
   avatarUrl: string | null;
+  /** The racer's best time today, whichever way the board is sorted. */
   bestMs: number;
+  /**
+   * The racer's most efficient attempt: efficiency 0..1, its optimal and
+   * actual key totals, and its time. Null when none of their runs could be
+   * scored.
+   */
+  efficiency: number | null;
+  optimalKeys: number | null;
+  actualKeys: number | null;
+  efficiencyMs: number | null;
+  /** Null when the server has no daily history for the racer. */
+  badges: BadgeChips | null;
 }
 
 export type ShareLinkResult =
@@ -311,6 +336,16 @@ const EMPTY_LEADERBOARD: DailyLeaderboardData = {
   totalRacers: 0,
 };
 
+function mapBadgeChips(raw: unknown): BadgeChips | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const b = raw as Record<string, unknown>;
+  return {
+    streak: (b.streak as number) ?? 0,
+    podiumStreak: (b.podium_streak as number) ?? 0,
+    wins: (b.wins as number) ?? 0,
+  };
+}
+
 function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((e: Record<string, unknown>) => ({
@@ -319,11 +354,16 @@ function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
     displayName: e.display_name as string,
     avatarUrl: (e.avatar_url as string | null) ?? null,
     bestMs: e.best_ms as number,
+    efficiency: typeof e.efficiency === 'number' ? e.efficiency : null,
+    optimalKeys: typeof e.optimal_keys === 'number' ? e.optimal_keys : null,
+    actualKeys: typeof e.actual_keys === 'number' ? e.actual_keys : null,
+    efficiencyMs: typeof e.efficiency_ms === 'number' ? e.efficiency_ms : null,
+    badges: mapBadgeChips(e.badges),
   }));
 }
 
 /**
- * Recently fetched leaderboard slices, keyed by date+limit. The board only
+ * Recently fetched leaderboard slices, keyed by board+date+limit. The board only
  * moves when someone finishes a run, so a short TTL keeps home↔daily
  * navigation from re-querying while still picking up other racers' times
  * within a minute. The user's own completions invalidate it immediately.
@@ -339,22 +379,24 @@ export function invalidateDailyLeaderboardCache(): void {
 }
 
 /**
- * Fetch the daily leaderboard, serving repeats of the same date+limit slice
- * from a 60-second in-memory cache. Error responses are not cached.
+ * Fetch the daily leaderboard, serving repeats of the same board+date+limit
+ * slice from a 60-second in-memory cache. Error responses are not cached.
  */
 export async function fetchDailyLeaderboard(
   accessToken: string | null,
   date?: string,
-  limit?: number
+  limit?: number,
+  board: DailyBoard = 'speed'
 ): Promise<DailyLeaderboardData> {
-  const cacheKey = `${date ?? 'today'}|${limit ?? 'default'}`;
+  const cacheKey = `${board}|${date ?? 'today'}|${limit ?? 'default'}`;
   const cached = leaderboardCache.get(cacheKey);
   if (cached) return cached;
 
   const result = await fetchDailyLeaderboardFromNetwork(
     accessToken,
     date,
-    limit
+    limit,
+    board
   );
   if (result !== null) {
     leaderboardCache.set(cacheKey, result);
@@ -366,13 +408,16 @@ export async function fetchDailyLeaderboard(
 /** Network fetch behind fetchDailyLeaderboard. Returns null on any error. */
 async function fetchDailyLeaderboardFromNetwork(
   accessToken: string | null,
-  date?: string,
-  limit?: number
+  date: string | undefined,
+  limit: number | undefined,
+  board: DailyBoard
 ): Promise<DailyLeaderboardData | null> {
   try {
     const params = new URLSearchParams();
     if (date) params.set('date', date);
     if (limit !== undefined) params.set('limit', String(limit));
+    // The server defaults to speed; leaving it off keeps those URLs unchanged.
+    if (board !== 'speed') params.set('board', board);
     const query = params.size > 0 ? `?${params.toString()}` : '';
     const res = await fetch(`${API_BASE}/api/daily/leaderboard${query}`, {
       headers: authHeaders(accessToken),
@@ -484,5 +529,183 @@ export async function fetchChallenge(
     };
   } catch {
     return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Daily profile: badges, streaks, placing history
+// ---------------------------------------------------------------------------
+
+/** A badge the user has earned, with the race date it was earned on. */
+export interface EarnedBadge {
+  id: string;
+  earnedOn: string;
+}
+
+/** A finishing position on one day. */
+export interface DailyPlacingRecord {
+  rank: number;
+  racers: number;
+  raceDate: string;
+}
+
+/** One raced day on the profile's recent-placings list. */
+export interface DailyHistoryDay {
+  raceDate: string;
+  bestMs: number;
+  speedRank: number;
+  racers: number;
+  /** Null when no attempt that day had complete keystroke data. */
+  efficiency: number | null;
+  efficiencyRank: number | null;
+  efficiencyRacers: number | null;
+}
+
+/** GET /api/daily/profile, mapped to camelCase. */
+export interface DailyProfile {
+  badges: EarnedBadge[];
+  /** Earned badges the user hasn't been shown yet (the toast's content). */
+  unseenBadges: EarnedBadge[];
+  streaks: {
+    participation: { current: number; longest: number };
+    podium: { current: number; longest: number };
+  };
+  counters: {
+    daysRaced: number;
+    speedWins: number;
+    efficiencyWins: number;
+    podiums: number;
+  };
+  personalBests: {
+    bestSpeedPlacing: DailyPlacingRecord | null;
+    bestEfficiencyPlacing: DailyPlacingRecord | null;
+    fastest: { ms: number; raceDate: string } | null;
+    mostEfficient: { efficiency: number; raceDate: string } | null;
+  };
+  /** Most recent raced days first. */
+  recent: DailyHistoryDay[];
+}
+
+/** `raw` as a key/value record; an empty one for anything else. */
+function asRecord(raw: unknown): Record<string, unknown> {
+  return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+}
+
+function numberOr<T>(raw: unknown, fallback: T): number | T {
+  return typeof raw === 'number' ? raw : fallback;
+}
+
+function mapStreak(raw: unknown): { current: number; longest: number } {
+  const s = asRecord(raw);
+  return { current: numberOr(s.current, 0), longest: numberOr(s.longest, 0) };
+}
+
+function mapEarnedBadges(raw: unknown): EarnedBadge[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((b: Record<string, unknown>) => ({
+    id: b.id as string,
+    earnedOn: b.earned_on as string,
+  }));
+}
+
+function mapPlacing(raw: unknown): DailyPlacingRecord | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const p = raw as Record<string, unknown>;
+  return {
+    rank: p.rank as number,
+    racers: p.racers as number,
+    raceDate: p.race_date as string,
+  };
+}
+
+/**
+ * Fetch the signed-in user's daily badges, streaks, and placing history.
+ * Returns null on any error.
+ */
+export async function fetchDailyProfile(
+  accessToken: string
+): Promise<DailyProfile | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/daily/profile`, {
+      headers: authHeaders(accessToken),
+    });
+    const body = safeParseJson(await res.text());
+    if (!res.ok || !body || typeof body !== 'object') {
+      console.error('[daily] fetchDailyProfile HTTP error', res.status, body);
+      return null;
+    }
+
+    const b = asRecord(body);
+    const pb = asRecord(b.personal_bests);
+    const streaks = asRecord(b.streaks);
+    const counters = asRecord(b.counters);
+    const fastest = pb.fastest ? asRecord(pb.fastest) : null;
+    const mostEfficient = pb.most_efficient
+      ? asRecord(pb.most_efficient)
+      : null;
+    const rawRecent = Array.isArray(b.recent) ? b.recent.map(asRecord) : [];
+    return {
+      badges: mapEarnedBadges(b.badges),
+      unseenBadges: mapEarnedBadges(b.unseen_badges),
+      streaks: {
+        participation: mapStreak(streaks.participation),
+        podium: mapStreak(streaks.podium),
+      },
+      counters: {
+        daysRaced: numberOr(counters.days_raced, 0),
+        speedWins: numberOr(counters.speed_wins, 0),
+        efficiencyWins: numberOr(counters.efficiency_wins, 0),
+        podiums: numberOr(counters.podiums, 0),
+      },
+      personalBests: {
+        bestSpeedPlacing: mapPlacing(pb.best_speed_placing),
+        bestEfficiencyPlacing: mapPlacing(pb.best_efficiency_placing),
+        fastest: fastest
+          ? { ms: fastest.ms as number, raceDate: fastest.race_date as string }
+          : null,
+        mostEfficient: mostEfficient
+          ? {
+              efficiency: mostEfficient.efficiency as number,
+              raceDate: mostEfficient.race_date as string,
+            }
+          : null,
+      },
+      recent: rawRecent.map((d) => ({
+        raceDate: d.race_date as string,
+        bestMs: d.best_ms as number,
+        speedRank: d.speed_rank as number,
+        racers: d.racers as number,
+        efficiency: numberOr(d.efficiency, null),
+        efficiencyRank: numberOr(d.efficiency_rank, null),
+        efficiencyRacers: numberOr(d.efficiency_racers, null),
+      })),
+    };
+  } catch (err) {
+    console.error('[daily] fetchDailyProfile network error:', err);
+    return null;
+  }
+}
+
+/**
+ * Record that the user has been shown these badges, so the toast doesn't
+ * announce them again. Returns false on any error.
+ */
+export async function markBadgesSeen(
+  accessToken: string,
+  badgeIds: string[]
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/daily/badges/seen`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ badge_ids: badgeIds }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('[daily] markBadgesSeen network error:', err);
+    return false;
   }
 }

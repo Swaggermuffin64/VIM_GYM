@@ -5,7 +5,8 @@
  * Every other mode is one row per game: multiplayer shows its finishing
  * position, practice just its time, unfinished games "left" or "DNF".
  * A 4px coloured strip marks the row type (amber = daily, green = 1st,
- * cyan = other multiplayer finish, red = DNF/left, slate = practice).
+ * cyan = other multiplayer finish, red = DNF/left, slate = practice); every
+ * row's text is full brightness, so practice reads as a first-class mode.
  * Presentational; rows are built by `recentActivity()` in lib/profileView.
  */
 import React from 'react';
@@ -120,16 +121,10 @@ function Row({ row, today }: { row: RecentActivityRow; today: string }) {
   }
 
   const { game } = row;
-  const practice = game.playMode === 'practice';
   return (
     <>
       <span style={{ ...styles.strip, background: gameStripColor(game) }} />
-      <span
-        style={{
-          ...styles.name,
-          color: practice ? colors.textMuted : colors.textPrimary,
-        }}
-      >
+      <span style={{ ...styles.name, color: colors.textPrimary }}>
         <span style={styles.mode}>{game.playMode.replaceAll('_', ' ')}</span>
         <span style={styles.date}>
           {formatDay(game.startedAt.slice(0, 10), today)}

@@ -223,6 +223,21 @@ describe('RecentGames', () => {
     expect(screen.getByText('4/44')).toBeTruthy();
     expect(screen.getByLabelText('No efficiency placing')).toBeTruthy();
   });
+  it('shows practice rows in the same bright text as other games', () => {
+    render(
+      <RecentGames
+        games={[
+          game({ playMode: 'practice' }),
+          game({ playMode: 'quick_play' }),
+        ]}
+        dailyRecent={[]}
+        today={TODAY}
+      />
+    );
+    const practice = screen.getByText('practice').parentElement!;
+    const quickPlay = screen.getByText('quick play').parentElement!;
+    expect(practice.style.color).toBe(quickPlay.style.color);
+  });
   it('shows an ordinal for a multiplayer win', () => {
     render(
       <RecentGames

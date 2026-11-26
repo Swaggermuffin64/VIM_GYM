@@ -20,3 +20,8 @@ export function ordinal(n: number): string {
     mod10 === 1 ? 'st' : mod10 === 2 ? 'nd' : mod10 === 3 ? 'rd' : 'th';
   return `${n}${suffix}`;
 }
+
+/** Daily placing as rank over field size: (4, 44) -> "4/44". */
+export function formatPlacing(rank: number, racers: number): string {
+  return `${rank}/${racers}`;
+}

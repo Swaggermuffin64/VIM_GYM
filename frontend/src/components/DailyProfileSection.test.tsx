@@ -44,6 +44,7 @@ const PROFILE: DailyProfile = {
       efficiencyRacers: 29,
     },
   ],
+  winDates: [],
 };
 
 afterEach(() => {

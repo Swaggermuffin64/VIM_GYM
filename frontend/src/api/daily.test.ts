@@ -775,7 +775,22 @@ describe('fetchDailyProfile', () => {
           efficiencyRacers: null,
         },
       ],
+      winDates: [],
     });
+  });
+
+  it('maps win_dates to winDates', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, win_dates: ['2026-11-20'] })
+    );
+    const profile = await fetchDailyProfile('tok');
+    expect(profile?.winDates).toEqual(['2026-11-20']);
+  });
+
+  it('defaults winDates to [] when win_dates is missing', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+    const profile = await fetchDailyProfile('tok');
+    expect(profile?.winDates).toEqual([]);
   });
 
   it('returns null on an HTTP error', async () => {

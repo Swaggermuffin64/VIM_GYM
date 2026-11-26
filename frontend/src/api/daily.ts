@@ -105,7 +105,7 @@ export interface ChallengeInfo {
 /**
  * Parse response text as JSON defensively. Returns null if parsing fails.
  */
-function safeParseJson(text: string): unknown {
+export function safeParseJson(text: string): unknown {
   try {
     return text ? JSON.parse(text) : null;
   } catch {
@@ -172,7 +172,9 @@ export function invalidateDailyRaceCache(): void {
 // ---------------------------------------------------------------------------
 
 /** Bearer header when a token is present; visitors send none. */
-function authHeaders(accessToken: string | null | undefined): HeadersInit {
+export function authHeaders(
+  accessToken: string | null | undefined
+): HeadersInit {
   return accessToken ? { Authorization: `Bearer ${accessToken}` } : {};
 }
 
@@ -584,10 +586,12 @@ export interface DailyProfile {
   };
   /** Most recent raced days first. */
   recent: DailyHistoryDay[];
+  /** UTC days (YYYY-MM-DD) the user won the daily; feeds the activity calendar. */
+  winDates: string[];
 }
 
 /** `raw` as a key/value record; an empty one for anything else. */
-function asRecord(raw: unknown): Record<string, unknown> {
+export function asRecord(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
 }
 
@@ -679,6 +683,9 @@ export async function fetchDailyProfile(
         efficiencyRank: numberOr(d.efficiency_rank, null),
         efficiencyRacers: numberOr(d.efficiency_racers, null),
       })),
+      winDates: Array.isArray(b.win_dates)
+        ? b.win_dates.filter((d): d is string => typeof d === 'string')
+        : [],
     };
   } catch (err) {
     console.error('[daily] fetchDailyProfile network error:', err);

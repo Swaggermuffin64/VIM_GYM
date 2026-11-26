@@ -3,7 +3,8 @@
  * label block, an arrow, then the value on a dark block (`STREAK ▸ 30`).
  * Colour comes from the badge's kind (see BADGE_KIND_COLORS).
  *
- * `size="sm"` is the leaderboard chip (no arrow, tighter); `locked` draws an
+ * `size="sm"` is the leaderboard chip (no arrow, tighter); `size="xl"` is
+ * the large plaque segment on the profile page; `locked` draws an
  * unearned badge as a dashed outline with no colour.
  */
 import React from 'react';
@@ -16,6 +17,7 @@ const VALUE_BG = '#1e293b';
 
 const SIZES = {
   lg: { height: 30, fontSize: 13, padX: 10, arrow: 10, radius: 6 },
+  xl: { height: 44, fontSize: 17, padX: 14, arrow: 14, radius: 8 },
   sm: { height: 16, fontSize: 10, padX: 4, arrow: 0, radius: 3 },
 } as const;
 
@@ -29,7 +31,7 @@ export function StatusSegment({
   kind: BadgeKind;
   label: string;
   value: React.ReactNode;
-  size?: 'lg' | 'sm';
+  size?: 'xl' | 'lg' | 'sm';
   locked?: boolean;
 }) {
   const s = SIZES[size];
@@ -82,7 +84,7 @@ export function StatusSegment({
       <span
         style={{
           ...block,
-          padding: `0 ${s.padX + (size === 'lg' ? 2 : 0)}px`,
+          padding: `0 ${s.padX + (size === 'sm' ? 0 : 2)}px`,
           borderRadius: `0 ${s.radius}px ${s.radius}px 0`,
           ...(locked
             ? { border: dashed, color: colors.textSecondary }

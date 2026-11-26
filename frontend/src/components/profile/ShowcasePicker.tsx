@@ -52,16 +52,27 @@ export function ShowcasePicker({
 }: {
   earned: BadgeInfo[];
   selected: string[];
-  onSave: (ids: string[]) => void;
+  onSave: (ids: string[]) => Promise<void>;
   onCancel: () => void;
 }) {
   const [chosen, setChosen] = useState<string[]>(selected);
+  const [saving, setSaving] = useState(false);
   const full = chosen.length >= MAX_SHOWCASED;
 
   const toggle = (id: string) =>
     setChosen((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+
+  /** Saves once; Save stays disabled until the save settles so a double click can't post twice. */
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(chosen);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -99,11 +110,17 @@ export function ShowcasePicker({
         <button
           type="button"
           style={styles.save}
-          onClick={() => onSave(chosen)}
+          disabled={saving}
+          onClick={save}
         >
           Save showcase
         </button>
-        <button type="button" style={styles.cancel} onClick={onCancel}>
+        <button
+          type="button"
+          style={styles.cancel}
+          disabled={saving}
+          onClick={onCancel}
+        >
           Cancel
         </button>
       </div>

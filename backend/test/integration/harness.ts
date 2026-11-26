@@ -87,6 +87,7 @@ export async function startTestDatabase(): Promise<TestDatabase> {
   await client.query(readMigration('003_games_and_stats.sql'));
   await client.query(readMigration('005_daily_races.sql'));
   await client.query(readMigration('008_daily_badges.sql'));
+  await client.query(readMigration('009_showcased_badges.sql'));
   await client.query(
     `INSERT INTO profiles (id, display_name) VALUES
        ($1, 'alice'), ($2, 'bob'), ($3, 'mallory')`,

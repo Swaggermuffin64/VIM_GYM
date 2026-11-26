@@ -53,7 +53,11 @@ import {
 } from './auth/httpAuth.js';
 import { resolveSocketIdentity } from './auth/socketIdentity.js';
 import { invalidateCachedDisplayName } from './auth/identityCache.js';
-import { getProfile, upsertProfile } from './db/profiles.js';
+import {
+  getProfile,
+  upsertProfile,
+  setShowcasedBadges,
+} from './db/profiles.js';
 import {
   upsertTasksOnFirstUse,
   createGameSession,
@@ -79,6 +83,7 @@ import {
   validateBoolean,
   validateKeystrokeEvents,
   validateAvatarUrl,
+  validateShowcase,
 } from './validation/inputValidation.js';
 
 // Event loop lag tracker — measures how late setImmediate fires vs expected
@@ -171,6 +176,7 @@ fastify.get('/api/user/me', async (request, reply) => {
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+      showcased_badges: profile.showcased_badges,
       created_at: profile.created_at,
     },
   };
@@ -229,9 +235,32 @@ fastify.post<{
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+      showcased_badges: profile.showcased_badges,
       created_at: profile.created_at,
     },
   };
+});
+
+// Save the (up to 3) badges the signed-in user features on their profile.
+// Separate from /api/user/profile, which requires display_name.
+fastify.post<{
+  Body: { showcased_badges?: unknown };
+}>('/api/user/showcase', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const result = validateShowcase(request.body?.showcased_badges);
+  if (!result.valid) {
+    return reply.status(400).send({ success: false, error: result.error });
+  }
+
+  const stored = await setShowcasedBadges(user.id, result.value!);
+  if (!stored) {
+    return reply
+      .status(500)
+      .send({ success: false, error: 'Failed to update showcase' });
+  }
+  return { success: true, showcased_badges: stored };
 });
 
 // Aggregated racing/task stats for the signed-in user's profile page.

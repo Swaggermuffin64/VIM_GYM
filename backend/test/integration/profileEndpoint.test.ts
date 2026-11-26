@@ -131,3 +131,55 @@ describe('POST /api/user/profile', () => {
     expect((await profileRow()).avatar_url).toBe(url);
   });
 });
+
+describe('showcased badges', () => {
+  async function getMe() {
+    const res = await fetch(`${base}/api/user/me`, {
+      headers: {
+        Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}`,
+      },
+    });
+    return (await res.json()) as {
+      profile: { showcased_badges: string[] };
+    };
+  }
+
+  async function postShowcase(showcased_badges: unknown) {
+    const res = await fetch(`${base}/api/user/showcase`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}`,
+      },
+      body: JSON.stringify({ showcased_badges }),
+    });
+    return {
+      res,
+      body: (await res.json()) as {
+        success: boolean;
+        showcased_badges?: string[];
+      },
+    };
+  }
+
+  it('/me returns an empty showcase for a fresh profile', async () => {
+    await db.query(
+      'UPDATE profiles SET showcased_badges = DEFAULT WHERE id = $1',
+      [TEST_USERS.alice]
+    );
+    expect((await getMe()).profile.showcased_badges).toEqual([]);
+  });
+
+  it('saves a showcase that /me then returns', async () => {
+    const { res, body } = await postShowcase(['first_win']);
+    expect(res.status).toBe(200);
+    expect(body.showcased_badges).toEqual(['first_win']);
+    expect((await getMe()).profile.showcased_badges).toEqual(['first_win']);
+  });
+
+  it('rejects an unknown badge with 400 and keeps the old showcase', async () => {
+    const { res } = await postShowcase(['nope']);
+    expect(res.status).toBe(400);
+    expect((await getMe()).profile.showcased_badges).toEqual(['first_win']);
+  });
+});

@@ -13,6 +13,7 @@ import {
   validateBoolean,
   validateOptionalRoomId,
   validateAvatarUrl,
+  validateShowcase,
 } from './inputValidation.js';
 
 describe('validateAvatarUrl', () => {
@@ -207,4 +208,53 @@ describe('validateOptionalRoomId', () => {
     });
     expect(validateOptionalRoomId('bad id!').valid).toBe(false);
   });
+});
+
+describe('validateShowcase', () => {
+  it('de-duplicates while preserving order', () => {
+    expect(validateShowcase(['streak_7', 'streak_7', 'first_win'])).toEqual({
+      valid: true,
+      value: ['streak_7', 'first_win'],
+    });
+  });
+
+  it('accepts an empty array (clears the showcase)', () => {
+    expect(validateShowcase([])).toEqual({ valid: true, value: [] });
+  });
+
+  it('rejects an unknown badge id', () => {
+    expect(validateShowcase(['nope'])).toEqual({
+      valid: false,
+      error: 'Unknown badge',
+    });
+  });
+
+  it('rejects non-string entries as unknown badges', () => {
+    expect(validateShowcase([42])).toEqual({
+      valid: false,
+      error: 'Unknown badge',
+    });
+  });
+
+  it('rejects more than three distinct badges', () => {
+    expect(
+      validateShowcase(['streak_7', 'first_win', 'days_7', 'days_30'])
+    ).toEqual({ valid: false, error: 'At most 3 badges' });
+  });
+
+  it('allows exactly three distinct badges', () => {
+    expect(validateShowcase(['streak_7', 'first_win', 'days_7']).valid).toBe(
+      true
+    );
+  });
+
+  it.each([['streak_7'], [undefined], [null], [{}]])(
+    'rejects a non-array (%s)',
+    (raw) => {
+      expect(validateShowcase(raw)).toEqual({
+        valid: false,
+        error: 'showcased_badges must be an array',
+      });
+    }
+  );
 });

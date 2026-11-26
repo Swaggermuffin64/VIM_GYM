@@ -6,6 +6,7 @@ export interface Profile {
   avatar_url: string | null;
   is_premium: boolean;
   has_completed_onboarding: boolean;
+  showcased_badges: string[];
   created_at: Date;
 }
 
@@ -15,7 +16,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
   if (!pool) return null;
 
   const result = await pool.query<Profile>(
-    `SELECT id, display_name, avatar_url, is_premium, has_completed_onboarding, created_at
+    `SELECT id, display_name, avatar_url, is_premium, has_completed_onboarding, showcased_badges, created_at
      FROM profiles WHERE id = $1`,
     [userId]
   );
@@ -51,7 +52,7 @@ export async function upsertProfile(
          display_name = EXCLUDED.display_name,
          avatar_url = COALESCE(EXCLUDED.avatar_url, profiles.avatar_url),
          has_completed_onboarding = true
-       RETURNING id, display_name, avatar_url, is_premium, has_completed_onboarding, created_at`,
+       RETURNING id, display_name, avatar_url, is_premium, has_completed_onboarding, showcased_badges, created_at`,
       [userId, data.display_name, data.avatar_url ?? null]
     );
     const profile = result.rows[0];
@@ -62,5 +63,30 @@ export async function upsertProfile(
       return { status: 'name_taken' };
     }
     throw err;
+  }
+}
+
+/**
+ * Replace the badges a user features on their profile page. Ids must already
+ * be validated (validateShowcase). Returns the stored array, or null when
+ * there is no database, no such profile, or the query fails.
+ */
+export async function setShowcasedBadges(
+  userId: string,
+  ids: string[]
+): Promise<string[] | null> {
+  const pool = getPool();
+  if (!pool) return null;
+
+  try {
+    const result = await pool.query<{ showcased_badges: string[] }>(
+      `UPDATE profiles SET showcased_badges = $2
+       WHERE id = $1
+       RETURNING showcased_badges`,
+      [userId, ids]
+    );
+    return result.rows[0]?.showcased_badges ?? null;
+  } catch {
+    return null;
   }
 }

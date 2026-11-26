@@ -279,6 +279,13 @@ describe('ProfilePage loading', () => {
     expect(count('/api/daily/profile')).toBe(1);
   });
 
+  it('shows the branded loading spinner until the profile arrives', async () => {
+    render(<ProfilePage />);
+    expect(screen.getByTestId('branded-loading-spinner')).toBeTruthy();
+    await screen.findByText('zaphod');
+    expect(screen.queryByTestId('branded-loading-spinner')).toBeNull();
+  });
+
   it('shows the identity error when /me fails', async () => {
     stubFetch({ me: { success: false, error: 'Nope' } });
     render(<ProfilePage />);

@@ -12,6 +12,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { SiteBanner } from '../components/SiteBanner';
+import { BrandedLoading } from '../components/BrandedLoading';
 import { colors } from '../theme';
 import { formatDuration, ordinal } from '../lib/format';
 import { fetchDailyProfile } from '../api/daily';
@@ -214,13 +215,9 @@ export default function ProfilePage() {
     );
   }
 
-  if (!profile) {
-    return (
-      <div style={styles.container}>
-        <SiteBanner />
-      </div>
-    );
-  }
+  // Same amber-ring loading screen the other routes show, until /me, stats
+  // and the daily profile have all answered.
+  if (!profile) return <BrandedLoading />;
 
   const showMultiplayer = (stats?.multiplayer.races ?? 0) > 0;
 

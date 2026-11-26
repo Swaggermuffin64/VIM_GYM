@@ -270,6 +270,7 @@ export default function ProfilePage() {
               <RecentGames
                 games={stats?.recentGames ?? []}
                 dailyRecent={daily?.recent ?? []}
+                today={today}
               />
             </div>
             <div style={cell(narrow, 6)}>

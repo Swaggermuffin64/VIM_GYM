@@ -162,17 +162,75 @@ describe('ActivityCalendar', () => {
 });
 
 describe('RecentGames', () => {
-  it('shows the daily placing for a daily row and an ordinal for a win', () => {
+  const scoredDay: DailyHistoryDay = {
+    raceDate: '2026-11-25',
+    bestMs: 14600,
+    speedRank: 2,
+    racers: 31,
+    efficiency: 0.91,
+    efficiencyRank: 3,
+    efficiencyRacers: 30,
+  };
+
+  it('shows one daily row per day with both board placings and the best time', () => {
     render(
       <RecentGames
         games={[
-          game({ playMode: 'daily', startedAt: '2026-11-25T08:00:00Z' }),
-          game({ playMode: 'quick_play', position: 1 }),
+          game({ playMode: 'daily', startedAt: '2026-11-25T09:00:00Z' }),
+          game({
+            playMode: 'daily',
+            startedAt: '2026-11-25T08:00:00Z',
+            finished: false,
+            totalTimeMs: null,
+          }),
         ]}
+        dailyRecent={[scoredDay]}
+        today={TODAY}
+      />
+    );
+    expect(screen.getAllByText('Race of the Day')).toHaveLength(1);
+    expect(screen.getByText('Nov 25')).toBeTruthy();
+    expect(screen.getByText('2/31')).toBeTruthy();
+    expect(screen.getByText('3/30')).toBeTruthy();
+    expect(screen.getByText('14.6s')).toBeTruthy();
+    // The unfinished attempt is folded into the day, not shown as DNF.
+    expect(screen.queryByText('DNF')).toBeNull();
+  });
+  it('labels the columns so the two placings are clear', () => {
+    render(<RecentGames games={[]} dailyRecent={[scoredDay]} today={TODAY} />);
+    expect(screen.getByText('Place')).toBeTruthy();
+    expect(screen.getByText('Eff.')).toBeTruthy();
+    expect(screen.getByText('Time')).toBeTruthy();
+  });
+  it('dates a daily row raced today as Today', () => {
+    render(
+      <RecentGames
+        games={[]}
+        dailyRecent={[{ ...scoredDay, raceDate: TODAY }]}
+        today={TODAY}
+      />
+    );
+    expect(screen.getByText('Today')).toBeTruthy();
+  });
+  it('shows a dash for efficiency when the day had no scored attempt', () => {
+    render(
+      <RecentGames
+        games={[]}
         dailyRecent={[historyDay('2026-11-25', 4)]}
+        today={TODAY}
       />
     );
     expect(screen.getByText('4/44')).toBeTruthy();
+    expect(screen.getByLabelText('No efficiency placing')).toBeTruthy();
+  });
+  it('shows an ordinal for a multiplayer win', () => {
+    render(
+      <RecentGames
+        games={[game({ playMode: 'quick_play', position: 1 })]}
+        dailyRecent={[]}
+        today={TODAY}
+      />
+    );
     expect(screen.getByText('1st')).toBeTruthy();
   });
   it('labels a game the player quit as left and an unfinished one as DNF', () => {
@@ -180,9 +238,10 @@ describe('RecentGames', () => {
       <RecentGames
         games={[
           game({ finished: false, leftRace: true }),
-          game({ finished: false }),
+          game({ finished: false, startedAt: '2026-11-19T12:00:00Z' }),
         ]}
         dailyRecent={[]}
+        today={TODAY}
       />
     );
     expect(screen.getByText('left')).toBeTruthy();
@@ -192,7 +251,7 @@ describe('RecentGames', () => {
 
 describe('RecentGames empty state', () => {
   it('explains an empty list instead of showing a bare label', () => {
-    render(<RecentGames games={[]} dailyRecent={[]} />);
+    render(<RecentGames games={[]} dailyRecent={[]} today={TODAY} />);
     expect(screen.getByText(/no games yet/i)).toBeTruthy();
   });
 });

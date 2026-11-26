@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { DailyHistoryDay, DailyProfile } from '../api/daily';
+import type { RecentGame } from '../api/profile';
 import {
   activityGrid,
   activityLevel,
   activitySummary,
   bestFinish,
   raceTimeDelta,
+  recentActivity,
   weekStartAxis,
   showcaseBadges,
   trophyCase,
@@ -293,5 +295,98 @@ describe('showcaseBadges', () => {
   });
   it('is empty when nothing is earned', () => {
     expect(showcaseBadges(['gone_badge'], [])).toEqual([]);
+  });
+});
+
+describe('recentActivity', () => {
+  const run = (
+    playMode: string,
+    startedAt: string,
+    extra: Partial<RecentGame> = {}
+  ): RecentGame => ({
+    playMode,
+    position: null,
+    finished: true,
+    leftRace: false,
+    totalTimeMs: 20000,
+    startedAt,
+    ...extra,
+  });
+  const dailyDay = (
+    raceDate: string,
+    extra: Partial<DailyHistoryDay> = {}
+  ): DailyHistoryDay => ({
+    raceDate,
+    bestMs: 14600,
+    speedRank: 2,
+    racers: 31,
+    efficiency: 0.91,
+    efficiencyRank: 3,
+    efficiencyRacers: 30,
+    ...extra,
+  });
+
+  it('collapses every daily attempt on a day into one row with both boards', () => {
+    const rows = recentActivity(
+      [
+        run('daily', '2026-11-25T09:00:00Z'),
+        run('daily', '2026-11-25T08:00:00Z', { finished: false }),
+      ],
+      [dailyDay('2026-11-25')]
+    );
+    expect(rows).toEqual([
+      {
+        kind: 'daily',
+        day: '2026-11-25',
+        bestMs: 14600,
+        speed: { rank: 2, racers: 31 },
+        efficiency: { rank: 3, racers: 30 },
+      },
+    ]);
+  });
+
+  it('keeps non-daily games as their own rows, newest first', () => {
+    const rows = recentActivity(
+      [
+        run('practice', '2026-11-25T14:00:00Z'),
+        run('daily', '2026-11-25T08:00:00Z'),
+        run('quick_play', '2026-11-24T10:00:00Z', { position: 1 }),
+      ],
+      [dailyDay('2026-11-25')]
+    );
+    expect(
+      rows.map((r) => (r.kind === 'daily' ? 'daily' : r.game.playMode))
+    ).toEqual(['practice', 'daily', 'quick_play']);
+  });
+
+  it('shows a raced day even when none of its attempts are in the game list', () => {
+    const rows = recentActivity([], [dailyDay('2026-11-23')]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind).toBe('daily');
+  });
+
+  it('leaves efficiency empty when the day had no scored attempt', () => {
+    const rows = recentActivity(
+      [],
+      [
+        dailyDay('2026-11-23', {
+          efficiency: null,
+          efficiencyRank: null,
+          efficiencyRacers: null,
+        }),
+      ]
+    );
+    expect(rows[0]).toMatchObject({ kind: 'daily', efficiency: null });
+  });
+
+  it('never shows more than the limit', () => {
+    const days = ['2026-11-20', '2026-11-21', '2026-11-22', '2026-11-23'];
+    expect(
+      recentActivity(
+        [],
+        days.map((d) => dailyDay(d)),
+        3
+      )
+    ).toHaveLength(3);
   });
 });

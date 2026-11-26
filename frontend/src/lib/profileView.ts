@@ -12,7 +12,7 @@ import type {
   DailyProfile,
   EarnedBadge,
 } from '../api/daily';
-import type { PlayerStats } from '../api/profile';
+import type { PlayerStats, RecentGame } from '../api/profile';
 import { BADGE_CATALOG, badgeInfo, formatEfficiency } from './dailyBadges';
 import type { BadgeInfo } from './dailyBadges';
 
@@ -250,4 +250,80 @@ export function showcaseBadges(
     .map((b) => badgeInfo(b.id))
     .filter((info): info is BadgeInfo => info !== undefined)
     .slice(0, MAX_SHOWCASED_BADGES);
+}
+
+/** A placing on one daily board: rank out of that board's field. */
+export interface BoardPlacing {
+  rank: number;
+  racers: number;
+}
+
+/**
+ * One row of the "Recent games" list. A Race of the Day is one row per day
+ * (all attempts that day folded together, with both board placings and the
+ * day's best time); every other mode is one row per game.
+ */
+export type RecentActivityRow =
+  | {
+      kind: 'daily';
+      /** The race's UTC date key. */
+      day: string;
+      bestMs: number;
+      speed: BoardPlacing;
+      /** Null when no attempt that day had complete keystroke data. */
+      efficiency: BoardPlacing | null;
+    }
+  | { kind: 'game'; game: RecentGame };
+
+/** Rows the "Recent games" list shows at most. */
+export const RECENT_ACTIVITY_LIMIT = 8;
+
+/**
+ * Builds the "Recent games" list: daily attempts collapse into one row per
+ * raced day (from the daily profile's recent days, so placings are always
+ * present), other games stay one row each, newest first, capped at `limit`.
+ * A daily day sorts by its latest attempt in `games`, or midday UTC when none
+ * of its attempts are in the list.
+ */
+export function recentActivity(
+  games: RecentGame[],
+  dailyRecent: DailyHistoryDay[],
+  limit = RECENT_ACTIVITY_LIMIT
+): RecentActivityRow[] {
+  const latestDailyAttempt = new Map<string, string>();
+  for (const game of games) {
+    if (game.playMode !== 'daily') continue;
+    const day = game.startedAt.slice(0, 10);
+    const seen = latestDailyAttempt.get(day);
+    if (!seen || game.startedAt > seen)
+      latestDailyAttempt.set(day, game.startedAt);
+  }
+
+  const dailyRows = dailyRecent.map((d) => ({
+    sortKey:
+      latestDailyAttempt.get(d.raceDate) ?? `${d.raceDate}T12:00:00.000Z`,
+    row: {
+      kind: 'daily' as const,
+      day: d.raceDate,
+      bestMs: d.bestMs,
+      speed: { rank: d.speedRank, racers: d.racers },
+      efficiency:
+        d.efficiencyRank !== null && d.efficiencyRacers !== null
+          ? { rank: d.efficiencyRank, racers: d.efficiencyRacers }
+          : null,
+    },
+  }));
+  const gameRows = games
+    .filter((game) => game.playMode !== 'daily')
+    .map((game) => ({
+      sortKey: game.startedAt,
+      row: { kind: 'game' as const, game },
+    }));
+
+  return [...dailyRows, ...gameRows]
+    .sort((a, b) =>
+      a.sortKey < b.sortKey ? 1 : a.sortKey > b.sortKey ? -1 : 0
+    )
+    .slice(0, limit)
+    .map((entry) => entry.row);
 }

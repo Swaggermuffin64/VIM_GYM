@@ -483,11 +483,17 @@ describe('ProfilePage stats', () => {
     expect(screen.getAllByText(/practice/i).length).toBeGreaterThan(0);
   });
 
-  it('leaves the result cell blank for a completed solo run, not DNF', async () => {
+  it('lists Race of the Day by day from the daily results, not per attempt', async () => {
+    // STATS has a single daily attempt (17.2s) but the daily profile reports
+    // no raced days, so there is no daily row to show — attempts never get a
+    // row of their own (that is what used to leave placings blank).
     stubFetch({ stats: STATS });
     render(<ProfilePage />);
-    expect(await screen.findByText('17.2s')).toBeTruthy(); // the daily row
-    expect(screen.queryByText(/done/i)).toBeNull();
+    await screen.findByText('Recent games');
+    expect(screen.queryByText('17.2s')).toBeNull();
+    expect(
+      screen.queryByText('Race of the Day', { selector: 'span' })
+    ).toBeNull();
     expect(screen.getAllByText('DNF').length).toBe(1); // only the practice row
   });
 

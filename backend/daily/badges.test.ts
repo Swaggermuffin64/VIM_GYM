@@ -221,6 +221,25 @@ describe('recent', () => {
   });
 });
 
+describe('winDates', () => {
+  it('winDates lists closed days won on either board', () => {
+    const s = summarizeDailyHistory(
+      [
+        day('2026-10-10', { speedRank: 1 }),
+        day('2026-10-11', { efficiencyRank: 1 }),
+        day('2026-10-12', { speedRank: 2, efficiencyRank: 2 }),
+      ],
+      TODAY
+    );
+    expect(s.winDates).toEqual(['2026-10-10', '2026-10-11']);
+  });
+
+  it('winDates excludes today', () => {
+    const s = summarizeDailyHistory([day(TODAY, { speedRank: 1 })], TODAY);
+    expect(s.winDates).toEqual([]);
+  });
+});
+
 describe('chipsByUser', () => {
   it('summarizes each user in a mixed history separately', () => {
     const chips = chipsByUser(

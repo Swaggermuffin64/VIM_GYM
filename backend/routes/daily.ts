@@ -563,6 +563,7 @@ export async function registerDailyRoutes(
             }
           : null,
       },
+      win_dates: summary.winDates,
       recent: summary.recent.map((d) => ({
         race_date: d.raceDate,
         best_ms: d.bestMs,

@@ -67,6 +67,8 @@ export interface DailySummary {
     fastest: { ms: number; raceDate: string } | null;
     mostEfficient: { efficiency: number; raceDate: string } | null;
   };
+  /** Closed race dates (before today) won on either board, ascending. */
+  winDates: string[];
   /** Most recent raced days first, at most RECENT_DAYS. */
   recent: DailyDayResult[];
 }
@@ -160,6 +162,9 @@ export function summarizeDailyHistory(
   const closed = sorted.filter((d) => d.raceDate < today);
 
   const racedRuns = consecutiveRuns(sorted.map((d) => d.raceDate));
+  const winDates = closed
+    .filter((d) => d.speedRank === 1 || d.efficiencyRank === 1)
+    .map((d) => d.raceDate);
   const podiumDays = closed.filter(isPodium);
   const podiumRuns = consecutiveRuns(podiumDays.map((d) => d.raceDate));
 
@@ -232,6 +237,7 @@ export function summarizeDailyHistory(
       fastest,
       mostEfficient,
     },
+    winDates,
     recent: sorted.slice(-RECENT_DAYS).reverse(),
   };
 }

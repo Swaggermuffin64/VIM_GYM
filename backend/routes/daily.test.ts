@@ -1010,6 +1010,15 @@ describe('GET /api/daily/profile', () => {
     });
   });
 
+  it('returns win_dates for closed days won on either board', async () => {
+    vi.mocked(dailyResults.getSeenBadges).mockResolvedValue([]);
+
+    const app = await buildServer();
+    const res = await app.inject({ method: 'GET', url: '/api/daily/profile' });
+
+    expect(res.json().win_dates).toEqual(['2026-10-12']);
+  });
+
   it('reports nothing unseen when the seen list cannot be read', async () => {
     vi.mocked(dailyResults.getSeenBadges).mockResolvedValue(null);
 

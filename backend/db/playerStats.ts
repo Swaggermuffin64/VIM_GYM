@@ -1,7 +1,7 @@
 /**
  * Read-only aggregate queries backing the profile page's stats section.
  * Includes the per-user volume aggregates (all-mode run count, multiplayer
- * split, 26-week activity calendar, weekly and 30-day race-time trends)
+ * split, 52-week activity calendar, weekly and 30-day race-time trends)
  * that feed the bento layout; all date bucketing is UTC.
  *
  * Counterpart to the writers in db/stats.ts: null-pool tolerant, logs
@@ -36,8 +36,12 @@ export interface WeeklyRaceTime {
   avgMs: number;
 }
 
-/** How many weeks back the activity calendar reaches. */
-export const ACTIVITY_WEEKS = 26;
+/**
+ * How many weeks back the activity calendar reaches: a full year, so the
+ * calendar fills its tile on desktop. At most one row per active day per
+ * user, so this stays cheap.
+ */
+export const ACTIVITY_WEEKS = 52;
 /** How many weeks back the weekly race-time trend reaches. */
 export const RACE_TIME_WEEKS = 12;
 

@@ -10,8 +10,13 @@ import { colors } from '../../theme';
 /** Pixel gap between tiles in the bento grid. */
 export const TILE_GAP = 10;
 
-/** A bento card: flat surface, thin border, rounded. Tiles never set grid spans. */
+/**
+ * A bento card: flat surface, thin border, rounded. Tiles never set grid
+ * spans, but they fill their grid cell's full height so neighbouring tiles in
+ * a row end on the same line instead of leaving empty space below.
+ */
 export const tile: React.CSSProperties = {
+  height: '100%',
   background: colors.bgCard,
   border: `1px solid ${colors.border}`,
   borderRadius: '14px',

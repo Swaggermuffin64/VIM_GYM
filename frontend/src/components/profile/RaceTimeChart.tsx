@@ -20,73 +20,80 @@ const RACE_TIME_WEEKS = 12;
 const styles: Record<string, React.CSSProperties> = {
   header: { display: 'flex', justifyContent: 'space-between', gap: '12px' },
   headline: { fontSize: '24px', fontWeight: 800 },
-  svg: { width: '100%', height: '52px', marginTop: '8px', display: 'block' },
+  root: { ...tile, display: 'flex', flexDirection: 'column' },
+  /** Grows to fill whatever height the grid row gives the tile. */
+  svg: {
+    width: '100%',
+    flex: 1,
+    minHeight: '52px',
+    marginTop: '8px',
+    display: 'block',
+  },
 };
 
+interface ChartPoint {
+  /** Position of the point's week on the axis (0 = oldest week). */
+  weekIndex: number;
+  x: number;
+  y: number;
+}
+
 /**
- * Line and area path strings for the weekly averages on a fixed axis of
- * `RACE_TIME_WEEKS` weeks ending this week. A week with no entry is a gap:
- * the line restarts (a new `M` sub-path) after it instead of joining across.
+ * Path strings for the weekly averages on a fixed axis of `RACE_TIME_WEEKS`
+ * weeks ending this week, drawn as one connected line:
+ * - `line`: solid segments between points in neighbouring weeks;
+ * - `gaps`: dashed segments that bridge weeks with no finished runs, so a
+ *   quiet week reads as "no data" instead of breaking the line apart;
+ * - `area`: the fill under the whole line, first point to last.
  * Faster (lower) weeks sit lower, so an improving player's line trends down.
  * Null when fewer than two weeks have data.
  */
 function sparklinePaths(
   weekly: PlayerStats['raceTimeWeekly'],
   today: string
-): { line: string; area: string } | null {
+): { line: string; gaps: string; area: string } | null {
   const axis = weekStartAxis(today, RACE_TIME_WEEKS);
   const avgByWeek = new Map(weekly.map((w) => [w.weekStart, w.avgMs]));
-  const known = axis.flatMap((week) => {
-    const v = avgByWeek.get(week);
-    return v === undefined ? [] : [v];
+  const known = axis.flatMap((week, weekIndex) => {
+    const avgMs = avgByWeek.get(week);
+    return avgMs === undefined ? [] : [{ weekIndex, avgMs }];
   });
   if (known.length < 2) return null;
 
-  const min = Math.min(...known);
-  const range = Math.max(...known) - min || 1;
+  const times = known.map((k) => k.avgMs);
+  const min = Math.min(...times);
+  const range = Math.max(...times) - min || 1;
   const usable = CHART_HEIGHT - CHART_PADDING * 2;
+  const points: ChartPoint[] = known.map(({ weekIndex, avgMs }) => ({
+    weekIndex,
+    x: (weekIndex / (RACE_TIME_WEEKS - 1)) * CHART_WIDTH,
+    y: CHART_PADDING + usable - ((avgMs - min) / range) * usable,
+  }));
 
-  // Consecutive weeks with data, as lists of "x y" points.
-  const runs: { x: number; y: number }[][] = [[]];
-  axis.forEach((week, i) => {
-    const v = avgByWeek.get(week);
-    if (v === undefined) {
-      if (runs[runs.length - 1]!.length > 0) runs.push([]);
-      return;
-    }
-    runs[runs.length - 1]!.push({
-      x: (i / (RACE_TIME_WEEKS - 1)) * CHART_WIDTH,
-      y: CHART_PADDING + usable - ((v - min) / range) * usable,
-    });
-  });
-  const segments = runs.filter((run) => run.length > 0);
-  const fmt = (p: { x: number; y: number }) =>
-    `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  const fmt = (p: ChartPoint) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`;
+  const solid: string[] = [];
+  const dashed: string[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const from = points[i - 1]!;
+    const to = points[i]!;
+    const segment = `M${fmt(from)} L${fmt(to)}`;
+    if (to.weekIndex - from.weekIndex === 1) solid.push(segment);
+    else dashed.push(segment);
+  }
 
-  // A lone week is a zero-length segment; the round line cap draws it as a dot.
-  const line = segments
-    .map((run) =>
-      run.length === 1
-        ? `M${fmt(run[0]!)} L${fmt(run[0]!)}`
-        : `M${run.map(fmt).join(' L')}`
-    )
-    .join(' ');
-  const area = segments
-    .filter((run) => run.length > 1)
-    .map((run) => {
-      const first = run[0]!;
-      const last = run[run.length - 1]!;
-      return `M${run.map(fmt).join(' L')} L${last.x.toFixed(1)} ${CHART_HEIGHT} L${first.x.toFixed(1)} ${CHART_HEIGHT}Z`;
-    })
-    .join(' ');
-  return { line, area };
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  const area = `M${points.map(fmt).join(' L')} L${last.x.toFixed(1)} ${CHART_HEIGHT} L${first.x.toFixed(1)} ${CHART_HEIGHT}Z`;
+  return { line: solid.join(' '), gaps: dashed.join(' '), area };
 }
 
 /**
  * Renders the average race time tile. `weekly` are weekly means keyed by UTC
  * Monday; they are placed on a 12-week axis ending at `today`'s week, weeks
- * with none leave a gap, and with fewer than two points no line is drawn. The delta compares the last
- * 30 days with the 30 before and is hidden when either is unknown.
+ * with none are bridged by a dashed segment, and with fewer than two points
+ * no line is drawn. The chart grows to fill the tile's height. The delta
+ * compares the last 30 days with the 30 before and is hidden when either is
+ * unknown.
  */
 export function RaceTimeChart({
   avgRaceMs,
@@ -105,7 +112,7 @@ export function RaceTimeChart({
   const paths = sparklinePaths(weekly, today);
 
   return (
-    <div style={tile}>
+    <div style={styles.root}>
       <div style={styles.header}>
         <div>
           <p style={sectionLabel}>Avg race time</p>
@@ -153,14 +160,29 @@ export function RaceTimeChart({
               </linearGradient>
             </defs>
             <path d={paths.area} fill="url(#raceTimeFill)" />
-            <path
-              d={paths.line}
-              fill="none"
-              stroke={colors.primaryLight}
-              strokeWidth="2"
-              strokeLinecap="round"
-              vectorEffect="non-scaling-stroke"
-            />
+            {paths.line && (
+              <path
+                data-testid="race-time-line"
+                d={paths.line}
+                fill="none"
+                stroke={colors.primaryLight}
+                strokeWidth="2"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {paths.gaps && (
+              <path
+                data-testid="race-time-gap"
+                d={paths.gaps}
+                fill="none"
+                stroke={colors.primaryLight}
+                strokeOpacity=".6"
+                strokeWidth="2"
+                strokeDasharray="4 5"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
           </>
         )}
       </svg>

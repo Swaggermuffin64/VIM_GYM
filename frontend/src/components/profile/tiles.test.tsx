@@ -66,13 +66,19 @@ const game = (overrides: Partial<RecentGame>): RecentGame => ({
 
 describe('MultiplayerTile', () => {
   it('renders nothing at 0 races', () => {
-    const { container } = render(<MultiplayerTile races={0} winRate={0} />);
+    const { container } = render(
+      <MultiplayerTile races={0} wins={0} winRate={0} />
+    );
     expect(container.innerHTML).toBe('');
   });
-  it('shows the win rate as a percentage', () => {
-    render(<MultiplayerTile races={13} winRate={0.38} />);
+  it('shows the win rate as a percentage with wins and races', () => {
+    render(<MultiplayerTile races={13} wins={5} winRate={0.38} />);
     expect(screen.getByText('38%')).toBeTruthy();
-    expect(screen.getByText('13 races')).toBeTruthy();
+    expect(screen.getByText('5 wins · 13 races')).toBeTruthy();
+  });
+  it('uses singular wording for one win in one race', () => {
+    render(<MultiplayerTile races={1} wins={1} winRate={1} />);
+    expect(screen.getByText('1 win · 1 race')).toBeTruthy();
   });
 });
 
@@ -119,6 +125,31 @@ describe('ActivityCalendar', () => {
       />
     );
     expect(screen.getByText('1 days active · 2 wins')).toBeTruthy();
+  });
+  it('shows a full year of squares by default', () => {
+    render(<ActivityCalendar activity={[]} winDates={[]} today={TODAY} />);
+    // 2025-12-01 is the Monday 51 weeks before today's week (2026-11-23).
+    expect(screen.getByLabelText('2025-12-01: 0 runs')).toBeTruthy();
+    expect(screen.queryByLabelText('2025-11-30: 0 runs')).toBeNull();
+  });
+  it('shows only the requested number of weeks', () => {
+    render(
+      <ActivityCalendar activity={[]} winDates={[]} today={TODAY} weeks={26} />
+    );
+    // 2026-06-01 is the Monday 25 weeks before today's week.
+    expect(screen.getByLabelText('2026-06-01: 0 runs')).toBeTruthy();
+    expect(screen.queryByLabelText('2026-05-31: 0 runs')).toBeNull();
+  });
+  it('counts only wins inside the shown weeks', () => {
+    render(
+      <ActivityCalendar
+        activity={[]}
+        winDates={['2026-03-02', '2026-11-20']}
+        today={TODAY}
+        weeks={26}
+      />
+    );
+    expect(screen.getByText('0 days active · 1 wins')).toBeTruthy();
   });
 });
 
@@ -203,7 +234,7 @@ describe('RaceTimeChart', () => {
     expect(screen.getByText('▼ 2.1s / 30d')).toBeTruthy();
     expect(container.querySelectorAll('path').length).toBe(2);
   });
-  it('breaks the line at a week with no finished runs', () => {
+  it('bridges a week with no finished runs with a dashed segment', () => {
     const { container } = render(
       <RaceTimeChart
         avgRaceMs={12400}
@@ -217,9 +248,28 @@ describe('RaceTimeChart', () => {
         today={TODAY}
       />
     );
-    const [, line] = Array.from(container.querySelectorAll('path'));
-    // Nov 16 is missing: two sub-paths, the lone latest week drawn as a dot.
-    expect(line!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
+    const solid = container.querySelector('[data-testid="race-time-line"]');
+    const bridge = container.querySelector('[data-testid="race-time-gap"]');
+    // Nov 2 → Nov 9 is one solid segment; Nov 9 → Nov 23 skips Nov 16, so it
+    // is drawn dashed rather than left as a hole in the line.
+    expect(solid!.getAttribute('d')!.match(/M/g)).toHaveLength(1);
+    expect(bridge!.getAttribute('d')!.match(/M/g)).toHaveLength(1);
+    expect(bridge!.getAttribute('stroke-dasharray')).toBeTruthy();
+  });
+  it('draws no dashed bridge when every week between points has data', () => {
+    const { container } = render(
+      <RaceTimeChart
+        avgRaceMs={12400}
+        weekly={[
+          { weekStart: '2026-11-16', avgMs: 14000 },
+          { weekStart: '2026-11-23', avgMs: 12000 },
+        ]}
+        avg30d={null}
+        prev30d={null}
+        today={TODAY}
+      />
+    );
+    expect(container.querySelector('[data-testid="race-time-gap"]')).toBeNull();
   });
   it('shows no delta when the averages are equal', () => {
     render(

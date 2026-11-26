@@ -257,8 +257,16 @@ describe('getPlayerStats', () => {
       ]);
     });
 
-    it('activity drops days older than 26 weeks', async () => {
-      await seedRun({ playMode: 'practice', startedAt: utcMidnight(200) });
+    it('activity keeps days within a year (52 weeks)', async () => {
+      await seedRun({ playMode: 'practice', startedAt: utcMidnight(300) });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.activity).toEqual([
+        { day: isoDay(utcMidnight(300)), runs: 1, multiplayerWins: 0 },
+      ]);
+    });
+
+    it('activity drops days older than 52 weeks', async () => {
+      await seedRun({ playMode: 'practice', startedAt: utcMidnight(400) });
       const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
       expect(stats.activity).toEqual([]);
       expect(stats.totalRuns).toBe(1);

@@ -54,6 +54,11 @@ function useIsNarrow(): boolean {
   return narrow;
 }
 
+/** Widest the profile column grows; wide enough that the bento tiles breathe. */
+const PAGE_MAX_WIDTH = 1200;
+/** Activity calendar weeks on a phone, where a full year's squares get too small. */
+const NARROW_CALENDAR_WEEKS = 26;
+
 /** Grid placement for a tile: `span` columns, optionally `rows` tall; full-width when narrow. */
 function cell(
   narrow: boolean,
@@ -85,7 +90,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   column: {
     width: '100%',
-    maxWidth: '900px',
+    maxWidth: `${PAGE_MAX_WIDTH}px`,
     display: 'flex',
     flexDirection: 'column',
     gap: `${TILE_GAP}px`,
@@ -97,7 +102,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   backButton: {
     width: '100%',
-    maxWidth: '900px',
+    maxWidth: `${PAGE_MAX_WIDTH}px`,
     padding: '16px 24px',
     fontSize: '17px',
     fontWeight: 500,
@@ -240,6 +245,7 @@ export default function ProfilePage() {
                 activity={stats?.activity ?? []}
                 winDates={daily?.winDates ?? []}
                 today={today}
+                weeks={narrow ? NARROW_CALENDAR_WEEKS : undefined}
               />
             </div>
             <div style={cell(narrow, 4)}>
@@ -255,6 +261,7 @@ export default function ProfilePage() {
               <div style={cell(narrow, 2)}>
                 <MultiplayerTile
                   races={stats.multiplayer.races}
+                  wins={stats.multiplayer.wins}
                   winRate={stats.multiplayer.winRate}
                 />
               </div>

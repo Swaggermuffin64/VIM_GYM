@@ -388,13 +388,26 @@ describe('ProfilePage daily strip', () => {
   it('practice-only player sees total runs and the empty race-of-the-day message', async () => {
     stubFetch({
       stats: { ...ZERO_STATS, stats: { ...ZERO_STATS.stats, total_runs: 12 } },
-      daily: null,
+      daily: dailyBody([], 0), // real practice-only shape: 200 with days_raced 0
     });
     render(<ProfilePage />);
     await screen.findByText('zaphod');
     await vi.waitFor(() => expect(stripValue('Total runs')).toBe('12'));
     expect(stripValue('Days raced')).toBe('—');
     expect(screen.getByText(/finish a race of the day/i)).toBeTruthy();
+  });
+});
+
+describe('ProfilePage daily fetch failure', () => {
+  it('still renders identity and total runs when the daily fetch 500s', async () => {
+    stubFetch({
+      stats: { ...ZERO_STATS, stats: { ...ZERO_STATS.stats, total_runs: 12 } },
+      daily: null,
+    });
+    render(<ProfilePage />);
+    await screen.findByText('zaphod');
+    await vi.waitFor(() => expect(stripValue('Total runs')).toBe('12'));
+    expect(stripValue('Days raced')).toBe('—');
   });
 });
 
@@ -436,6 +449,12 @@ describe('ProfilePage showcase', () => {
     expect(JSON.stringify(posts[0]!.body)).toBe(
       '{"showcased_badges":["first_win"]}'
     );
+    // After saving, the row shows only the saved badge.
+    await vi.waitFor(() => {
+      const row = screen.getByLabelText('Showcased badges');
+      expect(row.textContent).toContain('WIN');
+      expect(row.textContent).not.toContain('DAYS');
+    });
   });
 });
 

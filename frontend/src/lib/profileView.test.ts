@@ -6,6 +6,7 @@ import {
   activitySummary,
   bestFinish,
   raceTimeDelta,
+  weekStartAxis,
   showcaseBadges,
   trophyCase,
   weekTicks,
@@ -176,17 +177,42 @@ describe('activityLevel', () => {
 });
 
 describe('activitySummary', () => {
+  const TODAY_KEY = '2026-11-26';
   it('counts active days and totals multiplayer plus daily wins', () => {
     expect(
       activitySummary(
         [
-          { day: 'a', runs: 2, multiplayerWins: 1 },
-          { day: 'b', runs: 0, multiplayerWins: 0 },
-          { day: 'c', runs: 1, multiplayerWins: 2 },
+          { day: '2026-11-01', runs: 2, multiplayerWins: 1 },
+          { day: '2026-11-02', runs: 0, multiplayerWins: 0 },
+          { day: '2026-11-03', runs: 1, multiplayerWins: 2 },
         ],
-        ['x', 'y']
+        ['2026-11-04', '2026-11-05'],
+        TODAY_KEY
       )
     ).toEqual({ daysActive: 2, wins: 5 });
+  });
+  it('ignores days and wins older than the grid window', () => {
+    // 26 weeks ending Thu 2026-11-26 start on Monday 2026-06-01.
+    expect(
+      activitySummary(
+        [
+          { day: '2026-05-31', runs: 4, multiplayerWins: 1 },
+          { day: '2026-06-01', runs: 1, multiplayerWins: 0 },
+        ],
+        ['2026-05-31', '2026-06-01'],
+        TODAY_KEY
+      )
+    ).toEqual({ daysActive: 1, wins: 1 });
+  });
+});
+
+describe('weekStartAxis', () => {
+  it('lists UTC Mondays oldest first, ending with this week', () => {
+    const axis = weekStartAxis('2026-11-26', 3);
+    expect(axis).toEqual(['2026-11-09', '2026-11-16', '2026-11-23']);
+  });
+  it('defaults to 12 weeks', () => {
+    expect(weekStartAxis('2026-11-23')).toHaveLength(12);
   });
 });
 
@@ -196,6 +222,10 @@ describe('raceTimeDelta', () => {
   });
   it('reports a slower average', () => {
     expect(raceTimeDelta(12100, 10000)).toEqual({ ms: 2100, faster: false });
+  });
+  it('is null when the averages are equal or differ by under 50ms', () => {
+    expect(raceTimeDelta(10000, 10000)).toBeNull();
+    expect(raceTimeDelta(10000, 10040)).toBeNull();
   });
   it('is null when either side is missing', () => {
     expect(raceTimeDelta(null, 5)).toBeNull();

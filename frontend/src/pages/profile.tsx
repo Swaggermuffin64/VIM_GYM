@@ -248,6 +248,7 @@ export default function ProfilePage() {
                 weekly={stats?.raceTimeWeekly ?? []}
                 avg30d={stats?.avgRaceMs30d ?? null}
                 prev30d={stats?.avgRaceMsPrev30d ?? null}
+                today={today}
               />
             </div>
             {showMultiplayer && stats && (

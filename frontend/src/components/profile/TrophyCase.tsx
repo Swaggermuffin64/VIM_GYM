@@ -1,6 +1,6 @@
 /**
  * The full-width "Trophy case" tile: every Race of the Day badge as a plaque
- * in a 3-column grid, earned ones first (tinted, with the earned date) then
+ * in a responsive auto-fill grid (200px minimum column), earned ones first (tinted, with the earned date) then
  * locked ones (dashed, with a progress bar). A header shows earned / total
  * and a completion meter. Plaques are equal-height flex columns with the
  * date or progress pinned to the bottom so rows line up whatever the goal
@@ -60,7 +60,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
     gap: `${TILE_GAP}px`,
     alignItems: 'stretch',
   },
@@ -131,6 +131,7 @@ function Plaque({ entry }: { entry: TrophyEntry }) {
           background: `linear-gradient(180deg, ${color}24 0%, ${colors.bgCard} 70%)`,
           border: `1px solid ${color}66`,
         }}
+        role="group"
         aria-label={`${info.name}: ${info.goal}, earned`}
       >
         <span
@@ -161,6 +162,7 @@ function Plaque({ entry }: { entry: TrophyEntry }) {
   return (
     <div
       style={{ ...styles.plaque, border: `1px dashed ${colors.borderLight}` }}
+      role="group"
       aria-label={`${info.name}: ${info.goal}`}
     >
       <StatusSegment

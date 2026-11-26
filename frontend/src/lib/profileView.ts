@@ -115,31 +115,60 @@ export function activityLevel(runs: number): 0 | 1 | 2 | 3 {
 }
 
 /**
- * Headline numbers under the activity calendar: how many days had a run,
- * and total wins (multiplayer wins plus daily wins).
+ * Headline numbers over the activity calendar: how many days had a run,
+ * and total wins (multiplayer wins plus daily wins). Only days inside the
+ * grid window (the `weeks` columns ending at `today`) count, so the header
+ * always agrees with the squares drawn by `activityGrid`.
  */
 export function activitySummary(
   activity: PlayerStats['activity'],
-  winDates: string[]
+  winDates: string[],
+  today: string,
+  weeks = 26
 ): { daysActive: number; wins: number } {
+  const todayMs = dayKeyToMs(today);
+  const daysSinceMonday = (new Date(todayMs).getUTCDay() + 6) % 7;
+  const gridStart = msToDayKey(
+    todayMs - (daysSinceMonday + (weeks - 1) * 7) * DAY_MS
+  );
+  const inWindow = (day: string) => day >= gridStart && day <= today;
+  const days = activity.filter((a) => inWindow(a.day));
   return {
-    daysActive: activity.filter((a) => a.runs > 0).length,
+    daysActive: days.filter((a) => a.runs > 0).length,
     wins:
-      activity.reduce((sum, a) => sum + a.multiplayerWins, 0) + winDates.length,
+      days.reduce((sum, a) => sum + a.multiplayerWins, 0) +
+      winDates.filter(inWindow).length,
   };
+}
+
+/**
+ * The Monday (UTC `YYYY-MM-DD`) of each of the last `weeks` weeks, oldest
+ * first, the last being the week containing `today`. The fixed x-axis of the
+ * race-time chart, so weeks without finished runs show up as gaps.
+ */
+export function weekStartAxis(today: string, weeks = 12): string[] {
+  const todayMs = dayKeyToMs(today);
+  const daysSinceMonday = (new Date(todayMs).getUTCDay() + 6) % 7;
+  const thisMondayMs = todayMs - daysSinceMonday * DAY_MS;
+  return Array.from({ length: weeks }, (_, i) =>
+    msToDayKey(thisMondayMs - (weeks - 1 - i) * 7 * DAY_MS)
+  );
 }
 
 /**
  * How the last-30-days average race time compares with the 30 days before:
  * the size of the change and whether it got faster. Null when either
- * average is unknown.
+ * average is unknown, or when the change rounds to zero at the one-decimal
+ * display precision (under 50ms), so equal averages show no delta.
  */
 export function raceTimeDelta(
   avg30d: number | null,
   prev30d: number | null
 ): { ms: number; faster: boolean } | null {
   if (avg30d === null || prev30d === null) return null;
-  return { ms: Math.abs(avg30d - prev30d), faster: avg30d < prev30d };
+  const ms = Math.abs(avg30d - prev30d);
+  if (ms < 50) return null;
+  return { ms, faster: avg30d < prev30d };
 }
 
 /** One badge in the trophy case, earned or still locked. */

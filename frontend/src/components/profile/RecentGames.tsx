@@ -72,6 +72,11 @@ export function RecentGames({
   return (
     <div style={tile}>
       <p style={{ ...sectionLabel, marginBottom: '6px' }}>Recent games</p>
+      {games.length === 0 && (
+        <p style={{ ...meta, margin: '8px 0 0' }}>
+          No games yet — race to fill this in.
+        </p>
+      )}
       {games.map((game, i) => {
         const practice = game.playMode === 'practice';
         return (

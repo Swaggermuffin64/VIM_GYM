@@ -83,13 +83,13 @@ export function ActivityCalendar({
   today: string;
 }) {
   const weeks = activityGrid(activity, winDates, today);
-  const { daysActive, wins } = activitySummary(activity, winDates);
+  const { daysActive, wins } = activitySummary(activity, winDates, today);
 
   return (
     <div style={tile}>
       <div style={styles.header}>
         <p style={sectionLabel}>Activity</p>
-        <p style={meta}>{`${daysActive} days raced · ${wins} wins`}</p>
+        <p style={meta}>{`${daysActive} days active · ${wins} wins`}</p>
       </div>
       <div style={styles.grid}>
         {weeks.flatMap((week) =>

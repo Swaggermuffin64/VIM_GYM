@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+/**
+ * Render tests for the bento profile tiles (Race of the Day, activity
+ * calendar, race-time chart, recent games, trophy case, multiplayer).
+ */
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { DailyHistoryDay, DailyProfile } from '../../api/daily';
@@ -114,7 +118,7 @@ describe('ActivityCalendar', () => {
         today={TODAY}
       />
     );
-    expect(screen.getByText('1 days raced · 2 wins')).toBeTruthy();
+    expect(screen.getByText('1 days active · 2 wins')).toBeTruthy();
   });
 });
 
@@ -147,6 +151,13 @@ describe('RecentGames', () => {
   });
 });
 
+describe('RecentGames empty state', () => {
+  it('explains an empty list instead of showing a bare label', () => {
+    render(<RecentGames games={[]} dailyRecent={[]} />);
+    expect(screen.getByText(/no games yet/i)).toBeTruthy();
+  });
+});
+
 describe('TrophyCase', () => {
   it('shows earned / total and Flawless best efficiency', () => {
     render(<TrophyCase daily={sampleProfile()} />);
@@ -170,6 +181,7 @@ describe('RaceTimeChart', () => {
         weekly={[]}
         avg30d={10000}
         prev30d={null}
+        today={TODAY}
       />
     );
     expect(screen.getByText('12.4s')).toBeTruthy();
@@ -185,10 +197,41 @@ describe('RaceTimeChart', () => {
         ]}
         avg30d={10000}
         prev30d={12100}
+        today={TODAY}
       />
     );
     expect(screen.getByText('▼ 2.1s / 30d')).toBeTruthy();
     expect(container.querySelectorAll('path').length).toBe(2);
+  });
+  it('breaks the line at a week with no finished runs', () => {
+    const { container } = render(
+      <RaceTimeChart
+        avgRaceMs={12400}
+        weekly={[
+          { weekStart: '2026-11-02', avgMs: 14000 },
+          { weekStart: '2026-11-09', avgMs: 12000 },
+          { weekStart: '2026-11-23', avgMs: 11000 },
+        ]}
+        avg30d={null}
+        prev30d={null}
+        today={TODAY}
+      />
+    );
+    const [, line] = Array.from(container.querySelectorAll('path'));
+    // Nov 16 is missing: two sub-paths, the lone latest week drawn as a dot.
+    expect(line!.getAttribute('d')!.match(/M/g)).toHaveLength(2);
+  });
+  it('shows no delta when the averages are equal', () => {
+    render(
+      <RaceTimeChart
+        avgRaceMs={12400}
+        weekly={[]}
+        avg30d={10000}
+        prev30d={10000}
+        today={TODAY}
+      />
+    );
+    expect(screen.queryByText(/\/ 30d/)).toBeNull();
   });
   it('draws no path with fewer than 2 weekly points', () => {
     const { container } = render(
@@ -197,6 +240,7 @@ describe('RaceTimeChart', () => {
         weekly={[{ weekStart: '2026-11-02', avgMs: 14000 }]}
         avg30d={null}
         prev30d={null}
+        today={TODAY}
       />
     );
     expect(container.querySelectorAll('path').length).toBe(0);

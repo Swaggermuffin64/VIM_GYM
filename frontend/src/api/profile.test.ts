@@ -1,3 +1,8 @@
+/**
+ * Tests for the profile API client (api/profile.ts): snake_case to camelCase
+ * mapping of /api/user/me and /api/user/stats, defaults for missing fields,
+ * and the reject-proof error shapes.
+ */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 function jsonResponse(body: unknown, status = 200) {
@@ -91,7 +96,7 @@ describe('fetchPlayerStats', () => {
           races_played: 9,
           avg_race_ms: 40000,
           total_runs: 25,
-          multiplayer: { races: 8, wins: 2, win_rate: 25 },
+          multiplayer: { races: 8, wins: 2, win_rate: 0.25 },
           activity: [{ day: '2026-11-20', runs: 3, multiplayer_wins: 1 }],
           race_time_weekly: [{ week_start: '2026-11-16', avg_ms: 39000 }],
           avg_race_ms_30d: 38000,
@@ -117,7 +122,7 @@ describe('fetchPlayerStats', () => {
       avgRaceMs: 40000,
       avgRaceMs30d: 38000,
       avgRaceMsPrev30d: null,
-      multiplayer: { races: 8, wins: 2, winRate: 25 },
+      multiplayer: { races: 8, wins: 2, winRate: 0.25 },
       activity: [{ day: '2026-11-20', runs: 3, multiplayerWins: 1 }],
       raceTimeWeekly: [{ weekStart: '2026-11-16', avgMs: 39000 }],
       recentGames: [

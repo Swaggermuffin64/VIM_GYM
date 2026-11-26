@@ -2,7 +2,7 @@
  * HTTP client for the profile page's data: the signed-in user's profile
  * (GET /api/user/me), their stats (GET /api/user/stats) and the showcased
  * badge selection (POST /api/user/showcase). Backend routes live in
- * backend/routes/user.ts.
+ * backend/index.ts.
  *
  * Every function is reject-proof: network and HTTP errors are caught and
  * returned as an error-shaped value (never thrown). Response keys are mapped
@@ -53,14 +53,17 @@ function asRecordArray(raw: unknown): Record<string, unknown>[] {
   return Array.isArray(raw) ? raw.map(asRecord) : [];
 }
 
+/** `raw` if it is a number, otherwise null (absent or malformed field). */
 function numberOrNull(raw: unknown): number | null {
   return typeof raw === 'number' ? raw : null;
 }
 
+/** `raw` if it is a number, otherwise 0 (absent or malformed counter). */
 function numberOrZero(raw: unknown): number {
   return typeof raw === 'number' ? raw : 0;
 }
 
+/** The string entries of `raw`; empty for anything that is not an array. */
 function stringArray(raw: unknown): string[] {
   return Array.isArray(raw)
     ? raw.filter((v): v is string => typeof v === 'string')

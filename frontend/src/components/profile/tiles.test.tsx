@@ -97,6 +97,14 @@ describe('RaceOfTheDayTile', () => {
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('6.8s')).toBeTruthy();
   });
+  it('labels the seven ticks with their weekdays, ending today', () => {
+    // TODAY (2026-11-26) is a Thursday, so the ticks run Fr .. Th.
+    render(<RaceOfTheDayTile daily={sampleProfile()} today={TODAY} />);
+    const labels = screen
+      .getAllByTestId('tick-weekday')
+      .map((el) => el.textContent);
+    expect(labels).toEqual(['Fr', 'Sa', 'Su', 'Mo', 'Tu', 'We', 'Th']);
+  });
   it('hides the open hint once today is raced', () => {
     const daily = { ...sampleProfile(), recent: [historyDay(TODAY)] };
     render(<RaceOfTheDayTile daily={daily} today={TODAY} />);

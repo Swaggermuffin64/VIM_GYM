@@ -310,6 +310,8 @@ describe('recentActivity', () => {
     leftRace: false,
     totalTimeMs: 20000,
     startedAt,
+    efficiencyRank: null,
+    efficiencyRacers: null,
     ...extra,
   });
   const dailyDay = (

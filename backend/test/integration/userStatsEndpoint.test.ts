@@ -161,7 +161,11 @@ describe('GET /api/user/stats', () => {
         avg_race_ms: number | null;
         avg_task_efficiency: number | null;
         efficiency_sample: number;
-        recent_games: Array<{ play_mode: string }>;
+        recent_games: Array<{
+          play_mode: string;
+          efficiency_rank: number | null;
+          efficiency_racers: number | null;
+        }>;
       };
     };
     expect(body.success).toBe(true);
@@ -174,6 +178,11 @@ describe('GET /api/user/stats', () => {
     expect(body.stats.efficiency_sample).toBe(1);
     expect(body.stats.recent_games).toHaveLength(1);
     expect(body.stats.recent_games[0]!.play_mode).toBe('quick_play');
+    // Alice is the only finisher with keystroke data, so she ranks 1 of 1.
+    expect(body.stats.recent_games[0]).toMatchObject({
+      efficiency_rank: 1,
+      efficiency_racers: 1,
+    });
   });
 
   it('returns all-mode, multiplayer, activity and trend fields', async () => {

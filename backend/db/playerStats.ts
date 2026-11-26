@@ -17,6 +17,15 @@ export interface RecentGame {
   leftRace: boolean;
   totalTimeMs: number | null;
   startedAt: Date;
+  /**
+   * Multiplayer only: the player's keystroke-efficiency rank among that
+   * game's finishers (SUM(optimal) / SUM(actual) keys, capped at 1.0, like
+   * the daily efficiency board). Null for solo modes, for a player who did
+   * not finish, or when any of their tasks lacks keystroke data.
+   */
+  efficiencyRank: number | null;
+  /** How many finishers in that game had a ranked efficiency; null when unranked. */
+  efficiencyRacers: number | null;
 }
 
 /** One UTC calendar day on which the player had at least one run. */
@@ -183,6 +192,9 @@ export async function getPlayerStats(
            AND t.optimal_keystroke_count IS NOT NULL`,
           [userId]
         ),
+        // Recent games, plus an efficiency rank for multiplayer ones. Ranking
+        // touches only these few games' finishers and their task rows (via
+        // task_attempts_game_task_idx), so it stays cheap per profile load.
         pool.query<{
           play_mode: string;
           position: number | null;
@@ -190,14 +202,44 @@ export async function getPlayerStats(
           left_race: boolean;
           total_time_ms: number | null;
           started_at: Date;
+          efficiency_rank: string | null;
+          efficiency_racers: string | null;
         }>(
-          `SELECT g.play_mode, gp.position, gp.finished, gp.left_race,
-                gp.total_time_ms, g.started_at
-         FROM game_players gp
-         JOIN games g ON g.id = gp.game_id
-         WHERE gp.user_id = $1
-         ORDER BY g.started_at DESC
-         LIMIT $2`,
+          `WITH recent AS (
+           SELECT g.id AS game_id, g.play_mode, gp.position, gp.finished,
+                  gp.left_race, gp.total_time_ms, g.started_at
+             FROM game_players gp
+             JOIN games g ON g.id = gp.game_id
+            WHERE gp.user_id = $1
+            ORDER BY g.started_at DESC
+            LIMIT $2
+         ),
+         finisher_efficiency AS (
+           SELECT gp.game_id, gp.user_id,
+                  LEAST(1.0, SUM(t.optimal_keystroke_count)::float8
+                               / SUM(ta.keystroke_count)) AS efficiency
+             FROM recent r
+             JOIN game_players gp ON gp.game_id = r.game_id AND gp.finished
+             JOIN task_attempts ta
+               ON ta.game_id = gp.game_id AND ta.user_id = gp.user_id
+             JOIN tasks t ON t.content_hash = ta.task_hash
+            WHERE r.play_mode IN ('quick_play', 'private_match')
+            GROUP BY gp.game_id, gp.user_id
+           HAVING COUNT(ta.keystroke_count) = COUNT(*)
+              AND COUNT(t.optimal_keystroke_count) = COUNT(*)
+         ),
+         ranked AS (
+           SELECT game_id, user_id,
+                  RANK() OVER (PARTITION BY game_id ORDER BY efficiency DESC) AS rank,
+                  COUNT(*) OVER (PARTITION BY game_id) AS racers
+             FROM finisher_efficiency
+         )
+         SELECT r.play_mode, r.position, r.finished, r.left_race,
+                r.total_time_ms, r.started_at,
+                k.rank AS efficiency_rank, k.racers AS efficiency_racers
+           FROM recent r
+           LEFT JOIN ranked k ON k.game_id = r.game_id AND k.user_id = $1
+          ORDER BY r.started_at DESC`,
           [userId, recentLimit]
         ),
         pool.query<{ day: string; runs: number; multiplayer_wins: number }>(
@@ -249,6 +291,10 @@ export async function getPlayerStats(
         leftRace: row.left_race,
         totalTimeMs: row.total_time_ms,
         startedAt: row.started_at,
+        efficiencyRank:
+          row.efficiency_rank === null ? null : Number(row.efficiency_rank),
+        efficiencyRacers:
+          row.efficiency_racers === null ? null : Number(row.efficiency_racers),
       })),
       totalRuns: r.total_runs,
       multiplayer: {

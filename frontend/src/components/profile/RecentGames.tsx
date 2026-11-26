@@ -3,9 +3,10 @@
  * attempt that day folded together) with both board placings — speed in the
  * Place column, efficiency in the Eff. column — and the day's best time.
  * Every other mode is one row per game: multiplayer shows its finishing
- * position, practice just its time, unfinished games "left" or "DNF".
+ * position plus its efficiency rank among that game's finishers, practice
+ * just its time; an unfinished game has no result label and "—" for time.
  * A 4px coloured strip marks the row type (amber = daily, green = 1st,
- * cyan = other multiplayer finish, red = DNF/left, slate = practice); every
+ * cyan = other multiplayer finish, red = unfinished, slate = practice); every
  * row's text is full brightness, so practice reads as a first-class mode.
  * Presentational; rows are built by `recentActivity()` in lib/profileView.
  */
@@ -68,14 +69,24 @@ function gameStripColor(game: RecentGame): string {
   return game.position === 1 ? colors.successLight : colors.primary;
 }
 
-/** Result text for a non-daily game: ordinal, blank, "left" or "DNF". */
+/** Place text for a non-daily game: its finishing ordinal, else blank. */
 function gameResult(game: RecentGame): string {
-  if (game.position !== null) return ordinal(game.position);
-  if (game.finished) return '';
-  return game.leftRace ? 'left' : 'DNF';
+  return game.position !== null ? ordinal(game.position) : '';
 }
 
-/** A daily board placing, green and bold when it is a win. */
+/** True for the multiplayer modes, the only games ranked on efficiency. */
+function isMultiplayer(game: RecentGame): boolean {
+  return game.playMode === 'quick_play' || game.playMode === 'private_match';
+}
+
+/** The game's efficiency placing, or null when it was not ranked. */
+function gameEfficiency(game: RecentGame): BoardPlacing | null {
+  return game.efficiencyRank !== null && game.efficiencyRacers !== null
+    ? { rank: game.efficiencyRank, racers: game.efficiencyRacers }
+    : null;
+}
+
+/** A board placing (daily speed/efficiency or multiplayer efficiency), green and bold when it is a win. */
 function Placing({ placing }: { placing: BoardPlacing }) {
   const won = placing.rank === 1;
   return (
@@ -87,6 +98,18 @@ function Placing({ placing }: { placing: BoardPlacing }) {
       }}
     >
       {formatPlacing(placing.rank, placing.racers)}
+    </span>
+  );
+}
+
+/** The Eff. cell for a race that has no efficiency placing. */
+function NoEfficiency() {
+  return (
+    <span
+      style={{ ...styles.cell, color: colors.textMuted }}
+      aria-label="No efficiency placing"
+    >
+      —
     </span>
   );
 }
@@ -105,12 +128,7 @@ function Row({ row, today }: { row: RecentActivityRow; today: string }) {
         {row.efficiency ? (
           <Placing placing={row.efficiency} />
         ) : (
-          <span
-            style={{ ...styles.cell, color: colors.textMuted }}
-            aria-label="No efficiency placing"
-          >
-            —
-          </span>
+          <NoEfficiency />
         )}
         <span style={{ ...styles.cell, ...meta, fontSize: '15px' }}>
           {formatDuration(row.bestMs)}
@@ -121,6 +139,7 @@ function Row({ row, today }: { row: RecentActivityRow; today: string }) {
   }
 
   const { game } = row;
+  const efficiency = gameEfficiency(game);
   return (
     <>
       <span style={{ ...styles.strip, background: gameStripColor(game) }} />
@@ -134,17 +153,18 @@ function Row({ row, today }: { row: RecentActivityRow; today: string }) {
         style={{
           ...styles.cell,
           fontWeight: game.position === 1 ? 800 : 400,
-          color:
-            game.position === 1
-              ? colors.successLight
-              : isUnfinished(game)
-                ? RED
-                : colors.textPrimary,
+          color: game.position === 1 ? colors.successLight : colors.textPrimary,
         }}
       >
         {gameResult(game)}
       </span>
-      <span />
+      {efficiency ? (
+        <Placing placing={efficiency} />
+      ) : isMultiplayer(game) ? (
+        <NoEfficiency />
+      ) : (
+        <span />
+      )}
       <span style={{ ...styles.cell, ...meta, fontSize: '15px' }}>
         {game.totalTimeMs !== null ? formatDuration(game.totalTimeMs) : '—'}
       </span>

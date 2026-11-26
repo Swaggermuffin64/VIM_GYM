@@ -501,14 +501,14 @@ describe('ProfilePage stats', () => {
     expect(
       screen.queryByText('Race of the Day', { selector: 'span' })
     ).toBeNull();
-    expect(screen.getAllByText('DNF').length).toBe(1); // only the practice row
   });
 
-  it('still marks abandoned runs as left or DNF', async () => {
+  it('shows abandoned runs without a DNF or left label', async () => {
     stubFetch({ stats: STATS });
     render(<ProfilePage />);
-    expect(await screen.findByText('left')).toBeTruthy();
-    expect(screen.getByText('DNF')).toBeTruthy();
+    await screen.findByText('Recent games');
+    expect(screen.queryByText('left')).toBeNull();
+    expect(screen.queryByText('DNF')).toBeNull();
   });
 
   it('stats fetch failure still renders identity', async () => {

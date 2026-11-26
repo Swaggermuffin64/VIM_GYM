@@ -162,6 +162,88 @@ describe('getPlayerStats', () => {
     expect(stats.recentGames).toHaveLength(2);
   });
 
+  describe('efficiency rank on recent multiplayer games', () => {
+    const GAME = 901;
+    const started = new Date(Date.now() + 60_000); // newest game for bob
+
+    /** One game with two scored tasks (optimal 10 keys each) for bob and alice. */
+    async function seedRace(opts: {
+      playMode?: string;
+      bobFinished?: boolean;
+      bobKeys?: [number, number | null];
+    }) {
+      await db.query(
+        `INSERT INTO tasks (content_hash, task_type, task_json, optimal_keystroke_count)
+         VALUES ('eff1', 'navigate', '{}', 10), ('eff2', 'navigate', '{}', 10)
+         ON CONFLICT (content_hash) DO NOTHING`
+      );
+      await db.query(
+        `INSERT INTO games (id, play_mode, task_hashes, started_at)
+         VALUES ($1, $2, '{eff1,eff2}', $3)`,
+        [GAME, opts.playMode ?? 'quick_play', started]
+      );
+      const bobFinished = opts.bobFinished ?? true;
+      await db.query(
+        `INSERT INTO game_players (game_id, user_id, position, total_time_ms, finished)
+         VALUES ($1, $2, $3, $4, $5), ($1, $6, 2, 30000, true)`,
+        [
+          GAME,
+          TEST_USERS.bob,
+          bobFinished ? 1 : null,
+          bobFinished ? 20000 : null,
+          bobFinished,
+          TEST_USERS.alice,
+        ]
+      );
+      const [bobA, bobB] = opts.bobKeys ?? [10, 10];
+      // Bob is perfectly efficient (10 + 10); alice takes twice the keys.
+      await db.query(
+        `INSERT INTO task_attempts (user_id, task_hash, game_id, play_mode, duration_ms, keystroke_count)
+         VALUES ($1, 'eff1', $3, 'quick_play', 1000, $4),
+                ($1, 'eff2', $3, 'quick_play', 1000, $5),
+                ($2, 'eff1', $3, 'quick_play', 1000, 20),
+                ($2, 'eff2', $3, 'quick_play', 1000, 20)`,
+        [TEST_USERS.bob, TEST_USERS.alice, GAME, bobA, bobB]
+      );
+    }
+
+    afterEach(async () => {
+      await db.query(`DELETE FROM task_attempts WHERE game_id = $1`, [GAME]);
+      await db.query(`DELETE FROM games WHERE id = $1`, [GAME]);
+    });
+
+    it('ranks the player among the finishers of that game', async () => {
+      await seedRace({});
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]).toMatchObject({
+        playMode: 'quick_play',
+        efficiencyRank: 1,
+        efficiencyRacers: 2,
+      });
+    });
+
+    it('leaves a player who did not finish unranked', async () => {
+      await seedRace({ bobFinished: false });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]).toMatchObject({
+        efficiencyRank: null,
+        efficiencyRacers: null,
+      });
+    });
+
+    it('leaves a player unranked when a task is missing keystroke data', async () => {
+      await seedRace({ bobKeys: [10, null] });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+    });
+
+    it('does not rank solo modes', async () => {
+      await seedRace({ playMode: 'practice' });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+    });
+  });
+
   describe('per-user aggregates for the profile bento', () => {
     const MS_PER_DAY = 24 * 60 * 60 * 1000;
     const isoDay = (d: Date) => d.toISOString().slice(0, 10);

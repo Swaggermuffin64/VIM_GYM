@@ -61,6 +61,8 @@ const game = (overrides: Partial<RecentGame>): RecentGame => ({
   leftRace: false,
   totalTimeMs: 9200,
   startedAt: '2026-11-20T12:00:00Z',
+  efficiencyRank: null,
+  efficiencyRacers: null,
   ...overrides,
 });
 
@@ -248,19 +250,62 @@ describe('RecentGames', () => {
     );
     expect(screen.getByText('1st')).toBeTruthy();
   });
-  it('labels a game the player quit as left and an unfinished one as DNF', () => {
+  it('shows an unfinished game with no result label and a dash for time', () => {
     render(
       <RecentGames
         games={[
-          game({ finished: false, leftRace: true }),
-          game({ finished: false, startedAt: '2026-11-19T12:00:00Z' }),
+          game({ finished: false, leftRace: true, totalTimeMs: null }),
+          game({
+            finished: false,
+            totalTimeMs: null,
+            startedAt: '2026-11-19T12:00:00Z',
+          }),
         ]}
         dailyRecent={[]}
         today={TODAY}
       />
     );
-    expect(screen.getByText('left')).toBeTruthy();
-    expect(screen.getByText('DNF')).toBeTruthy();
+    expect(screen.queryByText('left')).toBeNull();
+    expect(screen.queryByText('DNF')).toBeNull();
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
+  });
+  it('shows the efficiency rank for a ranked multiplayer game', () => {
+    render(
+      <RecentGames
+        games={[
+          game({
+            playMode: 'quick_play',
+            position: 2,
+            efficiencyRank: 1,
+            efficiencyRacers: 4,
+          }),
+        ]}
+        dailyRecent={[]}
+        today={TODAY}
+      />
+    );
+    expect(screen.getByText('2nd')).toBeTruthy();
+    expect(screen.getByText('1/4')).toBeTruthy();
+  });
+  it('shows a dash for efficiency on an unranked multiplayer game', () => {
+    render(
+      <RecentGames
+        games={[game({ playMode: 'private_match', position: 1 })]}
+        dailyRecent={[]}
+        today={TODAY}
+      />
+    );
+    expect(screen.getByLabelText('No efficiency placing')).toBeTruthy();
+  });
+  it('leaves efficiency blank for practice', () => {
+    render(
+      <RecentGames
+        games={[game({ playMode: 'practice' })]}
+        dailyRecent={[]}
+        today={TODAY}
+      />
+    );
+    expect(screen.queryByLabelText('No efficiency placing')).toBeNull();
   });
 });
 

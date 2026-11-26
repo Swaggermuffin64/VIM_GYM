@@ -288,6 +288,8 @@ fastify.get('/api/user/stats', async (request, reply) => {
         left_race: g.leftRace,
         total_time_ms: g.totalTimeMs,
         started_at: g.startedAt,
+        efficiency_rank: g.efficiencyRank,
+        efficiency_racers: g.efficiencyRacers,
       })),
       total_runs: stats.totalRuns,
       multiplayer: {

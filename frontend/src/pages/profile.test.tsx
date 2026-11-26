@@ -287,24 +287,17 @@ describe('ProfilePage loading', () => {
 });
 
 describe('ProfilePage player card', () => {
-  it('shows the first letter when there is no avatar, an image when there is', async () => {
-    render(<ProfilePage />);
-    await screen.findByText('zaphod');
-    expect(screen.queryByAltText('zaphod avatar')).toBeNull();
-    expect(screen.getByText('Z')).toBeTruthy();
-    cleanup();
-
+  it('shows no avatar, even when the profile has an avatar url', async () => {
     stubFetch({
       me: {
         success: true,
         profile: { ...PROFILE, avatar_url: 'https://example.com/a.png' },
       },
     });
-    render(<ProfilePage />);
+    const { container } = render(<ProfilePage />);
     await screen.findByText('zaphod');
-    expect(screen.getByAltText('zaphod avatar').getAttribute('src')).toBe(
-      'https://example.com/a.png'
-    );
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.queryByText('Z')).toBeNull();
   });
 
   it('shows name, premium badge, and member-since date', async () => {

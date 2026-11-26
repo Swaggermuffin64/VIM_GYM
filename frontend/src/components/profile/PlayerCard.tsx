@@ -1,5 +1,5 @@
 /**
- * The profile page's main card: avatar, inline-editable display name, member
+ * The profile page's main card: inline-editable display name, member
  * since / Premium, the showcased badges (with a picker to change them) and a
  * four-number daily strip (days raced, daily wins, best finish, total runs).
  *
@@ -33,20 +33,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '15px',
   },
   top: { display: 'flex', gap: '18px', alignItems: 'center' },
-  avatar: {
-    width: '76px',
-    height: '76px',
-    borderRadius: '14px',
-    flexShrink: 0,
-    display: 'grid',
-    placeItems: 'center',
-    fontSize: '34px',
-    fontWeight: 800,
-    background: '#0f2a33',
-    color: colors.primaryLight,
-    border: `1px solid ${colors.primary}66`,
-    objectFit: 'cover',
-  },
   identity: { flex: 1, minWidth: 0 },
   nameRow: { display: 'flex', gap: '8px', alignItems: 'center' },
   name: { fontSize: '30px', fontWeight: 800, margin: 0 },
@@ -167,24 +153,6 @@ function formatMemberSince(iso: string | undefined): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-}
-
-/** Avatar image when the profile has one, otherwise the name's first letter. */
-function Avatar({ profile }: { profile: Profile }) {
-  if (profile.avatarUrl) {
-    return (
-      <img
-        src={profile.avatarUrl}
-        alt={`${profile.displayName} avatar`}
-        style={styles.avatar}
-      />
-    );
-  }
-  return (
-    <div style={styles.avatar} aria-hidden="true">
-      {profile.displayName.charAt(0).toUpperCase()}
-    </div>
-  );
 }
 
 /** Name heading with an edit pencil, or the inline editor once editing. */
@@ -335,7 +303,6 @@ export function PlayerCard({
   return (
     <div style={styles.card}>
       <div style={styles.top}>
-        <Avatar profile={profile} />
         <div style={styles.identity}>
           <NameEditor
             displayName={profile.displayName}

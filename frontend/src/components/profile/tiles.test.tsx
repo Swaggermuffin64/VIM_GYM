@@ -204,6 +204,11 @@ describe('TrophyCase', () => {
     expect(screen.getByText('/ 9')).toBeTruthy();
     expect(screen.getByText('best 97%')).toBeTruthy();
   });
+  it('shows no completion percentage beside the meter', () => {
+    render(<TrophyCase daily={sampleProfile()} />);
+    // 5 of 9 earned would read "56%"; the meter bar alone shows progress.
+    expect(screen.queryByText('56%')).toBeNull();
+  });
   it('renders every badge locked when daily is null', () => {
     render(<TrophyCase daily={null} />);
     expect(screen.getByText('0')).toBeTruthy();

@@ -2,7 +2,8 @@
  * The full-width "Trophy case" tile: every Race of the Day badge as a plaque
  * in a responsive auto-fill grid (200px minimum column), earned ones first (tinted, with the earned date) then
  * locked ones (dashed, with a progress bar). A header shows earned / total
- * and a completion meter. Plaques are equal-height flex columns with the
+ * and a completion meter bar (no percentage label). Plaques are equal-height
+ * flex columns with the
  * date or progress pinned to the bottom so rows line up whatever the goal
  * length. Presentational; the ordering and progress come from `trophyCase()`.
  */
@@ -213,7 +214,7 @@ export function TrophyCase({ daily }: { daily: DailyProfile | null }) {
           <span>/ {entries.length}</span>
         </p>
       </div>
-      <div style={styles.meter}>
+      <div style={styles.meter} aria-hidden="true">
         <div style={styles.track}>
           <div
             style={{
@@ -224,9 +225,6 @@ export function TrophyCase({ daily }: { daily: DailyProfile | null }) {
             }}
           />
         </div>
-        <span style={{ fontSize: '13px', color: colors.textSecondary }}>
-          {percent}%
-        </span>
       </div>
       <div style={styles.grid}>
         {entries.map((entry) => (

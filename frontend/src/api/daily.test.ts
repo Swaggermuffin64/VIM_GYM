@@ -317,7 +317,6 @@ describe('fetchDailyLeaderboard', () => {
           efficiency: null,
           optimalKeys: null,
           actualKeys: null,
-          efficiencyMs: null,
           badges: null,
         },
       ],
@@ -331,7 +330,6 @@ describe('fetchDailyLeaderboard', () => {
           efficiency: null,
           optimalKeys: null,
           actualKeys: null,
-          efficiencyMs: null,
           badges: null,
         },
       ],
@@ -368,7 +366,6 @@ describe('fetchDailyLeaderboard', () => {
       efficiency: null,
       optimalKeys: null,
       actualKeys: null,
-      efficiencyMs: null,
       badges: null,
     });
   });
@@ -658,7 +655,6 @@ describe('fetchDailyLeaderboard board=efficiency', () => {
             efficiency: 0.875,
             optimal_keys: 42,
             actual_keys: 48,
-            efficiency_ms: 41200,
             badges: { streak: 12, podium_streak: 3, wins: 4 },
           },
         ],
@@ -684,7 +680,6 @@ describe('fetchDailyLeaderboard board=efficiency', () => {
       efficiency: 0.875,
       optimalKeys: 42,
       actualKeys: 48,
-      efficiencyMs: 41200,
       badges: { streak: 12, podiumStreak: 3, wins: 4 },
     });
   });

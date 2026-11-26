@@ -40,8 +40,10 @@ import {
 import {
   queryEfficiencyBoard,
   queryDailyHistory,
+  queryFastestRunEfficiency,
   getSeenBadges,
   addSeenBadges,
+  type FastestRunEfficiency,
 } from '../db/dailyResults.js';
 import {
   chipsByUser,
@@ -412,9 +414,10 @@ export async function registerDailyRoutes(
   // -------------------------------------------------------------------------
   // `board=speed` (default) ranks each racer's best time; `board=efficiency`
   // ranks each racer's most keystroke-efficient attempt (db/dailyResults.ts).
-  // The board only picks the order: every row carries both the racer's best
-  // time and their most efficient attempt (efficiency, key totals, and that
-  // attempt's time), plus their badge chips (streak, podium streak, wins).
+  // Every row describes the one run it is ranked by: its time, efficiency,
+  // and key totals (the fastest run on the speed board, the most efficient
+  // on the efficiency board), plus the racer's badge chips (streak, podium
+  // streak, wins).
   fastify.get<{
     Querystring: { date?: string; limit?: string; board?: string };
   }>('/api/daily/leaderboard', async (request, reply) => {
@@ -467,27 +470,27 @@ export async function registerDailyRoutes(
       ...new Set(shown.map((e) => e.userId)),
     ]);
     const chips = chipsByUser(history, utcDateKey(new Date()));
-    // Each shown racer's result for this race: fills in the metric the
-    // board's own query doesn't carry.
-    const dayResult = new Map(
-      history.filter((d) => d.raceDate === raceDate).map((d) => [d.userId, d])
-    );
+    // Speed rows carry only a time; their keys come from that same fastest
+    // run. Efficiency rows already carry everything from their one run.
+    const fastestRunKeys =
+      board === 'speed'
+        ? await queryFastestRunEfficiency(raceDate, [
+            ...new Set(shown.map((e) => e.userId)),
+          ])
+        : new Map<string, FastestRunEfficiency>();
 
     const toWire = (e: BoardRow) => {
       const c = chips.get(e.userId);
-      const day = dayResult.get(e.userId);
-      // On the efficiency board e.bestMs is the efficient attempt's time.
-      const effMs = e.efficiency !== undefined ? e.bestMs : null;
+      const fastest = fastestRunKeys.get(e.userId);
       return {
         user_id: e.userId,
         display_name: e.displayName,
         avatar_url: e.avatarUrl,
-        best_ms: day?.bestMs ?? e.bestMs,
+        best_ms: e.bestMs,
         rank: e.rank,
-        efficiency: e.efficiency ?? day?.efficiency ?? null,
-        optimal_keys: e.optimalKeys ?? day?.optimalKeys ?? null,
-        actual_keys: e.actualKeys ?? day?.actualKeys ?? null,
-        efficiency_ms: effMs ?? day?.efficiencyMs ?? null,
+        efficiency: e.efficiency ?? fastest?.efficiency ?? null,
+        optimal_keys: e.optimalKeys ?? fastest?.optimalKeys ?? null,
+        actual_keys: e.actualKeys ?? fastest?.actualKeys ?? null,
         badges: c
           ? { streak: c.streak, podium_streak: c.podiumStreak, wins: c.wins }
           : null,

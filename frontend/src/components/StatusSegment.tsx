@@ -16,7 +16,7 @@ const VALUE_BG = '#1e293b';
 
 const SIZES = {
   lg: { height: 30, fontSize: 13, padX: 10, arrow: 10, radius: 6 },
-  sm: { height: 18, fontSize: 11, padX: 5, arrow: 0, radius: 4 },
+  sm: { height: 16, fontSize: 10, padX: 4, arrow: 0, radius: 3 },
 } as const;
 
 export function StatusSegment({

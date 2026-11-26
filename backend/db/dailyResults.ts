@@ -25,8 +25,9 @@ function logError(fn: string, err: unknown): void {
  * CTEs ranking every scorable attempt's efficiency, restricted to race date
  * `$1` (or every day when `$1` is NULL).
  *
- * attempt_eff — one row per finished attempt whose every task has both a
- *   recorded keystroke count and an optimal count; efficiency is
+ * attempt_eff — one row per finished attempt (keyed by attempt_id) whose
+ *   every task has both a recorded keystroke count and an optimal count;
+ *   efficiency is
  *   SUM(optimal) / SUM(actual), capped at 1.0; both sums are kept for display
  *   (optimal_keys, actual_keys). When a task has duplicate
  *   task_attempts rows for the game, the latest one counts.
@@ -35,7 +36,7 @@ function logError(fn: string, err: unknown): void {
  */
 const EFFICIENCY_CTES = `
   attempt_eff AS (
-    SELECT da.user_id, da.race_date, da.duration_ms,
+    SELECT da.id AS attempt_id, da.user_id, da.race_date, da.duration_ms,
            LEAST(1.0, SUM(t.optimal_keystroke_count)::float8
                         / SUM(ta.keystroke_count)) AS efficiency,
            SUM(t.optimal_keystroke_count)::int AS optimal_keys,
@@ -136,6 +137,70 @@ export async function queryEfficiencyBoard(
   } catch (err) {
     logError('queryEfficiencyBoard', err);
     return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fastest run's efficiency (speed board)
+// ---------------------------------------------------------------------------
+
+/**
+ * Keystroke efficiency of one racer's fastest run. All null when that run
+ * can't be scored (a task is missing its keystroke or optimal count).
+ */
+export interface FastestRunEfficiency {
+  efficiency: number | null;
+  optimalKeys: number | null;
+  actualKeys: number | null;
+}
+
+/**
+ * For each of `userIds` who finished a run on `raceDate`, the efficiency of
+ * their fastest run — the run the speed board ranks them by — so a speed row
+ * shows that run's keys rather than their most efficient run's. Equal times
+ * prefer the more efficient run. Racers with no finished run are absent.
+ * Returns an empty map for no ids, on no pool, or on error.
+ */
+export async function queryFastestRunEfficiency(
+  raceDate: string,
+  userIds: string[]
+): Promise<Map<string, FastestRunEfficiency>> {
+  const byUser = new Map<string, FastestRunEfficiency>();
+  if (userIds.length === 0) return byUser;
+  const pool = getPool();
+  if (!pool) {
+    logSkip('queryFastestRunEfficiency');
+    return byUser;
+  }
+  try {
+    const res = await pool.query<{
+      user_id: string;
+      efficiency: number | null;
+      optimal_keys: number | null;
+      actual_keys: number | null;
+    }>(
+      `WITH ${EFFICIENCY_CTES}
+      SELECT DISTINCT ON (da.user_id)
+             da.user_id, ae.efficiency, ae.optimal_keys, ae.actual_keys
+        FROM daily_attempts da
+        LEFT JOIN attempt_eff ae ON ae.attempt_id = da.id
+       WHERE da.race_date = $1::date
+         AND da.duration_ms IS NOT NULL
+         AND da.user_id = ANY ($2::uuid[])
+       ORDER BY da.user_id, da.duration_ms ASC, ae.efficiency DESC NULLS LAST`,
+      [raceDate, userIds]
+    );
+    for (const r of res.rows) {
+      byUser.set(r.user_id, {
+        efficiency: r.efficiency === null ? null : Number(r.efficiency),
+        optimalKeys: r.optimal_keys === null ? null : Number(r.optimal_keys),
+        actualKeys: r.actual_keys === null ? null : Number(r.actual_keys),
+      });
+    }
+    return byUser;
+  } catch (err) {
+    logError('queryFastestRunEfficiency', err);
+    return byUser;
   }
 }
 

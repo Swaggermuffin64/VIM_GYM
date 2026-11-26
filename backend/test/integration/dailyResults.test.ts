@@ -121,6 +121,50 @@ describe('queryEfficiencyBoard', () => {
   });
 });
 
+describe('queryFastestRunEfficiency', () => {
+  it("scores each racer's fastest run, not their most efficient one", async () => {
+    const fastest = await results.queryFastestRunEfficiency('2026-10-18', [
+      alice,
+      bob,
+    ]);
+    // bob's 7/7 run is his most efficient, but his 6.5s 7/8 run is fastest.
+    expect(fastest.get(bob)).toEqual({
+      efficiency: 0.875,
+      optimalKeys: 7,
+      actualKeys: 8,
+    });
+    expect(fastest.get(alice)).toEqual({
+      efficiency: 1,
+      optimalKeys: 7,
+      actualKeys: 7,
+    });
+  });
+
+  it('gives null keys when the fastest run is unscorable', async () => {
+    const fastest = await results.queryFastestRunEfficiency('2026-10-17', [
+      alice,
+      mallory,
+    ]);
+    // alice's 8s 7/10 run is fastest, beating her slower perfect run.
+    expect(fastest.get(alice)?.efficiency).toBe(0.7);
+    expect(fastest.get(mallory)).toEqual({
+      efficiency: null,
+      optimalKeys: null,
+      actualKeys: null,
+    });
+  });
+
+  it('leaves out racers with no run that day, and handles no ids', async () => {
+    const fastest = await results.queryFastestRunEfficiency('2026-10-18', [
+      mallory,
+    ]);
+    expect(fastest.size).toBe(0);
+    expect(
+      (await results.queryFastestRunEfficiency('2026-10-18', [])).size
+    ).toBe(0);
+  });
+});
+
 describe('queryDailyHistory', () => {
   it("ranks the requested users against each day's whole field", async () => {
     const history = await results.queryDailyHistory([mallory, bob]);

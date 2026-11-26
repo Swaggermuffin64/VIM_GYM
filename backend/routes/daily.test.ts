@@ -21,6 +21,7 @@ vi.mock('../db/daily.js', () => ({
 vi.mock('../db/dailyResults.js', () => ({
   queryEfficiencyBoard: vi.fn(),
   queryDailyHistory: vi.fn(),
+  queryFastestRunEfficiency: vi.fn(),
   getSeenBadges: vi.fn(),
   addSeenBadges: vi.fn(),
 }));
@@ -62,6 +63,9 @@ beforeEach(() => {
   // No daily history unless a test supplies some: rows carry null badges.
   vi.mocked(dailyResults.queryDailyHistory).mockResolvedValue([]);
   vi.mocked(dailyResults.queryEfficiencyBoard).mockResolvedValue([]);
+  vi.mocked(dailyResults.queryFastestRunEfficiency).mockResolvedValue(
+    new Map()
+  );
 });
 
 describe('GET /api/daily', () => {
@@ -518,7 +522,6 @@ describe('GET /api/daily/leaderboard', () => {
         efficiency: null,
         optimal_keys: null,
         actual_keys: null,
-        efficiency_ms: null,
         badges: null,
       },
       {
@@ -530,7 +533,6 @@ describe('GET /api/daily/leaderboard', () => {
         efficiency: null,
         optimal_keys: null,
         actual_keys: null,
-        efficiency_ms: null,
         badges: null,
       },
     ]);
@@ -610,7 +612,6 @@ describe('GET /api/daily/leaderboard', () => {
       efficiency: null,
       optimal_keys: null,
       actual_keys: null,
-      efficiency_ms: null,
       badges: null,
     });
   });
@@ -719,7 +720,6 @@ describe('GET /api/daily/leaderboard?board=efficiency', () => {
         efficiency: 1,
         optimal_keys: 42,
         actual_keys: 42,
-        efficiency_ms: 40_001,
         badges: null,
       },
       {
@@ -731,7 +731,6 @@ describe('GET /api/daily/leaderboard?board=efficiency', () => {
         efficiency: 0.9,
         optimal_keys: 42,
         actual_keys: 47,
-        efficiency_ms: 40_002,
         badges: null,
       },
     ]);
@@ -779,8 +778,11 @@ describe('GET /api/daily/leaderboard?board=efficiency', () => {
   });
 });
 
-describe('leaderboard rows carry both metrics', () => {
-  /** u1's result for 2026-10-19: best time 30s, best efficiency 40/50 on a 33s run. */
+describe('each leaderboard row describes a single run', () => {
+  /**
+   * u1's result for 2026-10-19: fastest run 30s; most efficient run 40/50 on
+   * a 33s run.
+   */
   const today = {
     userId: 'u1',
     raceDate: '2026-10-19',
@@ -795,7 +797,7 @@ describe('leaderboard rows carry both metrics', () => {
     efficiencyRacers: 2,
   };
 
-  it('adds the most efficient run to speed-sorted rows', async () => {
+  function speedBoardWithU1() {
     vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([
       {
         userId: 'u1',
@@ -807,6 +809,14 @@ describe('leaderboard rows carry both metrics', () => {
     ]);
     vi.mocked(daily.countDailyRacers).mockResolvedValue(1);
     vi.mocked(dailyResults.queryDailyHistory).mockResolvedValue([today]);
+  }
+
+  it("shows the fastest run's keys on the speed board", async () => {
+    speedBoardWithU1();
+    // The 30s run used 40/64 keys, not the most efficient run's 40/50.
+    vi.mocked(dailyResults.queryFastestRunEfficiency).mockResolvedValue(
+      new Map([['u1', { efficiency: 0.625, optimalKeys: 40, actualKeys: 64 }]])
+    );
 
     const app = await buildServer();
     const res = await app.inject({
@@ -814,16 +824,47 @@ describe('leaderboard rows carry both metrics', () => {
       url: '/api/daily/leaderboard?date=2026-10-19',
     });
 
-    expect(res.json().entries[0]).toMatchObject({
+    expect(dailyResults.queryFastestRunEfficiency).toHaveBeenCalledWith(
+      '2026-10-19',
+      ['u1']
+    );
+    expect(res.json().entries[0]).toEqual({
+      user_id: 'u1',
+      display_name: 'u1',
+      avatar_url: null,
       best_ms: 30_000,
-      efficiency: 0.8,
+      rank: 1,
+      efficiency: 0.625,
       optimal_keys: 40,
-      actual_keys: 50,
-      efficiency_ms: 33_000,
+      actual_keys: 64,
+      badges: expect.anything(),
     });
   });
 
-  it('adds the best time to efficiency-sorted rows', async () => {
+  it('shows no keys on the speed board when the fastest run is unscorable', async () => {
+    speedBoardWithU1();
+    vi.mocked(dailyResults.queryFastestRunEfficiency).mockResolvedValue(
+      new Map([
+        ['u1', { efficiency: null, optimalKeys: null, actualKeys: null }],
+      ])
+    );
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-10-19',
+    });
+
+    // Not the most efficient run's 0.8: that's a different attempt.
+    expect(res.json().entries[0]).toMatchObject({
+      best_ms: 30_000,
+      efficiency: null,
+      optimal_keys: null,
+      actual_keys: null,
+    });
+  });
+
+  it("shows the most efficient run's time on the efficiency board", async () => {
     vi.mocked(dailyResults.queryEfficiencyBoard).mockResolvedValue([
       {
         userId: 'u1',
@@ -844,12 +885,14 @@ describe('leaderboard rows carry both metrics', () => {
       url: '/api/daily/leaderboard?date=2026-10-19&board=efficiency',
     });
 
-    // best_ms is the racer's best time, not the efficient run's 33s.
+    // 33s is the efficient run's time, not the racer's 30s best.
     expect(res.json().entries[0]).toMatchObject({
-      best_ms: 30_000,
+      best_ms: 33_000,
       efficiency: 0.8,
-      efficiency_ms: 33_000,
+      optimal_keys: 40,
+      actual_keys: 50,
     });
+    expect(dailyResults.queryFastestRunEfficiency).not.toHaveBeenCalled();
   });
 });
 

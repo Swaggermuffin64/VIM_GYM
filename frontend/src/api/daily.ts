@@ -68,17 +68,18 @@ export interface DailyLeaderboardEntry {
   userId: string;
   displayName: string;
   avatarUrl: string | null;
-  /** The racer's best time today, whichever way the board is sorted. */
+  /**
+   * The time of the run this row is ranked by: the racer's fastest run on
+   * the speed board, their most efficient run on the efficiency board.
+   */
   bestMs: number;
   /**
-   * The racer's most efficient attempt: efficiency 0..1, its optimal and
-   * actual key totals, and its time. Null when none of their runs could be
-   * scored.
+   * That same run's efficiency 0..1 and its optimal and actual key totals.
+   * Null when the run couldn't be scored.
    */
   efficiency: number | null;
   optimalKeys: number | null;
   actualKeys: number | null;
-  efficiencyMs: number | null;
   /** Null when the server has no daily history for the racer. */
   badges: BadgeChips | null;
 }
@@ -357,7 +358,6 @@ function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
     efficiency: typeof e.efficiency === 'number' ? e.efficiency : null,
     optimalKeys: typeof e.optimal_keys === 'number' ? e.optimal_keys : null,
     actualKeys: typeof e.actual_keys === 'number' ? e.actual_keys : null,
-    efficiencyMs: typeof e.efficiency_ms === 'number' ? e.efficiency_ms : null,
     badges: mapBadgeChips(e.badges),
   }));
 }

@@ -3,7 +3,8 @@
  * attempt that day folded together) with both board placings — speed in the
  * Place column, efficiency in the Eff. column — and the day's best time.
  * Every other mode is one row per game: multiplayer shows its finishing
- * position plus its efficiency rank among that game's finishers, practice
+ * position plus its efficiency placement among that game's finishers as an
+ * ordinal (2nd = one finisher was more efficient), practice
  * just its time; an unfinished game has no result label and "—" for time.
  * A 4px coloured strip marks the row type (amber = daily, green = 1st,
  * cyan = other multiplayer finish, red = unfinished, slate = practice); every
@@ -79,16 +80,8 @@ function isMultiplayer(game: RecentGame): boolean {
   return game.playMode === 'quick_play' || game.playMode === 'private_match';
 }
 
-/** The game's efficiency placing, or null when it was not ranked. */
-function gameEfficiency(game: RecentGame): BoardPlacing | null {
-  return game.efficiencyRank !== null && game.efficiencyRacers !== null
-    ? { rank: game.efficiencyRank, racers: game.efficiencyRacers }
-    : null;
-}
-
-/** A board placing (daily speed/efficiency or multiplayer efficiency), green and bold when it is a win. */
-function Placing({ placing }: { placing: BoardPlacing }) {
-  const won = placing.rank === 1;
+/** A right-aligned result cell, green and bold when it is a 1st place. */
+function RankCell({ label, won }: { label: string; won: boolean }) {
   return (
     <span
       style={{
@@ -97,8 +90,18 @@ function Placing({ placing }: { placing: BoardPlacing }) {
         color: won ? colors.successLight : colors.textPrimary,
       }}
     >
-      {formatPlacing(placing.rank, placing.racers)}
+      {label}
     </span>
+  );
+}
+
+/** A daily board placing out of the day's field, e.g. "2/31". */
+function Placing({ placing }: { placing: BoardPlacing }) {
+  return (
+    <RankCell
+      label={formatPlacing(placing.rank, placing.racers)}
+      won={placing.rank === 1}
+    />
   );
 }
 
@@ -139,7 +142,6 @@ function Row({ row, today }: { row: RecentActivityRow; today: string }) {
   }
 
   const { game } = row;
-  const efficiency = gameEfficiency(game);
   return (
     <>
       <span style={{ ...styles.strip, background: gameStripColor(game) }} />
@@ -158,8 +160,11 @@ function Row({ row, today }: { row: RecentActivityRow; today: string }) {
       >
         {gameResult(game)}
       </span>
-      {efficiency ? (
-        <Placing placing={efficiency} />
+      {game.efficiencyRank !== null ? (
+        <RankCell
+          label={ordinal(game.efficiencyRank)}
+          won={game.efficiencyRank === 1}
+        />
       ) : isMultiplayer(game) ? (
         <NoEfficiency />
       ) : (

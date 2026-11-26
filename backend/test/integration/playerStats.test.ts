@@ -212,23 +212,26 @@ describe('getPlayerStats', () => {
       await db.query(`DELETE FROM games WHERE id = $1`, [GAME]);
     });
 
-    it('ranks the player among the finishers of that game', async () => {
+    it('places each finisher by efficiency within that game', async () => {
       await seedRace({});
+      // Bob used the optimal keys; alice used twice as many, so she placed
+      // 2nd on efficiency even though the race itself ranks them separately.
       const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      const alice = await playerStats.getPlayerStats(TEST_USERS.alice);
       expect(bob.recentGames[0]).toMatchObject({
         playMode: 'quick_play',
         efficiencyRank: 1,
-        efficiencyRacers: 2,
+      });
+      expect(alice.recentGames[0]).toMatchObject({
+        playMode: 'quick_play',
+        efficiencyRank: 2,
       });
     });
 
-    it('leaves a player who did not finish unranked', async () => {
+    it('leaves a player who did not finish unplaced', async () => {
       await seedRace({ bobFinished: false });
       const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
-      expect(bob.recentGames[0]).toMatchObject({
-        efficiencyRank: null,
-        efficiencyRacers: null,
-      });
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
     });
 
     it('leaves a player unranked when a task is missing keystroke data', async () => {

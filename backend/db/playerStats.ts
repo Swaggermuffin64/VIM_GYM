@@ -18,14 +18,13 @@ export interface RecentGame {
   totalTimeMs: number | null;
   startedAt: Date;
   /**
-   * Multiplayer only: the player's keystroke-efficiency rank among that
-   * game's finishers (SUM(optimal) / SUM(actual) keys, capped at 1.0, like
-   * the daily efficiency board). Null for solo modes, for a player who did
-   * not finish, or when any of their tasks lacks keystroke data.
+   * Multiplayer only: the player's efficiency placement in that game — 1 if
+   * they were the most keystroke-efficient finisher, 2 if one finisher beat
+   * them, and so on (SUM(optimal) / SUM(actual) keys, capped at 1.0, like the
+   * daily efficiency board). Null for solo modes, for a player who did not
+   * finish, or when any of their tasks lacks keystroke data.
    */
   efficiencyRank: number | null;
-  /** How many finishers in that game had a ranked efficiency; null when unranked. */
-  efficiencyRacers: number | null;
 }
 
 /** One UTC calendar day on which the player had at least one run. */
@@ -203,7 +202,6 @@ export async function getPlayerStats(
           total_time_ms: number | null;
           started_at: Date;
           efficiency_rank: string | null;
-          efficiency_racers: string | null;
         }>(
           `WITH recent AS (
            SELECT g.id AS game_id, g.play_mode, gp.position, gp.finished,
@@ -230,13 +228,12 @@ export async function getPlayerStats(
          ),
          ranked AS (
            SELECT game_id, user_id,
-                  RANK() OVER (PARTITION BY game_id ORDER BY efficiency DESC) AS rank,
-                  COUNT(*) OVER (PARTITION BY game_id) AS racers
+                  RANK() OVER (PARTITION BY game_id ORDER BY efficiency DESC) AS rank
              FROM finisher_efficiency
          )
          SELECT r.play_mode, r.position, r.finished, r.left_race,
                 r.total_time_ms, r.started_at,
-                k.rank AS efficiency_rank, k.racers AS efficiency_racers
+                k.rank AS efficiency_rank
            FROM recent r
            LEFT JOIN ranked k ON k.game_id = r.game_id AND k.user_id = $1
           ORDER BY r.started_at DESC`,
@@ -293,8 +290,6 @@ export async function getPlayerStats(
         startedAt: row.started_at,
         efficiencyRank:
           row.efficiency_rank === null ? null : Number(row.efficiency_rank),
-        efficiencyRacers:
-          row.efficiency_racers === null ? null : Number(row.efficiency_racers),
       })),
       totalRuns: r.total_runs,
       multiplayer: {

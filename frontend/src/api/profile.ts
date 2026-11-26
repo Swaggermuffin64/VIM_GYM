@@ -32,12 +32,11 @@ export interface RecentGame {
   totalTimeMs: number | null;
   startedAt: string;
   /**
-   * Multiplayer only: keystroke-efficiency rank among that game's finishers.
-   * Null for solo modes, unfinished games, or missing keystroke data.
+   * Multiplayer only: efficiency placement among that game's finishers
+   * (1 = most keystroke-efficient). Null for solo modes, unfinished games,
+   * or missing keystroke data.
    */
   efficiencyRank: number | null;
-  /** Finishers ranked on efficiency in that game; null when unranked. */
-  efficiencyRacers: number | null;
 }
 
 /** The numbers behind the profile's stat tiles, charts and calendar. */
@@ -152,7 +151,6 @@ export async function fetchPlayerStats(
         totalTimeMs: numberOrNull(g.total_time_ms),
         startedAt: g.started_at as string,
         efficiencyRank: numberOrNull(g.efficiency_rank),
-        efficiencyRacers: numberOrNull(g.efficiency_racers),
       })),
     };
   } catch (err) {

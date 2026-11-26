@@ -164,7 +164,6 @@ describe('GET /api/user/stats', () => {
         recent_games: Array<{
           play_mode: string;
           efficiency_rank: number | null;
-          efficiency_racers: number | null;
         }>;
       };
     };
@@ -178,11 +177,9 @@ describe('GET /api/user/stats', () => {
     expect(body.stats.efficiency_sample).toBe(1);
     expect(body.stats.recent_games).toHaveLength(1);
     expect(body.stats.recent_games[0]!.play_mode).toBe('quick_play');
-    // Alice is the only finisher with keystroke data, so she ranks 1 of 1.
-    expect(body.stats.recent_games[0]).toMatchObject({
-      efficiency_rank: 1,
-      efficiency_racers: 1,
-    });
+    // Alice is the only finisher with keystroke data, so she places 1st.
+    expect(body.stats.recent_games[0]!.efficiency_rank).toBe(1);
+    expect(body.stats.recent_games[0]).not.toHaveProperty('efficiency_racers');
   });
 
   it('returns all-mode, multiplayer, activity and trend fields', async () => {

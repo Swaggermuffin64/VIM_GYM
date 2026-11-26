@@ -62,7 +62,6 @@ const game = (overrides: Partial<RecentGame>): RecentGame => ({
   totalTimeMs: 9200,
   startedAt: '2026-11-20T12:00:00Z',
   efficiencyRank: null,
-  efficiencyRacers: null,
   ...overrides,
 });
 
@@ -269,23 +268,31 @@ describe('RecentGames', () => {
     expect(screen.queryByText('DNF')).toBeNull();
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
   });
-  it('shows the efficiency rank for a ranked multiplayer game', () => {
+  it('shows the efficiency placement of a multiplayer game as an ordinal', () => {
     render(
       <RecentGames
         games={[
-          game({
-            playMode: 'quick_play',
-            position: 2,
-            efficiencyRank: 1,
-            efficiencyRacers: 4,
-          }),
+          game({ playMode: 'quick_play', position: 3, efficiencyRank: 2 }),
         ]}
         dailyRecent={[]}
         today={TODAY}
       />
     );
+    // Finished 3rd on time but 2nd on efficiency.
+    expect(screen.getByText('3rd')).toBeTruthy();
     expect(screen.getByText('2nd')).toBeTruthy();
-    expect(screen.getByText('1/4')).toBeTruthy();
+  });
+  it('shows a multiplayer efficiency win in bold green', () => {
+    render(
+      <RecentGames
+        games={[
+          game({ playMode: 'quick_play', position: 2, efficiencyRank: 1 }),
+        ]}
+        dailyRecent={[]}
+        today={TODAY}
+      />
+    );
+    expect(screen.getByText('1st').style.fontWeight).toBe('800');
   });
   it('shows a dash for efficiency on an unranked multiplayer game', () => {
     render(

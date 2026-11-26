@@ -110,7 +110,6 @@ describe('fetchPlayerStats', () => {
               total_time_ms: 31000,
               started_at: '2026-11-20T10:00:00Z',
               efficiency_rank: 2,
-              efficiency_racers: 4,
             },
             {
               play_mode: 'practice',
@@ -144,7 +143,6 @@ describe('fetchPlayerStats', () => {
           totalTimeMs: 31000,
           startedAt: '2026-11-20T10:00:00Z',
           efficiencyRank: 2,
-          efficiencyRacers: 4,
         },
         {
           playMode: 'practice',
@@ -154,7 +152,6 @@ describe('fetchPlayerStats', () => {
           totalTimeMs: 20000,
           startedAt: '2026-11-19T10:00:00Z',
           efficiencyRank: null,
-          efficiencyRacers: null,
         },
       ],
     });

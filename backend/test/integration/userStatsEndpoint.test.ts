@@ -114,6 +114,12 @@ describe('GET /api/user/stats', () => {
         avg_task_efficiency: null,
         efficiency_sample: 0,
         recent_games: [],
+        total_runs: 0,
+        multiplayer: { races: 0, wins: 0, win_rate: 0 },
+        activity: [],
+        race_time_weekly: [],
+        avg_race_ms_30d: null,
+        avg_race_ms_prev_30d: null,
       },
     });
   });
@@ -168,5 +174,35 @@ describe('GET /api/user/stats', () => {
     expect(body.stats.efficiency_sample).toBe(1);
     expect(body.stats.recent_games).toHaveLength(1);
     expect(body.stats.recent_games[0]!.play_mode).toBe('quick_play');
+  });
+
+  it('returns all-mode and multiplayer fields', async () => {
+    // Alice already has one quick_play win (game 201); add a practice run.
+    await db.query(
+      `INSERT INTO games (id, play_mode, task_hashes, started_at)
+       VALUES (202, 'practice', '{h1}', now())`
+    );
+    await db.query(
+      `INSERT INTO game_players (game_id, user_id) VALUES (202, $1)`,
+      [TEST_USERS.alice]
+    );
+    const res = await fetch(`${base}/api/user/stats`, {
+      headers: { Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}` },
+    });
+    const body = (await res.json()) as {
+      stats: {
+        total_runs: number;
+        multiplayer: { races: number; wins: number; win_rate: number };
+        activity: Array<Record<string, unknown>>;
+      };
+    };
+    expect(body.stats.total_runs).toBe(2);
+    expect(body.stats.multiplayer).toEqual({ races: 1, wins: 1, win_rate: 1 });
+    expect(body.stats.activity.length).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(body.stats.activity[0]!).sort()).toEqual([
+      'day',
+      'multiplayer_wins',
+      'runs',
+    ]);
   });
 });

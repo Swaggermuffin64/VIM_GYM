@@ -260,6 +260,26 @@ fastify.get('/api/user/stats', async (request, reply) => {
         total_time_ms: g.totalTimeMs,
         started_at: g.startedAt,
       })),
+      total_runs: stats.totalRuns,
+      multiplayer: {
+        races: stats.multiplayer.races,
+        wins: stats.multiplayer.wins,
+        win_rate:
+          stats.multiplayer.races > 0
+            ? stats.multiplayer.wins / stats.multiplayer.races
+            : 0,
+      },
+      activity: stats.activity.map((a) => ({
+        day: a.day,
+        runs: a.runs,
+        multiplayer_wins: a.multiplayerWins,
+      })),
+      race_time_weekly: stats.raceTimeWeekly.map((w) => ({
+        week_start: w.weekStart,
+        avg_ms: w.avgMs,
+      })),
+      avg_race_ms_30d: stats.avgRaceMs30d,
+      avg_race_ms_prev_30d: stats.avgRaceMsPrev30d,
     },
   };
 });

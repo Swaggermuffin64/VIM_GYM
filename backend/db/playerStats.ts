@@ -98,7 +98,8 @@ export const RECENT_GAMES_LIMIT = 8;
 /**
  * Aggregates a player's racing record, task totals, all-mode session time,
  * keystroke efficiency, recent games, and the all-mode volume/trend
- * aggregates in nine queries. Returns the
+ * aggregates in six queries (kept at or below the
+ * connection pool size so they can run concurrently). Returns the
  * zero-state when persistence is disabled or a query fails — callers never
  * need a try/catch.
  */
@@ -114,50 +115,60 @@ export async function getPlayerStats(
     return ZERO_STATS;
   }
   try {
-    const [
-      racing,
-      tasks,
-      sessionTime,
-      efficiency,
-      recent,
-      runCounts,
-      activityRows,
-      weeklyRows,
-      windows,
-    ] = await Promise.all([
-      pool.query<{
-        races_played: number;
-        wins: number;
-        best_race_ms: number | null;
-      }>(
-        `SELECT
-           COUNT(*)::int AS races_played,
-           (COUNT(*) FILTER (WHERE gp.position = 1))::int AS wins,
-           MIN(gp.total_time_ms) FILTER (WHERE gp.finished) AS best_race_ms
+    const [racing, tasks, efficiency, recent, activityRows, weeklyRows] =
+      await Promise.all([
+        pool.query<{
+          races_played: number;
+          wins: number;
+          best_race_ms: number | null;
+          avg_race_ms: number | null;
+          total_runs: number;
+          multiplayer_races: number;
+          multiplayer_wins: number;
+          avg_30d: number | null;
+          avg_prev_30d: number | null;
+        }>(
+          `SELECT
+           (COUNT(*) FILTER (WHERE g.play_mode <> 'practice'))::int AS races_played,
+           (COUNT(*) FILTER (
+              WHERE g.play_mode <> 'practice' AND gp.position = 1
+           ))::int AS wins,
+           MIN(gp.total_time_ms) FILTER (
+             WHERE gp.finished AND g.play_mode <> 'practice') AS best_race_ms,
+           ROUND(AVG(gp.total_time_ms) FILTER (WHERE gp.finished))::int
+             AS avg_race_ms,
+           COUNT(*)::int AS total_runs,
+           (COUNT(*) FILTER (WHERE g.play_mode IN ('quick_play', 'private_match')))::int
+             AS multiplayer_races,
+           (COUNT(*) FILTER (
+              WHERE g.play_mode IN ('quick_play', 'private_match') AND gp.position = 1
+           ))::int AS multiplayer_wins,
+           ROUND(AVG(gp.total_time_ms) FILTER (
+             WHERE gp.finished AND g.started_at >= now() - interval '30 days'))::int
+             AS avg_30d,
+           ROUND(AVG(gp.total_time_ms) FILTER (
+             WHERE gp.finished
+               AND g.started_at < now() - interval '30 days'
+               AND g.started_at >= now() - interval '60 days'))::int
+             AS avg_prev_30d
          FROM game_players gp
          JOIN games g ON g.id = gp.game_id
-         WHERE gp.user_id = $1 AND g.play_mode <> 'practice'`,
-        [userId]
-      ),
-      pool.query<{ tasks_completed: number; avg_task_ms: number | null }>(
-        `SELECT
+         WHERE gp.user_id = $1`,
+          [userId]
+        ),
+        pool.query<{ tasks_completed: number; avg_task_ms: number | null }>(
+          `SELECT
            COUNT(*)::int AS tasks_completed,
            ROUND(AVG(duration_ms))::int AS avg_task_ms
          FROM task_attempts
          WHERE user_id = $1`,
-        [userId]
-      ),
-      pool.query<{ avg_race_ms: number | null }>(
-        `SELECT ROUND(AVG(total_time_ms))::int AS avg_race_ms
-         FROM game_players
-         WHERE user_id = $1 AND finished`,
-        [userId]
-      ),
-      pool.query<{
-        avg_task_efficiency: number | null;
-        efficiency_sample: number;
-      }>(
-        `SELECT
+          [userId]
+        ),
+        pool.query<{
+          avg_task_efficiency: number | null;
+          efficiency_sample: number;
+        }>(
+          `SELECT
            AVG(LEAST(1.0, t.optimal_keystroke_count::float8 / ta.keystroke_count))
              AS avg_task_efficiency,
            COUNT(*)::int AS efficiency_sample
@@ -166,44 +177,27 @@ export async function getPlayerStats(
          WHERE ta.user_id = $1
            AND ta.keystroke_count > 0
            AND t.optimal_keystroke_count IS NOT NULL`,
-        [userId]
-      ),
-      pool.query<{
-        play_mode: string;
-        position: number | null;
-        finished: boolean;
-        left_race: boolean;
-        total_time_ms: number | null;
-        started_at: Date;
-      }>(
-        `SELECT g.play_mode, gp.position, gp.finished, gp.left_race,
+          [userId]
+        ),
+        pool.query<{
+          play_mode: string;
+          position: number | null;
+          finished: boolean;
+          left_race: boolean;
+          total_time_ms: number | null;
+          started_at: Date;
+        }>(
+          `SELECT g.play_mode, gp.position, gp.finished, gp.left_race,
                 gp.total_time_ms, g.started_at
          FROM game_players gp
          JOIN games g ON g.id = gp.game_id
          WHERE gp.user_id = $1
          ORDER BY g.started_at DESC
          LIMIT $2`,
-        [userId, recentLimit]
-      ),
-      pool.query<{
-        total_runs: number;
-        multiplayer_races: number;
-        multiplayer_wins: number;
-      }>(
-        `SELECT
-           COUNT(*)::int AS total_runs,
-           (COUNT(*) FILTER (WHERE g.play_mode IN ('quick_play', 'private_match')))::int
-             AS multiplayer_races,
-           (COUNT(*) FILTER (
-              WHERE g.play_mode IN ('quick_play', 'private_match') AND gp.position = 1
-           ))::int AS multiplayer_wins
-         FROM game_players gp
-         JOIN games g ON g.id = gp.game_id
-         WHERE gp.user_id = $1`,
-        [userId]
-      ),
-      pool.query<{ day: string; runs: number; multiplayer_wins: number }>(
-        `SELECT
+          [userId, recentLimit]
+        ),
+        pool.query<{ day: string; runs: number; multiplayer_wins: number }>(
+          `SELECT
            to_char((g.started_at AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS day,
            COUNT(*)::int AS runs,
            (COUNT(*) FILTER (
@@ -215,10 +209,10 @@ export async function getPlayerStats(
            AND g.started_at >= now() - ($2 * interval '1 week')
          GROUP BY 1
          ORDER BY 1`,
-        [userId, ACTIVITY_WEEKS]
-      ),
-      pool.query<{ week_start: string; avg_ms: number }>(
-        `SELECT
+          [userId, ACTIVITY_WEEKS]
+        ),
+        pool.query<{ week_start: string; avg_ms: number }>(
+          `SELECT
            to_char(date_trunc('week', g.started_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD')
              AS week_start,
            ROUND(AVG(gp.total_time_ms))::int AS avg_ms
@@ -229,38 +223,19 @@ export async function getPlayerStats(
            AND g.started_at >= now() - ($2 * interval '1 week')
          GROUP BY 1
          ORDER BY 1`,
-        [userId, RACE_TIME_WEEKS]
-      ),
-      pool.query<{
-        avg_30d: number | null;
-        avg_prev_30d: number | null;
-      }>(
-        `SELECT
-           ROUND(AVG(gp.total_time_ms) FILTER (
-             WHERE g.started_at >= now() - interval '30 days'))::int AS avg_30d,
-           ROUND(AVG(gp.total_time_ms) FILTER (
-             WHERE g.started_at < now() - interval '30 days'))::int AS avg_prev_30d
-         FROM game_players gp
-         JOIN games g ON g.id = gp.game_id
-         WHERE gp.user_id = $1
-           AND gp.finished
-           AND g.started_at >= now() - interval '60 days'`,
-        [userId]
-      ),
-    ]);
+          [userId, RACE_TIME_WEEKS]
+        ),
+      ]);
     const r = racing.rows[0]!;
     const t = tasks.rows[0]!;
-    const s = sessionTime.rows[0]!;
     const e = efficiency.rows[0]!;
-    const counts = runCounts.rows[0]!;
-    const w = windows.rows[0]!;
     return {
       racesPlayed: r.races_played,
       wins: r.wins,
       bestRaceMs: r.best_race_ms,
       tasksCompleted: t.tasks_completed,
       avgTaskMs: t.avg_task_ms,
-      avgRaceMs: s.avg_race_ms,
+      avgRaceMs: r.avg_race_ms,
       avgTaskEfficiency: e.avg_task_efficiency,
       efficiencySample: e.efficiency_sample,
       recentGames: recent.rows.map((row) => ({
@@ -271,10 +246,10 @@ export async function getPlayerStats(
         totalTimeMs: row.total_time_ms,
         startedAt: row.started_at,
       })),
-      totalRuns: counts.total_runs,
+      totalRuns: r.total_runs,
       multiplayer: {
-        races: counts.multiplayer_races,
-        wins: counts.multiplayer_wins,
+        races: r.multiplayer_races,
+        wins: r.multiplayer_wins,
       },
       activity: activityRows.rows.map((row) => ({
         day: row.day,
@@ -285,8 +260,8 @@ export async function getPlayerStats(
         weekStart: row.week_start,
         avgMs: row.avg_ms,
       })),
-      avgRaceMs30d: w.avg_30d,
-      avgRaceMsPrev30d: w.avg_prev_30d,
+      avgRaceMs30d: r.avg_30d,
+      avgRaceMsPrev30d: r.avg_prev_30d,
     };
   } catch (err) {
     const code = (err as { code?: string })?.code;

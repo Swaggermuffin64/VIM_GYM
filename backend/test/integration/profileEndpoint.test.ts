@@ -4,7 +4,7 @@
  * must be the *sanitized* display name, and avatar URLs must be validated —
  * both regressions found in code review of the auth branch.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -133,6 +133,18 @@ describe('POST /api/user/profile', () => {
 });
 
 describe('showcased badges', () => {
+  /** Directly set the stored showcase so each test owns its starting state. */
+  async function seedShowcase(ids: string[]) {
+    await db.query('UPDATE profiles SET showcased_badges = $2 WHERE id = $1', [
+      TEST_USERS.alice,
+      ids,
+    ]);
+  }
+
+  beforeEach(async () => {
+    await seedShowcase([]);
+  });
+
   async function getMe() {
     const res = await fetch(`${base}/api/user/me`, {
       headers: {
@@ -163,10 +175,6 @@ describe('showcased badges', () => {
   }
 
   it('/me returns an empty showcase for a fresh profile', async () => {
-    await db.query(
-      'UPDATE profiles SET showcased_badges = DEFAULT WHERE id = $1',
-      [TEST_USERS.alice]
-    );
     expect((await getMe()).profile.showcased_badges).toEqual([]);
   });
 
@@ -178,6 +186,7 @@ describe('showcased badges', () => {
   });
 
   it('rejects an unknown badge with 400 and keeps the old showcase', async () => {
+    await seedShowcase(['first_win']);
     const { res } = await postShowcase(['nope']);
     expect(res.status).toBe(400);
     expect((await getMe()).profile.showcased_badges).toEqual(['first_win']);

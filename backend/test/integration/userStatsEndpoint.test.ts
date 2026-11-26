@@ -176,24 +176,29 @@ describe('GET /api/user/stats', () => {
     expect(body.stats.recent_games[0]!.play_mode).toBe('quick_play');
   });
 
-  it('returns all-mode and multiplayer fields', async () => {
-    // Alice already has one quick_play win (game 201); add a practice run.
+  it('returns all-mode, multiplayer, activity and trend fields', async () => {
+    // Self-contained: bob gets one quick_play win, one practice run, both
+    // finished and started now, so every new field is non-empty.
     await db.query(
-      `INSERT INTO games (id, play_mode, task_hashes, started_at)
-       VALUES (202, 'practice', '{h1}', now())`
+      `INSERT INTO games (id, play_mode, task_hashes, started_at, finished_at)
+       VALUES (301, 'quick_play', '{}', now(), now()),
+              (302, 'practice', '{}', now(), now())`
     );
     await db.query(
-      `INSERT INTO game_players (game_id, user_id) VALUES (202, $1)`,
-      [TEST_USERS.alice]
+      `INSERT INTO game_players (game_id, user_id, position, total_time_ms, finished)
+       VALUES (301, $1, 1, 60000, true), (302, $1, NULL, 40000, true)`,
+      [TEST_USERS.bob]
     );
     const res = await fetch(`${base}/api/user/stats`, {
-      headers: { Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}` },
+      headers: { Authorization: `Bearer ${mintTestToken(TEST_USERS.bob)}` },
     });
     const body = (await res.json()) as {
       stats: {
         total_runs: number;
         multiplayer: { races: number; wins: number; win_rate: number };
         activity: Array<Record<string, unknown>>;
+        race_time_weekly: Array<Record<string, unknown>>;
+        avg_race_ms_30d: number | null;
       };
     };
     expect(body.stats.total_runs).toBe(2);
@@ -204,5 +209,11 @@ describe('GET /api/user/stats', () => {
       'multiplayer_wins',
       'runs',
     ]);
+    expect(body.stats.race_time_weekly.length).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(body.stats.race_time_weekly[0]!).sort()).toEqual([
+      'avg_ms',
+      'week_start',
+    ]);
+    expect(typeof body.stats.avg_race_ms_30d).toBe('number');
   });
 });

@@ -86,7 +86,9 @@ export async function setShowcasedBadges(
       [userId, ids]
     );
     return result.rows[0]?.showcased_badges ?? null;
-  } catch {
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    console.error('[profiles] setShowcasedBadges failed', { code, err });
     return null;
   }
 }

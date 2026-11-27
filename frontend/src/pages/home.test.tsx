@@ -120,7 +120,7 @@ describe('HomePage', () => {
       renderHome();
     });
 
-    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith('tok', undefined, 3);
+    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith('tok', undefined, 5);
   });
 
   it('invites the user to race while attempts remain', async () => {

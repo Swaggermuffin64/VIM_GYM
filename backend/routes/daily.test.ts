@@ -25,6 +25,9 @@ vi.mock('../db/dailyResults.js', () => ({
   getSeenBadges: vi.fn(),
   addSeenBadges: vi.fn(),
 }));
+vi.mock('../db/profiles.js', () => ({
+  getShowcasedBadgesByUser: vi.fn(),
+}));
 vi.mock('../db/stats.js', () => ({
   createGameSession: vi.fn(),
   finishGameSession: vi.fn(),
@@ -41,6 +44,7 @@ vi.mock('../auth/httpAuth.js', () => ({
 import * as daily from '../db/daily.js';
 import * as dailyResults from '../db/dailyResults.js';
 import * as stats from '../db/stats.js';
+import { getShowcasedBadgesByUser } from '../db/profiles.js';
 import {
   requireSupabaseAuth,
   tryResolveSupabaseUser,
@@ -66,6 +70,8 @@ beforeEach(() => {
   vi.mocked(dailyResults.queryFastestRunEfficiency).mockResolvedValue(
     new Map()
   );
+  // Nobody has picked showcase badges unless a test says so.
+  vi.mocked(getShowcasedBadgesByUser).mockResolvedValue(new Map());
 });
 
 describe('GET /api/daily', () => {
@@ -523,6 +529,7 @@ describe('GET /api/daily/leaderboard', () => {
         optimal_keys: null,
         actual_keys: null,
         badges: null,
+        showcased_badges: [],
       },
       {
         user_id: 'user-1',
@@ -534,6 +541,7 @@ describe('GET /api/daily/leaderboard', () => {
         optimal_keys: null,
         actual_keys: null,
         badges: null,
+        showcased_badges: [],
       },
     ]);
   });
@@ -613,6 +621,7 @@ describe('GET /api/daily/leaderboard', () => {
       optimal_keys: null,
       actual_keys: null,
       badges: null,
+      showcased_badges: [],
     });
   });
 
@@ -721,6 +730,7 @@ describe('GET /api/daily/leaderboard?board=efficiency', () => {
         optimal_keys: 42,
         actual_keys: 42,
         badges: null,
+        showcased_badges: [],
       },
       {
         user_id: 'b',
@@ -732,6 +742,7 @@ describe('GET /api/daily/leaderboard?board=efficiency', () => {
         optimal_keys: 42,
         actual_keys: 47,
         badges: null,
+        showcased_badges: [],
       },
     ]);
     expect(body.last_place.user_id).toBe('d');
@@ -838,6 +849,7 @@ describe('each leaderboard row describes a single run', () => {
       optimal_keys: 40,
       actual_keys: 64,
       badges: expect.anything(),
+      showcased_badges: expect.any(Array),
     });
   });
 
@@ -942,6 +954,8 @@ describe('leaderboard badge chips', () => {
         streak: 3,
         podium_streak: 2,
         wins: 1,
+        speed_wins: 1,
+        efficiency_wins: 0,
       });
     } finally {
       vi.useRealTimers();
@@ -1092,5 +1106,93 @@ describe('auth gating', () => {
       url: '/api/daily/attempt/start',
     });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe("leaderboard rows carry the racer's showcased badges", () => {
+  /** u1 won the speed board on a closed day, so holds 'first_win'. */
+  function boardWithWinner() {
+    vi.mocked(daily.queryDailyLeaderboard).mockResolvedValue([
+      {
+        userId: 'u1',
+        displayName: 'u1',
+        avatarUrl: null,
+        bestMs: 30_000,
+        rank: 1,
+      },
+    ]);
+    vi.mocked(daily.countDailyRacers).mockResolvedValue(1);
+    vi.mocked(dailyResults.queryDailyHistory).mockResolvedValue([
+      {
+        userId: 'u1',
+        raceDate: '2020-01-01',
+        bestMs: 30_000,
+        speedRank: 1,
+        racers: 2,
+        efficiency: 0.8,
+        efficiencyMs: 33_000,
+        optimalKeys: 40,
+        actualKeys: 50,
+        efficiencyRank: 2,
+        efficiencyRacers: 2,
+      },
+    ]);
+  }
+
+  it('sends the earned picks, in the order the racer chose', async () => {
+    boardWithWinner();
+    vi.mocked(getShowcasedBadgesByUser).mockResolvedValue(
+      new Map([['u1', ['first_win']]])
+    );
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-10-19',
+    });
+
+    expect(getShowcasedBadgesByUser).toHaveBeenCalledWith(['u1']);
+    expect(res.json().entries[0].showcased_badges).toEqual(['first_win']);
+  });
+
+  it('drops picks the racer has not earned', async () => {
+    boardWithWinner();
+    vi.mocked(getShowcasedBadgesByUser).mockResolvedValue(
+      new Map([['u1', ['streak_30', 'first_win']]])
+    );
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-10-19',
+    });
+
+    expect(res.json().entries[0].showcased_badges).toEqual(['first_win']);
+  });
+
+  it('sends the latest earned badges when the racer picked none', async () => {
+    boardWithWinner();
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-10-19',
+    });
+
+    // The same badges their profile card shows before a showcase is chosen.
+    expect(res.json().entries[0].showcased_badges).toEqual(['first_win']);
+  });
+
+  it('sends an empty list when the racer has earned nothing', async () => {
+    boardWithWinner();
+    vi.mocked(dailyResults.queryDailyHistory).mockResolvedValue([]);
+
+    const app = await buildServer();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/daily/leaderboard?date=2026-10-19',
+    });
+
+    expect(res.json().entries[0].showcased_badges).toEqual([]);
   });
 });

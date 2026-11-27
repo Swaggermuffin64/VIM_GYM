@@ -8,7 +8,8 @@
  */
 import React, { useState } from 'react';
 import { StatusSegment } from '../StatusSegment';
-import type { BadgeInfo } from '../../lib/dailyBadges';
+import { BadgeValue } from '../BadgeValue';
+import type { BadgeInfo, DailyWins } from '../../lib/dailyBadges';
 import { colors } from '../../theme';
 
 const MAX_SHOWCASED = 3;
@@ -46,11 +47,14 @@ const styles: Record<string, React.CSSProperties> = {
  */
 export function ShowcasePicker({
   earned,
+  wins,
   selected,
   onSave,
   onCancel,
 }: {
   earned: BadgeInfo[];
+  /** The player's daily wins per board, shown on the win badge; null if unknown. */
+  wins: DailyWins | null;
   selected: string[];
   onSave: (ids: string[]) => Promise<void>;
   onCancel: () => void;
@@ -100,7 +104,7 @@ export function ShowcasePicker({
               <StatusSegment
                 kind={info.kind}
                 label={info.label}
-                value={info.value}
+                value={<BadgeValue info={info} wins={wins} />}
               />
             </button>
           );

@@ -6,14 +6,42 @@
  * `size="sm"` is the leaderboard chip (no arrow, tighter); `size="xl"` is
  * the large plaque segment on the profile page; `locked` draws an
  * unearned badge as a dashed outline with no colour.
+ *
+ * The 'flawless' kind (the perfect-run badge) stands out wherever it is
+ * drawn: a holographic gradient label, gradient value text, a soft violet
+ * glow, and a sheen that sweeps across it (`flawless-sheen` in App.css).
  */
 import React from 'react';
-import { BADGE_KIND_COLORS } from '../lib/dailyBadges';
+import { BADGE_KIND_COLORS, FLAWLESS_GRADIENT } from '../lib/dailyBadges';
 import type { BadgeKind } from '../lib/dailyBadges';
 import { colors } from '../theme';
 
 /** Dark block behind the value. */
 const VALUE_BG = '#1e293b';
+
+/** The Flawless value ("100%") in the same foil as its label. */
+const flawlessText: React.CSSProperties = {
+  background: FLAWLESS_GRADIENT,
+  WebkitBackgroundClip: 'text',
+  backgroundClip: 'text',
+  color: 'transparent',
+};
+
+/**
+ * A bright diagonal band laid over the whole Flawless segment; App.css
+ * sweeps it across every few seconds.
+ */
+const sheen: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  bottom: 0,
+  left: 0,
+  width: '40%',
+  background:
+    'linear-gradient(100deg, transparent 0%, rgba(255, 255, 255, 0.55) 50%, transparent 100%)',
+  pointerEvents: 'none',
+  transform: 'translateX(-150%)',
+};
 
 const SIZES = {
   lg: { height: 30, fontSize: 13, padX: 10, arrow: 10, radius: 6 },
@@ -36,6 +64,10 @@ export function StatusSegment({
 }) {
   const s = SIZES[size];
   const color = BADGE_KIND_COLORS[kind];
+  const flawless = kind === 'flawless' && !locked;
+  // The arrow is a CSS triangle, so it takes the gradient's last colour to
+  // run on from the label's right edge.
+  const arrowColor = flawless ? colors.secondaryLight : color;
   const block: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -46,6 +78,7 @@ export function StatusSegment({
 
   return (
     <span
+      data-flawless={flawless || undefined}
       style={{
         display: 'inline-flex',
         alignItems: 'stretch',
@@ -55,6 +88,14 @@ export function StatusSegment({
         fontWeight: 800,
         lineHeight: 1,
         fontFamily: '"JetBrains Mono", monospace',
+        ...(flawless
+          ? {
+              position: 'relative',
+              overflow: 'hidden',
+              borderRadius: `${s.radius}px`,
+              boxShadow: `0 0 ${s.height / 2}px ${color}73`,
+            }
+          : {}),
       }}
     >
       <span
@@ -63,7 +104,10 @@ export function StatusSegment({
           borderRadius: `${s.radius}px 0 0 ${s.radius}px`,
           ...(locked
             ? { border: dashed, borderRight: 'none', color: colors.textMuted }
-            : { background: color, color: colors.bgDark }),
+            : {
+                background: flawless ? FLAWLESS_GRADIENT : color,
+                color: colors.bgDark,
+              }),
         }}
       >
         {label}
@@ -76,7 +120,7 @@ export function StatusSegment({
             height: 0,
             borderTop: `${s.height / 2}px solid transparent`,
             borderBottom: `${s.height / 2}px solid transparent`,
-            borderLeft: `${s.arrow}px solid ${color}`,
+            borderLeft: `${s.arrow}px solid ${arrowColor}`,
             background: VALUE_BG,
           }}
         />
@@ -91,8 +135,11 @@ export function StatusSegment({
             : { background: VALUE_BG, color }),
         }}
       >
-        {value}
+        {flawless ? <span style={flawlessText}>{value}</span> : value}
       </span>
+      {flawless && (
+        <span aria-hidden="true" className="flawless-sheen" style={sheen} />
+      )}
     </span>
   );
 }

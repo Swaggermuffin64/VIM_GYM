@@ -9,7 +9,14 @@
  */
 import React from 'react';
 import type { DailyProfile } from '../../api/daily';
-import { BADGE_CATALOG, BADGE_KIND_COLORS } from '../../lib/dailyBadges';
+import {
+  BADGE_CATALOG,
+  BADGE_KIND_COLORS,
+  FLAWLESS_GRADIENT,
+  dailyWins,
+} from '../../lib/dailyBadges';
+import type { DailyWins } from '../../lib/dailyBadges';
+import { BadgeValue } from '../BadgeValue';
 import { trophyCase } from '../../lib/profileView';
 import type { TrophyEntry } from '../../lib/profileView';
 import { colors } from '../../theme';
@@ -120,7 +127,14 @@ function lockedEntries(): TrophyEntry[] {
 }
 
 /** One badge plaque, earned (tinted, dated) or locked (dashed, progress). */
-function Plaque({ entry }: { entry: TrophyEntry }) {
+function Plaque({
+  entry,
+  wins,
+}: {
+  entry: TrophyEntry;
+  /** The player's daily wins per board, shown on the earned win badge; null if unknown. */
+  wins: DailyWins | null;
+}) {
   const { info, earnedOn } = entry;
   const color = BADGE_KIND_COLORS[info.kind];
 
@@ -131,6 +145,10 @@ function Plaque({ entry }: { entry: TrophyEntry }) {
           ...styles.plaque,
           background: `linear-gradient(180deg, ${color}24 0%, ${colors.bgCard} 70%)`,
           border: `1px solid ${color}66`,
+          // The rare perfect-run badge glows, so it stands out in the case.
+          ...(info.kind === 'flawless'
+            ? { boxShadow: `0 0 24px ${color}40` }
+            : {}),
         }}
         role="group"
         aria-label={`${info.name}: ${info.goal}, earned`}
@@ -143,13 +161,13 @@ function Plaque({ entry }: { entry: TrophyEntry }) {
             left: 0,
             right: 0,
             height: '3px',
-            background: color,
+            background: info.kind === 'flawless' ? FLAWLESS_GRADIENT : color,
           }}
         />
         <StatusSegment
           kind={info.kind}
           label={info.label}
-          value={info.value}
+          value={<BadgeValue info={info} wins={wins} />}
           size="xl"
         />
         <p style={styles.name}>{info.name}</p>
@@ -202,6 +220,7 @@ export function TrophyCase({ daily }: { daily: DailyProfile | null }) {
   const entries = daily ? trophyCase(daily) : lockedEntries();
   const earned = entries.filter((e) => e.earnedOn !== null).length;
   const percent = Math.round((earned / entries.length) * 100);
+  const wins = dailyWins(daily);
 
   return (
     <div style={tile}>
@@ -228,7 +247,7 @@ export function TrophyCase({ daily }: { daily: DailyProfile | null }) {
       </div>
       <div style={styles.grid}>
         {entries.map((entry) => (
-          <Plaque key={entry.info.id} entry={entry} />
+          <Plaque key={entry.info.id} entry={entry} wins={wins} />
         ))}
       </div>
     </div>

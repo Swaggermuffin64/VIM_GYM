@@ -46,12 +46,14 @@ import {
   type FastestRunEfficiency,
 } from '../db/dailyResults.js';
 import {
-  chipsByUser,
+  chipsFromSummary,
+  profileShowcase,
   isBadgeId,
+  summariesByUser,
   summarizeDailyHistory,
-  type EarnedBadge,
-  type Placing,
 } from '../daily/badges.js';
+import { getShowcasedBadgesByUser } from '../db/profiles.js';
+import { badgeToWire, dailySummaryToWire } from './profileWire.js';
 
 /** Rows returned by GET /api/daily/leaderboard when no limit is given. */
 const DEFAULT_LEADERBOARD_LIMIT = 30;
@@ -460,16 +462,19 @@ export async function registerDailyRoutes(
         ? await speedBoardSlice(raceDate, limit, user?.id ?? null)
         : await efficiencyBoardSlice(raceDate, limit, user?.id ?? null);
 
-    // Chips are computed only for the racers on the returned rows.
+    // Chips and showcases are computed only for the racers on the returned
+    // rows.
     const shown = [
       ...slice.entries,
       ...(slice.neighborhood ?? []),
       ...(slice.lastPlace ? [slice.lastPlace] : []),
     ];
-    const history = await queryDailyHistory([
-      ...new Set(shown.map((e) => e.userId)),
+    const shownIds = [...new Set(shown.map((e) => e.userId))];
+    const [history, showcased] = await Promise.all([
+      queryDailyHistory(shownIds),
+      getShowcasedBadgesByUser(shownIds),
     ]);
-    const chips = chipsByUser(history, utcDateKey(new Date()));
+    const summaries = summariesByUser(history, utcDateKey(new Date()));
     // Speed rows carry only a time; their keys come from that same fastest
     // run. Efficiency rows already carry everything from their one run.
     const fastestRunKeys =
@@ -480,7 +485,8 @@ export async function registerDailyRoutes(
         : new Map<string, FastestRunEfficiency>();
 
     const toWire = (e: BoardRow) => {
-      const c = chips.get(e.userId);
+      const summary = summaries.get(e.userId);
+      const c = summary ? chipsFromSummary(summary) : undefined;
       const fastest = fastestRunKeys.get(e.userId);
       return {
         user_id: e.userId,
@@ -492,8 +498,21 @@ export async function registerDailyRoutes(
         optimal_keys: e.optimalKeys ?? fastest?.optimalKeys ?? null,
         actual_keys: e.actualKeys ?? fastest?.actualKeys ?? null,
         badges: c
-          ? { streak: c.streak, podium_streak: c.podiumStreak, wins: c.wins }
+          ? {
+              streak: c.streak,
+              podium_streak: c.podiumStreak,
+              wins: c.wins,
+              speed_wins: c.speedWins,
+              efficiency_wins: c.efficiencyWins,
+            }
           : null,
+        // The badges the racer's profile card shows (their picks, else their
+        // latest earned); empty when they have none, and the row then shows
+        // the `badges` chips.
+        showcased_badges: profileShowcase(
+          showcased.get(e.userId) ?? [],
+          summary
+        ),
       };
     };
 
@@ -528,51 +547,10 @@ export async function registerDailyRoutes(
     const unseen =
       seen === null ? [] : summary.badges.filter((b) => !seen.includes(b.id));
 
-    const badgeToWire = (b: EarnedBadge) => ({
-      id: b.id,
-      earned_on: b.earnedOn,
-    });
-    const placingToWire = (p: Placing | null) =>
-      p ? { rank: p.rank, racers: p.racers, race_date: p.raceDate } : null;
-    const { personalBests: pb, streaks, counters } = summary;
-
     return {
       success: true,
-      badges: summary.badges.map(badgeToWire),
+      ...dailySummaryToWire(summary),
       unseen_badges: unseen.map(badgeToWire),
-      streaks: {
-        participation: streaks.participation,
-        podium: streaks.podium,
-      },
-      counters: {
-        days_raced: counters.daysRaced,
-        speed_wins: counters.speedWins,
-        efficiency_wins: counters.efficiencyWins,
-        podiums: counters.podiums,
-      },
-      personal_bests: {
-        best_speed_placing: placingToWire(pb.bestSpeedPlacing),
-        best_efficiency_placing: placingToWire(pb.bestEfficiencyPlacing),
-        fastest: pb.fastest
-          ? { ms: pb.fastest.ms, race_date: pb.fastest.raceDate }
-          : null,
-        most_efficient: pb.mostEfficient
-          ? {
-              efficiency: pb.mostEfficient.efficiency,
-              race_date: pb.mostEfficient.raceDate,
-            }
-          : null,
-      },
-      win_dates: summary.winDates,
-      recent: summary.recent.map((d) => ({
-        race_date: d.raceDate,
-        best_ms: d.bestMs,
-        speed_rank: d.speedRank,
-        racers: d.racers,
-        efficiency: d.efficiency,
-        efficiency_rank: d.efficiencyRank,
-        efficiency_racers: d.efficiencyRacers,
-      })),
     };
   });
 

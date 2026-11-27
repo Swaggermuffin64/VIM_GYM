@@ -5,14 +5,16 @@
  *
  * Presentational plus local UI state (editing name, choosing showcase). All
  * saving is delegated to the page through `onSaveName` / `onSaveShowcase`,
- * which resolve to an error message, or null on success.
+ * which resolve to an error message, or null on success. Leave both out for
+ * someone else's profile: the card is then read-only, with no edit controls.
  */
 import React, { useState } from 'react';
 import type { DailyProfile } from '../../api/daily';
 import type { PlayerStats, Profile } from '../../api/profile';
 import { formatPlacing } from '../../lib/format';
 import { bestFinish, showcaseBadges } from '../../lib/profileView';
-import { badgeInfo } from '../../lib/dailyBadges';
+import { badgeInfo, dailyWins } from '../../lib/dailyBadges';
+import { BadgeValue } from '../BadgeValue';
 import type { BadgeInfo } from '../../lib/dailyBadges';
 import { colors } from '../../theme';
 import { StatusSegment } from '../StatusSegment';
@@ -230,15 +232,17 @@ function Showcase({
 }: {
   daily: DailyProfile | null;
   showcased: string[];
-  onSaveShowcase: (ids: string[]) => Promise<string | null>;
+  /** Null on someone else's profile: the badges show, the picker doesn't. */
+  onSaveShowcase: ((ids: string[]) => Promise<string | null>) | null;
 }) {
   const [choosing, setChoosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const earned = daily?.badges ?? [];
   const shown = showcaseBadges(showcased, earned);
+  const wins = dailyWins(daily);
   if (shown.length === 0) return null;
 
-  if (choosing) {
+  if (choosing && onSaveShowcase) {
     const earnedInfos = earned
       .map((b) => badgeInfo(b.id))
       .filter((info): info is BadgeInfo => info !== undefined);
@@ -246,6 +250,7 @@ function Showcase({
       <div style={{ marginTop: '16px' }}>
         <ShowcasePicker
           earned={earnedInfos}
+          wins={wins}
           selected={shown.map((s) => s.id)}
           onSave={async (ids) => {
             const failure = await onSaveShowcase(ids);
@@ -269,12 +274,14 @@ function Showcase({
           key={info.id}
           kind={info.kind}
           label={info.label}
-          value={info.value}
+          value={<BadgeValue info={info} wins={wins} />}
         />
       ))}
-      <button style={styles.linkButton} onClick={() => setChoosing(true)}>
-        showcase ✎
-      </button>
+      {onSaveShowcase && (
+        <button style={styles.linkButton} onClick={() => setChoosing(true)}>
+          showcase ✎
+        </button>
+      )}
     </div>
   );
 }
@@ -293,8 +300,10 @@ export function PlayerCard({
   profile: Profile;
   stats: PlayerStats | null;
   daily: DailyProfile | null;
-  onSaveName: (name: string) => Promise<string | null>;
-  onSaveShowcase: (ids: string[]) => Promise<string | null>;
+  /** Omitted on someone else's profile, which hides the name editor. */
+  onSaveName?: (name: string) => Promise<string | null>;
+  /** Omitted on someone else's profile, which hides the showcase picker. */
+  onSaveShowcase?: (ids: string[]) => Promise<string | null>;
 }) {
   const memberSince = formatMemberSince(profile.createdAt);
   const hasDaily = daily !== null && daily.counters.daysRaced > 0;
@@ -304,10 +313,14 @@ export function PlayerCard({
     <div style={styles.card}>
       <div style={styles.top}>
         <div style={styles.identity}>
-          <NameEditor
-            displayName={profile.displayName}
-            onSaveName={onSaveName}
-          />
+          {onSaveName ? (
+            <NameEditor
+              displayName={profile.displayName}
+              onSaveName={onSaveName}
+            />
+          ) : (
+            <h1 style={styles.name}>{profile.displayName}</h1>
+          )}
           <p style={meta}>
             {memberSince && <>Member since {memberSince}</>}
             {memberSince && profile.isPremium && ' · '}
@@ -318,7 +331,7 @@ export function PlayerCard({
       <Showcase
         daily={daily}
         showcased={profile.showcasedBadges}
-        onSaveShowcase={onSaveShowcase}
+        onSaveShowcase={onSaveShowcase ?? null}
       />
       <div style={styles.strip}>
         <StripStat

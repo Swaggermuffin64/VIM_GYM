@@ -17,6 +17,7 @@ function renderPicker(onSave = vi.fn(async () => {}), selected: string[] = []) {
   render(
     <ShowcasePicker
       earned={FOUR_EARNED}
+      wins={null}
       selected={selected}
       onSave={onSave}
       onCancel={() => {}}
@@ -71,5 +72,24 @@ describe('ShowcasePicker save', () => {
 
     finish();
     await vi.waitFor(() => expect(save.disabled).toBe(false));
+  });
+});
+
+describe('ShowcasePicker win badge', () => {
+  it("splits the player's wins by board on the win badge", () => {
+    const win = BADGE_CATALOG.find((b) => b.id === 'first_win')!;
+    render(
+      <ShowcasePicker
+        earned={[win]}
+        wins={{ speed: 3, efficiency: 2 }}
+        selected={[]}
+        onSave={vi.fn(async () => {})}
+        onCancel={() => {}}
+      />
+    );
+
+    expect(screen.getByText('S3')).toBeTruthy();
+    expect(screen.getByText('E2')).toBeTruthy();
+    expect(screen.queryByText('1st')).toBeNull();
   });
 });

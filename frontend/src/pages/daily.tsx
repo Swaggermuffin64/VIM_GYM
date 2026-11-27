@@ -21,7 +21,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../theme';
@@ -36,7 +36,6 @@ import {
   fetchChallenge,
 } from '../api/daily';
 import type {
-  BadgeChips,
   ChallengeInfo,
   DailyBoard,
   DailyRaceInfo,
@@ -58,8 +57,16 @@ import {
 } from '../lib/challengeRedirect';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 import { DAILY_RAIL_RACER_COUNT } from '../lib/dailyRail';
-import { chipsFor, formatEfficiency } from '../lib/dailyBadges';
+import {
+  badgeInfo,
+  badgeTitle,
+  chipsFor,
+  formatEfficiency,
+} from '../lib/dailyBadges';
+import type { BadgeInfo } from '../lib/dailyBadges';
 import { StatusSegment } from '../components/StatusSegment';
+import { BadgeValue } from '../components/BadgeValue';
+import { BrandedSpinner } from '../components/BrandedLoading';
 
 // ---------------------------------------------------------------------------
 // Phase state machine
@@ -109,10 +116,10 @@ const ALL_RACERS_ROW_LIMIT = 1000;
 
 /**
  * Leaderboard column widths, shared by the column labels and every row so
- * they line up: rank, racer (takes the rest), Keys, Eff., Time.
+ * they line up: rank, racer (takes the rest), Keys, Efficiency, Time.
  */
 const LEADERBOARD_GRID = {
-  gridTemplateColumns: '48px minmax(0, 1fr) 76px 66px 72px',
+  gridTemplateColumns: '48px minmax(0, 1fr) 76px 86px 72px',
   columnGap: '14px',
 };
 
@@ -475,7 +482,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: '"JetBrains Mono", monospace',
   },
   // One grid for the column labels and every row: rank, racer (name over
-  // badge chips), then Keys, Eff. and Time, whichever order the board is in.
+  // badge chips), then Keys, Efficiency and Time, whichever order the board is in.
   // Baseline alignment keeps the rank and metrics on the name's line, with
   // the chips hanging below it.
   leaderboardRow: {
@@ -491,7 +498,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '17px',
     lineHeight: 1.3,
   },
-  // Today's top 3 under the current sort.
+  // Today's podium (top 3) under the current sort.
   leaderboardRowPodium: {
     background: `${colors.warning}0f`,
   },
@@ -569,7 +576,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 400,
     color: colors.textSecondary,
   },
-  // The rail's top 3: one large row each, tinted gold / silver / bronze.
+  // The rail's top 5: one large row each; the podium tinted gold / silver / bronze.
   topRacerList: { display: 'flex', flexDirection: 'column', gap: '10px' },
   topRacerRow: {
     display: 'flex',
@@ -595,6 +602,26 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: '9px',
   },
+  // Inherits the name's look; App.css underlines it on hover.
+  racerNameLink: { color: 'inherit', textDecoration: 'none' },
+  // Name plus the viewer's "you" tag; the name truncates, the tag never does.
+  topRacerNameLine: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    minWidth: 0,
+  },
+  topRacerYouTag: {
+    flexShrink: 0,
+    padding: '2px 7px',
+    borderRadius: '4px',
+    background: `${colors.primary}26`,
+    color: colors.primaryLight,
+    fontSize: '11px',
+    fontWeight: 700,
+    letterSpacing: '0.8px',
+    textTransform: 'uppercase',
+  },
   topRacerName: {
     fontSize: '20px',
     fontWeight: 600,
@@ -605,7 +632,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   topRacerStats: {
     display: 'grid',
-    gridTemplateColumns: '78px 66px 76px',
+    gridTemplateColumns: '78px 82px 76px',
     gap: '14px',
     textAlign: 'right',
     marginLeft: 'auto',
@@ -625,7 +652,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: colors.primaryLight,
   },
-  // "Your position": the viewer's own row when they're outside the top 3.
+  // "Your position": the viewer's own row when they're outside the top 5.
   ownPosition: {
     marginTop: '22px',
     display: 'flex',
@@ -725,6 +752,24 @@ const styles: Record<string, React.CSSProperties> = {
   sortButtonActive: {
     background: `${colors.primary}20`,
     color: colors.primaryLight,
+  },
+  // Board-switch loading (BoardLoadingCover / BoardLoadingPlaceholder).
+  boardLoadingCover: { position: 'relative' },
+  // The dim's resting state; `board-loading-dim` animates into it.
+  boardLoadingStaleRows: { opacity: 0.35, pointerEvents: 'none' },
+  boardLoadingSpinnerSlot: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Roughly three rail rows, so the first load doesn't start as a sliver.
+  boardLoadingPlaceholder: {
+    minHeight: '240px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   leaderboardEmpty: {
     color: colors.textMuted,
@@ -890,15 +935,10 @@ export default function DailyRacePage() {
     return cached ? { name: 'preRace', info: cached } : { name: 'loading' };
   });
   const [board, setBoard] = useState<DailyBoard>('speed');
-  // Tagged with the board it was fetched for, so switching tabs never shows
-  // one board's rows under the other's heading while the fetch is in flight.
-  const [leaderboard, setLeaderboard] = useState<{
-    board: DailyBoard;
-    data: DailyLeaderboardData;
-  }>({
-    board: 'speed',
-    data: { entries: [], neighborhood: null, lastPlace: null, totalRacers: 0 },
-  });
+  // The last rows fetched, tagged with their board. Null until the first
+  // fetch lands. While a switch is in flight it still holds the old board,
+  // which the rail shows dimmed under a spinner (see BoardLoadingCover).
+  const [leaderboard, setLeaderboard] = useState<BoardSnapshot | null>(null);
   // Only counts while the user is out of attempts — that's the one state where
   // "when does the next race start" is the question on their mind.
   const countdown = useUtcMidnightCountdown(
@@ -1142,9 +1182,7 @@ export default function DailyRacePage() {
               info={phase.info}
               board={board}
               onBoardChange={setBoard}
-              leaderboard={
-                leaderboard.board === board ? leaderboard.data : null
-              }
+              leaderboard={leaderboard}
               accessToken={session?.access_token ?? null}
               countdown={countdown}
               userId={user?.id ?? null}
@@ -1181,8 +1219,11 @@ function PreRaceScreen({
   info: DailyRaceInfo;
   board: DailyBoard;
   onBoardChange: (board: DailyBoard) => void;
-  /** The selected board's rows; null while they load after a tab switch. */
-  leaderboard: DailyLeaderboardData | null;
+  /**
+   * The last rows fetched; null before the first fetch. Its board differs
+   * from `board` while a switch is loading.
+   */
+  leaderboard: BoardSnapshot | null;
   /** Passed on to the full-leaderboard dialog's fetch; null for a visitor. */
   accessToken: string | null;
   countdown: string;
@@ -1194,12 +1235,13 @@ function PreRaceScreen({
   const totalSlots = usedCount + info.attemptsRemaining;
   const outOfAttempts = info.attemptsRemaining === 0;
   const [fullLeaderboardOpen, setFullLeaderboardOpen] = useState(false);
+  const shown = leaderboard?.data ?? null;
+  // The board the visible rows belong to, so a stale slice keeps its own
+  // emphasised column until the new one lands.
+  const shownBoard = leaderboard?.board ?? board;
   const hasUnlistedRacers =
-    leaderboard !== null &&
-    leaderboard.totalRacers > leaderboard.entries.length;
-  const ownRowOutsideTop = leaderboard
-    ? findOwnRowOutsideTop(leaderboard, userId)
-    : null;
+    shown !== null && shown.totalRacers > shown.entries.length;
+  const ownRowOutsideTop = shown ? findOwnRowOutsideTop(shown, userId) : null;
 
   return (
     <div className="daily-split" style={styles.split}>
@@ -1268,40 +1310,46 @@ function PreRaceScreen({
         <div style={styles.railHead}>
           <span style={styles.leaderboardTitle}>Leaderboard</span>
           <SortControl board={board} onChange={onBoardChange} />
-          {leaderboard && leaderboard.totalRacers > 0 && (
+          {shown && shown.totalRacers > 0 && (
             <span style={styles.railCount}>
-              {formatRacerCount(leaderboard.totalRacers)}
+              {formatRacerCount(shown.totalRacers)}
             </span>
           )}
           <KeyColumnsTip />
         </div>
-        {leaderboard === null ? (
-          <div style={styles.leaderboardEmpty}>Loading…</div>
-        ) : leaderboard.entries.length === 0 ? (
-          <div style={styles.leaderboardEmpty}>{emptyBoardText(board)}</div>
+        {shown === null ? (
+          <BoardLoadingPlaceholder />
         ) : (
-          <div style={styles.railRows}>
-            <div style={styles.topRacerList}>
-              {leaderboard.entries.map((entry) => (
-                <TopRacerRow
-                  key={entry.userId}
-                  board={board}
-                  entry={entry}
-                  userId={userId}
-                />
-              ))}
-            </div>
-            {ownRowOutsideTop && (
-              <OwnPositionRow board={board} entry={ownRowOutsideTop} />
+          <BoardLoadingCover loading={leaderboard?.board !== board}>
+            {shown.entries.length === 0 ? (
+              <div style={styles.leaderboardEmpty}>
+                {emptyBoardText(shownBoard)}
+              </div>
+            ) : (
+              <div style={styles.railRows}>
+                <div style={styles.topRacerList}>
+                  {shown.entries.map((entry) => (
+                    <TopRacerRow
+                      key={entry.userId}
+                      board={shownBoard}
+                      entry={entry}
+                      userId={userId}
+                    />
+                  ))}
+                </div>
+                {ownRowOutsideTop && (
+                  <OwnPositionRow board={shownBoard} entry={ownRowOutsideTop} />
+                )}
+              </div>
             )}
-          </div>
+          </BoardLoadingCover>
         )}
         {hasUnlistedRacers && (
           <button
             style={styles.fullLeaderboardButton}
             onClick={() => setFullLeaderboardOpen(true)}
           >
-            Show all {leaderboard.totalRacers} racers
+            Show all {shown.totalRacers} racers
           </button>
         )}
       </aside>
@@ -1315,6 +1363,62 @@ function PreRaceScreen({
           onClose={() => setFullLeaderboardOpen(false)}
         />
       )}
+    </div>
+  );
+}
+
+/** One board's fetched rows, tagged with the board they were fetched for. */
+interface BoardSnapshot {
+  board: DailyBoard;
+  data: DailyLeaderboardData;
+}
+
+/**
+ * Keeps the last board's rows in place while a Speed / Key Efficiency switch
+ * loads, dimmed under the amber spinner, so the panel holds its height
+ * instead of collapsing to a line of text and springing back. The dimming
+ * and spinner fade in after a short delay (`board-loading-dim` and
+ * `board-loading-fade-in` in App.css), so a switch the cache answers at once never flickers.
+ */
+function BoardLoadingCover({
+  loading,
+  children,
+}: {
+  loading: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={styles.boardLoadingCover} aria-busy={loading}>
+      <div
+        style={loading ? styles.boardLoadingStaleRows : undefined}
+        className={loading ? 'board-loading-dim' : undefined}
+        inert={loading || undefined}
+      >
+        {children}
+      </div>
+      {loading && (
+        <div
+          style={styles.boardLoadingSpinnerSlot}
+          className="board-loading-fade-in"
+          role="status"
+          aria-label="Loading leaderboard"
+        >
+          <BrandedSpinner />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The amber spinner in a fixed-height slot, before any rows have loaded. */
+function BoardLoadingPlaceholder() {
+  return (
+    <div
+      style={styles.boardLoadingPlaceholder}
+      role="status"
+      aria-label="Loading leaderboard"
+    >
+      <BrandedSpinner />
     </div>
   );
 }
@@ -1341,13 +1445,11 @@ function DailyFullLeaderboardModal({
   userId: string | null;
   onClose: () => void;
 }) {
-  // Tagged with the board it was fetched for, so a switch shows "Loading…"
-  // rather than the other board's rows under the new heading.
-  const [fetched, setFetched] = useState<{
-    board: DailyBoard;
-    data: DailyLeaderboardData;
-  } | null>(null);
-  const field = fetched?.board === board ? fetched.data : null;
+  // The last field fetched, tagged with its board: kept on screen, dimmed,
+  // while a switch loads (see BoardLoadingCover).
+  const [fetched, setFetched] = useState<BoardSnapshot | null>(null);
+  const field = fetched?.data ?? null;
+  const fieldBoard = fetched?.board ?? board;
 
   useEffect(() => {
     let closed = false;
@@ -1375,16 +1477,22 @@ function DailyFullLeaderboardModal({
       onClose={onClose}
     >
       {field === null ? (
-        <div style={styles.leaderboardEmpty}>Loading…</div>
-      ) : field.entries.length === 0 ? (
-        <div style={styles.leaderboardEmpty}>{emptyBoardText(board)}</div>
+        <BoardLoadingPlaceholder />
       ) : (
-        <LeaderboardRows
-          board={board}
-          entries={field.entries}
-          entriesBelowDivider={field.neighborhood}
-          userId={userId}
-        />
+        <BoardLoadingCover loading={fieldBoard !== board}>
+          {field.entries.length === 0 ? (
+            <div style={styles.leaderboardEmpty}>
+              {emptyBoardText(fieldBoard)}
+            </div>
+          ) : (
+            <LeaderboardRows
+              board={fieldBoard}
+              entries={field.entries}
+              entriesBelowDivider={field.neighborhood}
+              userId={userId}
+            />
+          )}
+        </BoardLoadingCover>
       )}
     </LeaderboardModalFrame>
   );
@@ -1494,7 +1602,7 @@ function formatRacerCount(totalRacers: number): string {
 }
 
 /**
- * A single board row: rank, name with badge chips beneath, then Keys, Eff.
+ * A single board row: rank, name with badge chips beneath, then Keys, Efficiency
  * and Time, with the column the board is sorted by highlighted. Today's top
  * 3 are tinted; the signed-in user's row is highlighted and marked
  * aria-current.
@@ -1533,7 +1641,7 @@ function LeaderboardRow({
       </span>
       <span style={styles.leaderboardNameCell}>
         <span style={styles.leaderboardName}>{entry.displayName}</span>
-        <BadgeChipList badges={entry.badges} />
+        <BadgeChipList entry={entry} />
       </span>
       <span
         style={metric('efficiency')}
@@ -1559,12 +1667,31 @@ function LeaderboardRow({
 }
 
 /**
- * A racer's badge chips (streak, podium streak, wins), each labelled with its
- * full description for hover and screen readers. Renders nothing when the
- * racer has no chips. Used by every leaderboard row.
+ * The badges beside a racer's name: the same ones their profile card shows
+ * (their showcase picks, else their latest earned, chosen by the server), or
+ * the automatic streak / podium / wins chips (chipsFor) for a racer who has
+ * earned no badges yet.
  */
-function BadgeChipList({ badges }: { badges: BadgeChips | null }) {
-  const chips = chipsFor(badges);
+function BadgeChipList({ entry }: { entry: DailyLeaderboardEntry }) {
+  const wins = entry.badges
+    ? {
+        speed: entry.badges.speedWins,
+        efficiency: entry.badges.efficiencyWins,
+      }
+    : null;
+  const showcased = entry.showcasedBadges
+    .map((id) => badgeInfo(id))
+    .filter((info): info is BadgeInfo => info !== undefined);
+  const chips =
+    showcased.length > 0
+      ? showcased.map((info) => ({
+          key: info.id,
+          kind: info.kind,
+          label: info.label,
+          value: <BadgeValue info={info} wins={wins} />,
+          title: badgeTitle(info, wins),
+        }))
+      : chipsFor(entry.badges);
   if (chips.length === 0) return null;
   return (
     <span style={styles.leaderboardChips}>
@@ -1587,20 +1714,18 @@ function BadgeChipList({ badges }: { badges: BadgeChips | null }) {
   );
 }
 
-/** The "i" tip explaining Keys, Eff. and which run a row's numbers come from. */
+/** The "i" tip explaining how to read the Keys and Efficiency columns. */
 function KeyColumnsTip() {
   return (
     <InfoTip label="How efficiency is scored">
       <strong>Keys</strong> is keystrokes used / optimal. For example,{' '}
       <strong>50/40</strong> means the racer used 50 keystrokes where the
-      day&apos;s tasks can be done in 40, so <strong>Eff.</strong> is 80%. Every
-      column comes from one run: the racer&apos;s fastest on the Speed board,
-      their most efficient on the Key Efficiency board.
+      day&apos;s tasks can be done in 40, so <strong>Efficiency</strong> is 80%.
     </InfoTip>
   );
 }
 
-/** Keys / Eff. / Time for one row, with the board's sorted stat emphasised. */
+/** Keys / Efficiency / Time for one row, with the board's sorted stat emphasised. */
 function rowStats(board: DailyBoard, entry: DailyLeaderboardEntry) {
   const { efficiency, optimalKeys, actualKeys } = entry;
   const pct = efficiency === null ? '—' : formatEfficiency(efficiency);
@@ -1642,9 +1767,16 @@ const TOP_RACER_MEDALS: Record<
   },
 };
 
+/** Rank colour, row tint and outline for rail rows below the podium (4th, 5th). */
+const TOP_RACER_UNMEDALLED = {
+  rank: colors.textMuted,
+  background: 'rgba(255, 255, 255, 0.02)',
+  border: colors.border,
+};
+
 /**
- * One of the rail's top 3: a large rank in its medal colour, name with badge
- * chips beneath, then labelled Keys / Eff. / Time, the board's sorted stat
+ * One of the rail's top 5: a large rank in its medal colour, name with badge
+ * chips beneath, then labelled Keys / Efficiency / Time, the board's sorted stat
  * emphasised. The stats wrap below the name on a narrow screen.
  */
 function TopRacerRow({
@@ -1657,7 +1789,7 @@ function TopRacerRow({
   userId: string | null;
 }) {
   const isOwn = entry.userId === userId;
-  const medal = TOP_RACER_MEDALS[entry.rank] ?? TOP_RACER_MEDALS[3];
+  const medal = TOP_RACER_MEDALS[entry.rank] ?? TOP_RACER_UNMEDALLED;
   const stats = rowStats(board, entry);
   const value = (sorted: boolean) =>
     sorted ? styles.topRacerStatValueSorted : styles.topRacerStatValue;
@@ -1672,7 +1804,6 @@ function TopRacerRow({
         ...styles.topRacerRow,
         background: medal.background,
         borderColor: medal.border,
-        ...(isOwn ? { boxShadow: `0 0 0 1px ${colors.primary}` } : {}),
       }}
       aria-current={isOwn ? 'true' : undefined}
     >
@@ -1680,8 +1811,15 @@ function TopRacerRow({
         {entry.rank}
       </span>
       <span style={styles.topRacerNameCell}>
-        <span style={styles.topRacerName}>{entry.displayName}</span>
-        <BadgeChipList badges={entry.badges} />
+        <span style={styles.topRacerNameLine}>
+          <span style={styles.topRacerName}>
+            <RacerNameLink entry={entry} userId={userId} />
+          </span>
+          {/* A tag, not a second outline: a ring around the medal border
+              read as two stacked borders (gold + cyan). */}
+          {isOwn && <span style={styles.topRacerYouTag}>you</span>}
+        </span>
+        <BadgeChipList entry={entry} />
       </span>
       <span style={styles.topRacerStats}>
         <span style={styles.topRacerStat} title={stats.keysTitle}>
@@ -1700,7 +1838,7 @@ function TopRacerRow({
           </span>
         </span>
         <span style={styles.topRacerStat}>
-          <span style={label(false)}>Eff.</span>
+          <span style={label(false)}>Efficiency</span>
           <span style={value(false)}>{stats.pct}</span>
         </span>
         <span style={styles.topRacerStat}>
@@ -1713,7 +1851,28 @@ function TopRacerRow({
 }
 
 /**
- * The viewer's own row under the rail's top 3, so a mid-pack racer still sees
+ * A racer's name on the rail, linking to their profile: /profile for the
+ * viewer's own row, /players/:id for anyone else. Plain text for a visitor
+ * (null `userId`), since profiles are for signed-in users only.
+ */
+function RacerNameLink({
+  entry,
+  userId,
+}: {
+  entry: DailyLeaderboardEntry;
+  userId: string | null;
+}) {
+  if (!userId) return <>{entry.displayName}</>;
+  const to = entry.userId === userId ? '/profile' : `/players/${entry.userId}`;
+  return (
+    <Link to={to} className="racer-name-link" style={styles.racerNameLink}>
+      {entry.displayName}
+    </Link>
+  );
+}
+
+/**
+ * The viewer's own row under the rail's top 5, so a mid-pack racer still sees
  * where they stand: rank, name, badges, keys and efficiency, time.
  */
 function OwnPositionRow({
@@ -1729,8 +1888,10 @@ function OwnPositionRow({
       <span style={styles.ownPositionLabel}>Your position</span>
       <div style={styles.ownPositionRow} aria-current="true">
         <span style={styles.ownPositionRank}>#{entry.rank}</span>
-        <span style={styles.ownPositionName}>{entry.displayName}</span>
-        <BadgeChipList badges={entry.badges} />
+        <span style={styles.ownPositionName}>
+          <RacerNameLink entry={entry} userId={entry.userId} />
+        </span>
+        <BadgeChipList entry={entry} />
         <span style={styles.ownPositionKeys} title={stats.keysTitle}>
           {stats.hasKeys
             ? `${entry.actualKeys}/${entry.optimalKeys} · ${stats.pct}`
@@ -1774,7 +1935,7 @@ function LeaderboardColumns({ board }: { board: DailyBoard }) {
         Keys
         <KeyColumnsTip />
       </span>
-      <span style={styles.leaderboardColumnRight}>Eff.</span>
+      <span style={styles.leaderboardColumnRight}>Efficiency</span>
       <span style={sorted('speed')}>Time</span>
     </div>
   );

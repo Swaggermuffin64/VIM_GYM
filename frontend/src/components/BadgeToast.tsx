@@ -14,7 +14,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchDailyProfile, markBadgesSeen } from '../api/daily';
 import type { EarnedBadge } from '../api/daily';
-import { badgeInfo } from '../lib/dailyBadges';
+import { badgeInfo, dailyWins } from '../lib/dailyBadges';
+import { BadgeValue } from './BadgeValue';
+import type { DailyWins } from '../lib/dailyBadges';
 import { StatusSegment } from './StatusSegment';
 import { colors } from '../theme';
 
@@ -86,6 +88,8 @@ export function BadgeToast() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [badges, setBadges] = useState<EarnedBadge[] | null>(null);
+  // The player's daily wins per board, shown on a newly earned win badge.
+  const [wins, setWins] = useState<DailyWins | null>(null);
   // The user already checked on this page load; token refreshes don't recheck.
   const checkedFor = useRef<string | null>(null);
 
@@ -105,6 +109,7 @@ export function BadgeToast() {
       );
       if (unseen.length === 0) return;
       setBadges(unseen);
+      setWins(dailyWins(profile));
       void markBadgesSeen(
         token,
         unseen.map((b) => b.id)
@@ -141,7 +146,7 @@ export function BadgeToast() {
                 <StatusSegment
                   kind={info.kind}
                   label={info.label}
-                  value={info.value}
+                  value={<BadgeValue info={info} wins={wins} />}
                   size="sm"
                 />
               </span>

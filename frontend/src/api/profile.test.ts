@@ -26,7 +26,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const { fetchMe, fetchPlayerStats, saveShowcase } = await import('./profile');
+const { fetchMe, fetchPlayer, fetchPlayerStats, saveShowcase } =
+  await import('./profile');
 
 describe('fetchMe', () => {
   it('maps the profile including showcased badges', async () => {
@@ -215,5 +216,63 @@ describe('saveShowcase', () => {
     fetchMock.mockRejectedValue(new Error('offline'));
     const result = await saveShowcase('tok', []);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('fetchPlayer', () => {
+  it("maps another player's profile, stats and daily history", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        player: {
+          id: 'p1',
+          display_name: 'stinkyhat',
+          avatar_url: null,
+          showcased_badges: ['streak-7'],
+          created_at: '2026-05-01T00:00:00Z',
+        },
+        stats: { total_runs: 12, multiplayer: { races: 4, wins: 1 } },
+        daily: { counters: { days_raced: 9 }, win_dates: ['2026-11-20'] },
+      })
+    );
+
+    const result = await fetchPlayer('tok', 'p1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/players/p1'),
+      { headers: { Authorization: 'Bearer tok' } }
+    );
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.player.profile).toEqual({
+      id: 'p1',
+      displayName: 'stinkyhat',
+      avatarUrl: null,
+      isPremium: false,
+      createdAt: '2026-05-01T00:00:00Z',
+      showcasedBadges: ['streak-7'],
+    });
+    expect(result.player.stats.totalRuns).toBe(12);
+    expect(result.player.stats.multiplayer.wins).toBe(1);
+    expect(result.player.daily.counters.daysRaced).toBe(9);
+    expect(result.player.daily.winDates).toEqual(['2026-11-20']);
+    expect(result.player.daily.unseenBadges).toEqual([]);
+  });
+
+  it("is 'not_found' on a 404", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: false, error: 'Player not found' }, 404)
+    );
+    expect(await fetchPlayer('tok', 'nobody')).toEqual({
+      status: 'not_found',
+    });
+  });
+
+  it("is 'error' on a server error or network failure", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ success: false }, 500));
+    expect(await fetchPlayer('tok', 'p1')).toEqual({ status: 'error' });
+
+    fetchMock.mockRejectedValueOnce(new Error('offline'));
+    expect(await fetchPlayer('tok', 'p1')).toEqual({ status: 'error' });
   });
 });

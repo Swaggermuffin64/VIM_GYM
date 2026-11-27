@@ -60,6 +60,9 @@ export interface BadgeChips {
   podiumStreak: number;
   /** #1 finishes on closed days, both boards combined. */
   wins: number;
+  /** `wins` split by board, for the win badge's per-board counts. */
+  speedWins: number;
+  efficiencyWins: number;
 }
 
 /** A single row in the daily leaderboard. */
@@ -82,6 +85,12 @@ export interface DailyLeaderboardEntry {
   actualKeys: number | null;
   /** Null when the server has no daily history for the racer. */
   badges: BadgeChips | null;
+  /**
+   * The badge ids the racer's profile card shows: their earned showcase
+   * picks, else their three most recently earned. Empty when they have
+   * earned none; the row then falls back to the `badges` chips.
+   */
+  showcasedBadges: string[];
 }
 
 export type ShareLinkResult =
@@ -346,6 +355,8 @@ function mapBadgeChips(raw: unknown): BadgeChips | null {
     streak: (b.streak as number) ?? 0,
     podiumStreak: (b.podium_streak as number) ?? 0,
     wins: (b.wins as number) ?? 0,
+    speedWins: (b.speed_wins as number) ?? 0,
+    efficiencyWins: (b.efficiency_wins as number) ?? 0,
   };
 }
 
@@ -361,6 +372,9 @@ function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
     optimalKeys: typeof e.optimal_keys === 'number' ? e.optimal_keys : null,
     actualKeys: typeof e.actual_keys === 'number' ? e.actual_keys : null,
     badges: mapBadgeChips(e.badges),
+    showcasedBadges: Array.isArray(e.showcased_badges)
+      ? e.showcased_badges.filter((id): id is string => typeof id === 'string')
+      : [],
   }));
 }
 
@@ -639,58 +653,65 @@ export async function fetchDailyProfile(
       return null;
     }
 
-    const b = asRecord(body);
-    const pb = asRecord(b.personal_bests);
-    const streaks = asRecord(b.streaks);
-    const counters = asRecord(b.counters);
-    const fastest = pb.fastest ? asRecord(pb.fastest) : null;
-    const mostEfficient = pb.most_efficient
-      ? asRecord(pb.most_efficient)
-      : null;
-    const rawRecent = Array.isArray(b.recent) ? b.recent.map(asRecord) : [];
-    return {
-      badges: mapEarnedBadges(b.badges),
-      unseenBadges: mapEarnedBadges(b.unseen_badges),
-      streaks: {
-        participation: mapStreak(streaks.participation),
-        podium: mapStreak(streaks.podium),
-      },
-      counters: {
-        daysRaced: numberOr(counters.days_raced, 0),
-        speedWins: numberOr(counters.speed_wins, 0),
-        efficiencyWins: numberOr(counters.efficiency_wins, 0),
-        podiums: numberOr(counters.podiums, 0),
-      },
-      personalBests: {
-        bestSpeedPlacing: mapPlacing(pb.best_speed_placing),
-        bestEfficiencyPlacing: mapPlacing(pb.best_efficiency_placing),
-        fastest: fastest
-          ? { ms: fastest.ms as number, raceDate: fastest.race_date as string }
-          : null,
-        mostEfficient: mostEfficient
-          ? {
-              efficiency: mostEfficient.efficiency as number,
-              raceDate: mostEfficient.race_date as string,
-            }
-          : null,
-      },
-      recent: rawRecent.map((d) => ({
-        raceDate: d.race_date as string,
-        bestMs: d.best_ms as number,
-        speedRank: d.speed_rank as number,
-        racers: d.racers as number,
-        efficiency: numberOr(d.efficiency, null),
-        efficiencyRank: numberOr(d.efficiency_rank, null),
-        efficiencyRacers: numberOr(d.efficiency_racers, null),
-      })),
-      winDates: Array.isArray(b.win_dates)
-        ? b.win_dates.filter((d): d is string => typeof d === 'string')
-        : [],
-    };
+    return mapDailyProfile(body);
   } catch (err) {
     console.error('[daily] fetchDailyProfile network error:', err);
     return null;
   }
+}
+
+/**
+ * A daily-profile object from the server (snake_case), mapped to
+ * DailyProfile. Shared with another player's profile (fetchPlayer in
+ * api/profile.ts), whose payload has no unseen badges.
+ */
+export function mapDailyProfile(raw: unknown): DailyProfile {
+  const b = asRecord(raw);
+  const pb = asRecord(b.personal_bests);
+  const streaks = asRecord(b.streaks);
+  const counters = asRecord(b.counters);
+  const fastest = pb.fastest ? asRecord(pb.fastest) : null;
+  const mostEfficient = pb.most_efficient ? asRecord(pb.most_efficient) : null;
+  const rawRecent = Array.isArray(b.recent) ? b.recent.map(asRecord) : [];
+  return {
+    badges: mapEarnedBadges(b.badges),
+    unseenBadges: mapEarnedBadges(b.unseen_badges),
+    streaks: {
+      participation: mapStreak(streaks.participation),
+      podium: mapStreak(streaks.podium),
+    },
+    counters: {
+      daysRaced: numberOr(counters.days_raced, 0),
+      speedWins: numberOr(counters.speed_wins, 0),
+      efficiencyWins: numberOr(counters.efficiency_wins, 0),
+      podiums: numberOr(counters.podiums, 0),
+    },
+    personalBests: {
+      bestSpeedPlacing: mapPlacing(pb.best_speed_placing),
+      bestEfficiencyPlacing: mapPlacing(pb.best_efficiency_placing),
+      fastest: fastest
+        ? { ms: fastest.ms as number, raceDate: fastest.race_date as string }
+        : null,
+      mostEfficient: mostEfficient
+        ? {
+            efficiency: mostEfficient.efficiency as number,
+            raceDate: mostEfficient.race_date as string,
+          }
+        : null,
+    },
+    recent: rawRecent.map((d) => ({
+      raceDate: d.race_date as string,
+      bestMs: d.best_ms as number,
+      speedRank: d.speed_rank as number,
+      racers: d.racers as number,
+      efficiency: numberOr(d.efficiency, null),
+      efficiencyRank: numberOr(d.efficiency_rank, null),
+      efficiencyRacers: numberOr(d.efficiency_racers, null),
+    })),
+    winDates: Array.isArray(b.win_dates)
+      ? b.win_dates.filter((d): d is string => typeof d === 'string')
+      : [],
+  };
 }
 
 /**

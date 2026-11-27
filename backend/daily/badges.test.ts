@@ -4,6 +4,7 @@ import type { DailyDayResult } from '../db/dailyResults.js';
 import {
   addDays,
   chipsByUser,
+  profileShowcase,
   isBadgeId,
   RECENT_DAYS,
   summarizeDailyHistory,
@@ -249,7 +250,63 @@ describe('chipsByUser', () => {
       ],
       TODAY
     );
-    expect(chips.get('u1')).toEqual({ streak: 3, podiumStreak: 3, wins: 3 });
-    expect(chips.get('u2')).toEqual({ streak: 1, podiumStreak: 1, wins: 1 });
+    // u1 won the speed board three days running; u2 won efficiency once.
+    expect(chips.get('u1')).toEqual({
+      streak: 3,
+      podiumStreak: 3,
+      wins: 3,
+      speedWins: 3,
+      efficiencyWins: 0,
+    });
+    expect(chips.get('u2')).toEqual({
+      streak: 1,
+      podiumStreak: 1,
+      wins: 1,
+      speedWins: 0,
+      efficiencyWins: 1,
+    });
+  });
+});
+
+describe('profileShowcase', () => {
+  // Closed-day wins on 2026-10-10 and 2026-10-12 earn 'first_win' on the 10th;
+  // a perfect efficiency run on the 12th earns 'first_perfect' that day.
+  const summary = summarizeDailyHistory(
+    [day('2026-10-10', { speedRank: 1 }), day('2026-10-12', { efficiency: 1 })],
+    TODAY
+  );
+  const earnedIds = summary.badges.map((b) => b.id);
+
+  it('keeps earned picks in the chosen order and drops unearned ones', () => {
+    expect(profileShowcase(['streak_30', 'first_win'], summary)).toEqual([
+      'first_win',
+    ]);
+  });
+
+  it('shows the most recently earned badges when nothing is picked', () => {
+    expect(earnedIds).toEqual(
+      expect.arrayContaining(['first_win', 'first_perfect'])
+    );
+    expect(profileShowcase([], summary)[0]).toBe('first_perfect');
+    expect(profileShowcase([], summary)).toContain('first_win');
+  });
+
+  it('falls back to the latest earned when every pick is unearned', () => {
+    expect(profileShowcase(['streak_30'], summary)).toEqual(
+      profileShowcase([], summary)
+    );
+  });
+
+  it('shows at most three', () => {
+    const veteran = summarizeDailyHistory(
+      daysEnding('2026-10-18', 30, { speedRank: 1, efficiency: 1 }),
+      TODAY
+    );
+    expect(veteran.badges.length).toBeGreaterThan(3);
+    expect(profileShowcase([], veteran)).toHaveLength(3);
+  });
+
+  it('is empty with no daily history', () => {
+    expect(profileShowcase(['first_win'], undefined)).toEqual([]);
   });
 });

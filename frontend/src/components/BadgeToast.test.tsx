@@ -16,9 +16,15 @@ vi.mock('../api/daily', () => ({
 
 const { BadgeToast } = await import('./BadgeToast');
 
-function profileWithUnseen(ids: string[]) {
+function profileWithUnseen(ids: string[], wins = { speed: 0, efficiency: 0 }) {
   return {
     unseenBadges: ids.map((id) => ({ id, earnedOn: '2026-10-10' })),
+    counters: {
+      daysRaced: 7,
+      speedWins: wins.speed,
+      efficiencyWins: wins.efficiency,
+      podiums: 0,
+    },
   };
 }
 
@@ -66,6 +72,21 @@ describe('BadgeToast', () => {
       'first_win',
       'first_perfect',
     ]);
+  });
+
+  it("splits the player's wins by board on a newly earned win badge", async () => {
+    mockFetchDailyProfile.mockResolvedValue(
+      profileWithUnseen(['first_win'], { speed: 3, efficiency: 1 })
+    );
+
+    await act(async () => {
+      renderAt('/');
+    });
+
+    expect(await screen.findByText(/Champion/)).toBeTruthy();
+    expect(screen.getByText('S3')).toBeTruthy();
+    expect(screen.getByText('E1')).toBeTruthy();
+    expect(screen.queryByText('1st')).toBeNull();
   });
 
   it('links to the profile and closes', async () => {

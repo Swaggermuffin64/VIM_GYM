@@ -7,6 +7,7 @@ import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfService from './pages/terms';
 import ProfilePage from './pages/profile';
+import PlayerProfilePage from './pages/player';
 import DailyRoute from './pages/dailyRoute';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
@@ -72,6 +73,15 @@ function App() {
           element={
             <AuthGuard>
               <ProfilePage />
+            </AuthGuard>
+          }
+        />
+        {/* Another player's read-only profile; linked from the daily rail. */}
+        <Route
+          path="/players/:id"
+          element={
+            <AuthGuard>
+              <PlayerProfilePage />
             </AuthGuard>
           }
         />

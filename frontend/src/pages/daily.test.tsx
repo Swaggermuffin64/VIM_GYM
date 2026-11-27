@@ -140,6 +140,7 @@ function boardEntry(rank: number, userId: string, displayName: string) {
     optimalKeys: null,
     actualKeys: null,
     badges: null,
+    showcasedBadges: [] as string[],
   };
 }
 
@@ -559,7 +560,7 @@ describe('DailyRacePage', () => {
     function serveBoardByLimit() {
       mockFetchDailyLeaderboard.mockImplementation(
         async (_token: unknown, _date: unknown, limit: number) =>
-          limit === 3 ? TOP_SLICE : WHOLE_FIELD
+          limit === 5 ? TOP_SLICE : WHOLE_FIELD
       );
     }
 
@@ -611,7 +612,7 @@ describe('DailyRacePage', () => {
     it('uses the singular for a field of one racer', async () => {
       mockFetchDailyLeaderboard.mockImplementation(
         async (_token: unknown, _date: unknown, limit: number) =>
-          limit === 3
+          limit === 5
             ? { ...TOP_SLICE, totalRacers: 2 }
             : { ...WHOLE_FIELD, totalRacers: 1 }
       );
@@ -665,7 +666,7 @@ describe('DailyRacePage', () => {
           limit: number,
           board: string
         ) =>
-          limit === 3
+          limit === 5
             ? TOP_SLICE
             : {
                 ...WHOLE_FIELD,
@@ -731,15 +732,15 @@ describe('DailyRacePage', () => {
       expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
         'tok',
         undefined,
-        3,
+        5,
         'efficiency'
       );
     });
   });
 
-  // The rail is the top 3 as large rows, then the viewer's own row when they
+  // The rail is the top 5 as large rows, then the viewer's own row when they
   // fall outside it; the full field lives in the dialog.
-  it('asks for the top 3 racers', async () => {
+  it('asks for the top 5 racers', async () => {
     await act(async () => {
       renderDaily();
     });
@@ -748,9 +749,35 @@ describe('DailyRacePage', () => {
     expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
       'tok',
       undefined,
-      3,
+      5,
       'speed'
     );
+  });
+
+  it('lists five top racers, with only the podium in medal colours', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 5,
+      entries: [
+        boardEntry(1, 'other-1', 'first'),
+        boardEntry(2, 'other-2', 'second'),
+        boardEntry(3, 'other-3', 'third'),
+        boardEntry(4, 'other-4', 'fourth'),
+        boardEntry(5, 'other-5', 'fifth'),
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('first');
+
+    const rows = screen.getAllByTestId('top-racer');
+    expect(rows).toHaveLength(5);
+    const bronzeBorder = rows[2].style.borderColor;
+    expect(rows[3].style.borderColor).not.toBe(bronzeBorder);
+    expect(rows[4].style.borderColor).not.toBe(bronzeBorder);
   });
 
   it("labels each top racer's keys, efficiency, and time", async () => {
@@ -777,7 +804,7 @@ describe('DailyRacePage', () => {
     ) as HTMLElement;
 
     expect(within(row).getByText('Keys')).toBeTruthy();
-    expect(within(row).getByText('Eff.')).toBeTruthy();
+    expect(within(row).getByText('Efficiency')).toBeTruthy();
     expect(within(row).getByText('Time')).toBeTruthy();
     expect(within(row).getByText('/120').parentElement?.textContent).toBe(
       '128/120'
@@ -786,7 +813,7 @@ describe('DailyRacePage', () => {
     expect(within(row).getByText('31.0s')).toBeTruthy();
   });
 
-  it("shows the viewer's own row under the top 3 when they're outside it", async () => {
+  it("shows the viewer's own row under the top 5 when they're outside it", async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       entries: [boardEntry(1, 'other-1', 'speedster')],
@@ -830,7 +857,150 @@ describe('DailyRacePage', () => {
     expect(screen.getByText('#312')).toBeTruthy();
   });
 
-  it('shows no "Your position" row when the viewer is in the top 3', async () => {
+  it("marks the viewer's podium row with a tag, not a second outline", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 2,
+      entries: [
+        boardEntry(1, 'me-123', 'testuser'),
+        boardEntry(2, 'other-2', 'second'),
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const [ownRow, otherRow] = await screen.findAllByTestId('top-racer');
+
+    expect(ownRow.getAttribute('aria-current')).toBe('true');
+    expect(ownRow.style.boxShadow).toBe('');
+    expect(within(ownRow).getByText('you')).toBeTruthy();
+    expect(within(otherRow).queryByText('you')).toBeNull();
+  });
+
+  it("links each racer's name to their profile, and the viewer's to /profile", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 2,
+      entries: [
+        boardEntry(1, 'other-1', 'speedster'),
+        boardEntry(2, 'me-123', 'testuser'),
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+
+    const other = await screen.findByRole('link', { name: 'speedster' });
+    expect(other.getAttribute('href')).toBe('/players/other-1');
+    const own = screen.getByRole('link', { name: 'testuser' });
+    expect(own.getAttribute('href')).toBe('/profile');
+  });
+
+  it('links the "Your position" row to the viewer\'s own profile', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 312,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: [boardEntry(47, 'me-123', 'testuser')],
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('Your position');
+
+    expect(
+      screen.getByRole('link', { name: 'testuser' }).getAttribute('href')
+    ).toBe('/profile');
+  });
+
+  it("shows the badges from the racer's profile card in place of the automatic chips", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 12, podiumStreak: 3, wins: 4 },
+          showcasedBadges: ['first_win'],
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByLabelText('Champion')).toBeTruthy();
+    expect(within(row).queryByLabelText('12-day streak')).toBeNull();
+  });
+
+  it("splits a racer's win badge by board, with the split spelled out on hover", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: {
+            streak: 0,
+            podiumStreak: 0,
+            wins: 5,
+            speedWins: 3,
+            efficiencyWins: 2,
+          },
+          showcasedBadges: ['first_win'],
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByText('S3')).toBeTruthy();
+    expect(within(row).getByText('E2')).toBeTruthy();
+    expect(
+      within(row).getByLabelText('Champion: 3 speed, 2 efficiency wins')
+    ).toBeTruthy();
+  });
+
+  it('falls back to the automatic chips when the racer has no badges to show', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 12, podiumStreak: 0, wins: 0 },
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByLabelText('12-day streak')).toBeTruthy();
+  });
+
+  it('shows no "Your position" row when the viewer is in the top 5', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       entries: [
@@ -856,27 +1026,9 @@ describe('DailyRacePage', () => {
       totalRacers: 3,
       neighborhood: null,
       entries: [
-        {
-          rank: 1,
-          userId: 'other-1',
-          displayName: 'speedster',
-          avatarUrl: null,
-          bestMs: 3000,
-        },
-        {
-          rank: 2,
-          userId: 'me-123',
-          displayName: 'testuser',
-          avatarUrl: null,
-          bestMs: 5000,
-        },
-        {
-          rank: 3,
-          userId: 'other-2',
-          displayName: 'slowpoke',
-          avatarUrl: null,
-          bestMs: 8000,
-        },
+        { ...boardEntry(1, 'other-1', 'speedster'), bestMs: 3000 },
+        { ...boardEntry(2, 'me-123', 'testuser'), bestMs: 5000 },
+        { ...boardEntry(3, 'other-2', 'slowpoke'), bestMs: 8000 },
       ],
     });
 
@@ -915,10 +1067,30 @@ describe('DailyRacePage for a visitor with no session', () => {
     expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
       null,
       undefined,
-      3,
+      5,
       'speed'
     );
     expect(mockGetCachedDailyRace).not.toHaveBeenCalled();
+  });
+
+  it("shows racers' names as plain text, since profiles need a sign-in", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: null,
+      lastPlace: null,
+    });
+    const visitorUser = AUTH.user;
+    AUTH.user = null as unknown as { id: string };
+    try {
+      await act(async () => {
+        renderDaily();
+      });
+      expect(await screen.findByText('speedster')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'speedster' })).toBeNull();
+    } finally {
+      AUTH.user = visitorUser;
+    }
   });
 
   it('sends Start to /login instead of claiming an attempt', async () => {
@@ -1237,7 +1409,7 @@ describe('DailyRacePage efficiency board', () => {
     expect(mockFetchDailyLeaderboard).toHaveBeenLastCalledWith(
       'tok',
       undefined,
-      3,
+      5,
       'efficiency'
     );
     expect(screen.getByText('Keys')).toBeTruthy();
@@ -1274,11 +1446,8 @@ describe('DailyRacePage efficiency board', () => {
     await act(async () => {
       tipButton.focus();
     });
-    expect(screen.getByRole('tooltip').textContent).toContain(
-      'used 50 keystrokes where'
-    );
-    expect(screen.getByRole('tooltip').textContent).toContain(
-      'Every column comes from one run'
+    expect(screen.getByRole('tooltip').textContent).toBe(
+      "Keys is keystrokes used / optimal. For example, 50/40 means the racer used 50 keystrokes where the day's tasks can be done in 40, so Efficiency is 80%."
     );
     await act(async () => {
       tipButton.blur();
@@ -1338,5 +1507,82 @@ describe('DailyRacePage efficiency board', () => {
 
     expect(screen.getByLabelText('12-day streak').textContent).toBe('STRK12');
     expect(screen.getByLabelText('3 daily wins').textContent).toBe('WIN3');
+  });
+
+  // Switching boards keeps the panel's height: the old rows stay, dimmed and
+  // inert under the amber spinner, until the new board's rows land.
+  describe('while a board switch is loading', () => {
+    function boardOf(name: string) {
+      return {
+        totalRacers: 1,
+        neighborhood: null,
+        lastPlace: null,
+        entries: [boardEntry(1, 'other-1', name)],
+      };
+    }
+
+    it('shows the spinner, not "No entries yet", before the first rows land', async () => {
+      mockFetchDailyLeaderboard.mockReturnValue(new Promise(() => {}));
+
+      await act(async () => {
+        renderDaily();
+      });
+
+      expect(
+        await screen.findByRole('status', { name: 'Loading leaderboard' })
+      ).toBeTruthy();
+      expect(screen.getByTestId('branded-loading-spinner')).toBeTruthy();
+      expect(screen.queryByText('No entries yet')).toBeNull();
+    });
+
+    it('keeps the old rows, dimmed under the spinner, until the new board arrives', async () => {
+      let resolveEfficiency: (
+        data: ReturnType<typeof boardOf>
+      ) => void = () => {};
+      mockFetchDailyLeaderboard.mockImplementation(
+        (_token: unknown, _date: unknown, _limit: unknown, board: unknown) =>
+          board === 'efficiency'
+            ? new Promise((resolve) => {
+                resolveEfficiency = resolve;
+              })
+            : Promise.resolve(boardOf('speedster'))
+      );
+
+      await act(async () => {
+        renderDaily();
+      });
+      expect(await screen.findByText('speedster')).toBeTruthy();
+      expect(
+        screen.queryByRole('status', { name: 'Loading leaderboard' })
+      ).toBeNull();
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'Key Efficiency' }).click();
+      });
+
+      const staleRow = screen.getByText('speedster');
+      const cover = staleRow.closest('[aria-busy]') as HTMLElement;
+      expect(cover.getAttribute('aria-busy')).toBe('true');
+      expect(staleRow.closest('[inert]')).not.toBeNull();
+      expect(
+        screen.getByRole('status', { name: 'Loading leaderboard' })
+      ).toBeTruthy();
+
+      await act(async () => {
+        resolveEfficiency(boardOf('golfer'));
+      });
+
+      expect(await screen.findByText('golfer')).toBeTruthy();
+      expect(screen.queryByText('speedster')).toBeNull();
+      expect(
+        screen.queryByRole('status', { name: 'Loading leaderboard' })
+      ).toBeNull();
+      expect(
+        screen
+          .getByText('golfer')
+          .closest('[aria-busy]')
+          ?.getAttribute('aria-busy')
+      ).toBe('false');
+    });
   });
 });

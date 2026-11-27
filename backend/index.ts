@@ -68,6 +68,8 @@ import {
   compactKeystrokes,
 } from './db/stats.js';
 import { getPlayerStats } from './db/playerStats.js';
+import { playerStatsToWire } from './routes/profileWire.js';
+import { registerPlayerRoutes } from './routes/players.js';
 import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
 import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
@@ -269,49 +271,7 @@ fastify.get('/api/user/stats', async (request, reply) => {
   if (!user) return;
 
   const stats = await getPlayerStats(user.id);
-  return {
-    success: true,
-    stats: {
-      races_played: stats.racesPlayed,
-      wins: stats.wins,
-      win_rate: stats.racesPlayed > 0 ? stats.wins / stats.racesPlayed : 0,
-      best_race_ms: stats.bestRaceMs,
-      tasks_completed: stats.tasksCompleted,
-      avg_task_ms: stats.avgTaskMs,
-      avg_race_ms: stats.avgRaceMs,
-      avg_task_efficiency: stats.avgTaskEfficiency,
-      efficiency_sample: stats.efficiencySample,
-      recent_games: stats.recentGames.map((g) => ({
-        play_mode: g.playMode,
-        position: g.position,
-        finished: g.finished,
-        left_race: g.leftRace,
-        total_time_ms: g.totalTimeMs,
-        started_at: g.startedAt,
-        efficiency_rank: g.efficiencyRank,
-      })),
-      total_runs: stats.totalRuns,
-      multiplayer: {
-        races: stats.multiplayer.races,
-        wins: stats.multiplayer.wins,
-        win_rate:
-          stats.multiplayer.races > 0
-            ? stats.multiplayer.wins / stats.multiplayer.races
-            : 0,
-      },
-      activity: stats.activity.map((a) => ({
-        day: a.day,
-        runs: a.runs,
-        multiplayer_wins: a.multiplayerWins,
-      })),
-      race_time_weekly: stats.raceTimeWeekly.map((w) => ({
-        week_start: w.weekStart,
-        avg_ms: w.avgMs,
-      })),
-      avg_race_ms_30d: stats.avgRaceMs30d,
-      avg_race_ms_prev_30d: stats.avgRaceMsPrev30d,
-    },
-  };
+  return { success: true, stats: playerStatsToWire(stats) };
 });
 
 // Get a new position task (single player)
@@ -901,6 +861,9 @@ await fastify.register(registerDailyRoutes);
 
 // Public share unfurl page and challenge endpoint (unauthenticated)
 await fastify.register(registerShareRoutes);
+
+// Other players' profiles (signed-in only)
+await fastify.register(registerPlayerRoutes);
 
 // Memory-aware health check for Fly.io auto-restart
 const MEMORY_LIMIT_MB = 200;

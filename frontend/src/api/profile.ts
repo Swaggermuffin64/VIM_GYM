@@ -1,14 +1,16 @@
 /**
  * HTTP client for the profile page's data: the signed-in user's profile
- * (GET /api/user/me), their stats (GET /api/user/stats) and the showcased
- * badge selection (POST /api/user/showcase). Backend routes live in
- * backend/index.ts.
+ * (GET /api/user/me), their stats (GET /api/user/stats), the showcased
+ * badge selection (POST /api/user/showcase), and another player's whole
+ * profile (GET /api/players/:id, backend/routes/players.ts). The other
+ * backend routes live in backend/index.ts.
  *
  * Every function is reject-proof: network and HTTP errors are caught and
  * returned as an error-shaped value (never thrown). Response keys are mapped
  * from the backend's snake_case to camelCase, with defaults for missing fields.
  */
-import { asRecord, authHeaders, safeParseJson } from './daily';
+import { asRecord, authHeaders, mapDailyProfile, safeParseJson } from './daily';
+import type { DailyProfile } from './daily';
 
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
 
@@ -122,40 +124,100 @@ export async function fetchPlayerStats(
       console.error('[profile] fetchPlayerStats HTTP error', res.status, body);
       return null;
     }
-    const s = asRecord(body.stats);
-    const mp = asRecord(s.multiplayer);
-    return {
-      totalRuns: numberOrZero(s.total_runs),
-      avgRaceMs: numberOrNull(s.avg_race_ms),
-      avgRaceMs30d: numberOrNull(s.avg_race_ms_30d),
-      avgRaceMsPrev30d: numberOrNull(s.avg_race_ms_prev_30d),
-      multiplayer: {
-        races: numberOrZero(mp.races),
-        wins: numberOrZero(mp.wins),
-        winRate: numberOrZero(mp.win_rate),
-      },
-      activity: asRecordArray(s.activity).map((a) => ({
-        day: a.day as string,
-        runs: numberOrZero(a.runs),
-        multiplayerWins: numberOrZero(a.multiplayer_wins),
-      })),
-      raceTimeWeekly: asRecordArray(s.race_time_weekly).map((w) => ({
-        weekStart: w.week_start as string,
-        avgMs: numberOrZero(w.avg_ms),
-      })),
-      recentGames: asRecordArray(s.recent_games).map((g) => ({
-        playMode: g.play_mode as string,
-        position: numberOrNull(g.position),
-        finished: g.finished === true,
-        leftRace: g.left_race === true,
-        totalTimeMs: numberOrNull(g.total_time_ms),
-        startedAt: g.started_at as string,
-        efficiencyRank: numberOrNull(g.efficiency_rank),
-      })),
-    };
+    return mapPlayerStats(body.stats);
   } catch (err) {
     console.error('[profile] fetchPlayerStats network error:', err);
     return null;
+  }
+}
+
+/** A stats object from the server (snake_case), mapped to PlayerStats. */
+function mapPlayerStats(raw: unknown): PlayerStats {
+  const s = asRecord(raw);
+  const mp = asRecord(s.multiplayer);
+  return {
+    totalRuns: numberOrZero(s.total_runs),
+    avgRaceMs: numberOrNull(s.avg_race_ms),
+    avgRaceMs30d: numberOrNull(s.avg_race_ms_30d),
+    avgRaceMsPrev30d: numberOrNull(s.avg_race_ms_prev_30d),
+    multiplayer: {
+      races: numberOrZero(mp.races),
+      wins: numberOrZero(mp.wins),
+      winRate: numberOrZero(mp.win_rate),
+    },
+    activity: asRecordArray(s.activity).map((a) => ({
+      day: a.day as string,
+      runs: numberOrZero(a.runs),
+      multiplayerWins: numberOrZero(a.multiplayer_wins),
+    })),
+    raceTimeWeekly: asRecordArray(s.race_time_weekly).map((w) => ({
+      weekStart: w.week_start as string,
+      avgMs: numberOrZero(w.avg_ms),
+    })),
+    recentGames: asRecordArray(s.recent_games).map((g) => ({
+      playMode: g.play_mode as string,
+      position: numberOrNull(g.position),
+      finished: g.finished === true,
+      leftRace: g.left_race === true,
+      totalTimeMs: numberOrNull(g.total_time_ms),
+      startedAt: g.started_at as string,
+      efficiencyRank: numberOrNull(g.efficiency_rank),
+    })),
+  };
+}
+
+/** Everything another player's profile page shows. */
+export interface PlayerProfileData {
+  /** `isPremium` is always false: the server doesn't share it. */
+  profile: Profile;
+  stats: PlayerStats;
+  daily: DailyProfile;
+}
+
+export type FetchPlayerResult =
+  | { status: 'ok'; player: PlayerProfileData }
+  | { status: 'not_found' }
+  | { status: 'error' };
+
+/**
+ * Fetch another player's profile, stats and daily history in one call
+ * (GET /api/players/:id). 'not_found' for an unknown or malformed id.
+ */
+export async function fetchPlayer(
+  accessToken: string,
+  playerId: string
+): Promise<FetchPlayerResult> {
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/players/${encodeURIComponent(playerId)}`,
+      { headers: authHeaders(accessToken) }
+    );
+    if (res.status === 404) return { status: 'not_found' };
+    const body = asRecord(safeParseJson(await res.text()));
+    if (!res.ok || body.success !== true || !body.player) {
+      console.error('[profile] fetchPlayer HTTP error', res.status, body);
+      return { status: 'error' };
+    }
+    const p = asRecord(body.player);
+    return {
+      status: 'ok',
+      player: {
+        profile: {
+          id: p.id as string,
+          displayName: p.display_name as string,
+          avatarUrl: typeof p.avatar_url === 'string' ? p.avatar_url : null,
+          isPremium: false,
+          createdAt:
+            typeof p.created_at === 'string' ? p.created_at : undefined,
+          showcasedBadges: stringArray(p.showcased_badges),
+        },
+        stats: mapPlayerStats(body.stats),
+        daily: mapDailyProfile(body.daily),
+      },
+    };
+  } catch (err) {
+    console.error('[profile] fetchPlayer network error:', err);
+    return { status: 'error' };
   }
 }
 

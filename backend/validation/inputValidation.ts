@@ -10,7 +10,7 @@ import {
   englishDataset,
   englishRecommendedTransformers,
 } from 'obscenity';
-import { isBadgeId } from '../daily/badges.js';
+import { isBadgeId, MAX_SHOWCASE } from '../daily/badges.js';
 
 const profanityMatcher = new RegExpMatcher({
   ...englishDataset.build(),
@@ -303,9 +303,6 @@ export const validators = {
   editorText: validateEditorText,
   boolean: validateBoolean,
 };
-
-/** Most badges a player may feature on their profile. */
-export const MAX_SHOWCASE = 3;
 
 /**
  * Validate the badge ids a player wants to showcase on their profile.

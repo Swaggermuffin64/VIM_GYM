@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Transaction } from '@codemirror/state';
 import { Vim, getCM } from '@replit/codemirror-vim';
 import type { CodeMirrorV } from '@replit/codemirror-vim';
 
@@ -18,9 +17,8 @@ import {
   setYankPasteConfirmed,
   setAllowedPasteResults,
   setAllowedDeleteRange,
-  allowReset,
-  setUndoBarrier,
 } from '../extensions/readOnlyNavigation';
+import { loadTaskSnippet } from '../extensions/taskSnippetLoader';
 
 interface SummaryTaskSandboxProps {
   task: Task;
@@ -85,16 +83,7 @@ export const SummaryTaskSandbox: React.FC<SummaryTaskSandboxProps> = ({
                 setAllowedDeleteRange.of(null),
               ];
 
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: task.codeSnippet,
-      },
-      selection: { anchor: 0 },
-      effects: [allowReset.of(true), setUndoBarrier.of(true), ...taskEffects],
-      annotations: Transaction.addToHistory.of(false),
-    });
+    loadTaskSnippet(view, task.codeSnippet, taskEffects);
 
     const cm = getCM(view);
     if (cm?.state?.vim) {

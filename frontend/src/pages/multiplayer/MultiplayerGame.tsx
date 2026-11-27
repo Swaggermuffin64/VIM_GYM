@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Vim, getCM } from '@replit/codemirror-vim';
 import type { CodeMirrorV } from '@replit/codemirror-vim';
-import { Transaction } from '@codemirror/state';
 
 import { useGameSocket } from '../../hooks/useGameSocket';
 import type { Task, TaskSummary } from '../../types/task';
@@ -32,15 +31,14 @@ import {
   setYankConfirmed,
 } from '../../extensions/targetHighlight';
 import {
-  allowReset,
   EditBlockReason,
   setAllowedDeleteRange,
   setDeleteMode,
   setYankPasteMode,
   setYankPasteConfirmed,
   setAllowedPasteResults,
-  setUndoBarrier,
 } from '../../extensions/readOnlyNavigation';
+import { loadTaskSnippet } from '../../extensions/taskSnippetLoader';
 import {
   VimRaceEditor,
   VimRaceEditorHandle,
@@ -566,21 +564,11 @@ const MultiplayerGame: React.FC = () => {
     const view = editorRef.current?.view;
     if (!view || !gameState.task.id) return;
 
-    editorRef.current?.resetUndoHistory();
     Vim.getRegisterController().unnamedRegister.clear();
     yankConfirmedRef.current = false;
     lastRegisterValueRef.current = '';
 
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: gameState.task.codeSnippet,
-      },
-      selection: { anchor: 0 },
-      effects: [allowReset.of(true), setUndoBarrier.of(true)],
-      annotations: Transaction.addToHistory.of(false),
-    });
+    loadTaskSnippet(view, gameState.task.codeSnippet);
 
     if (gameState.task.type === 'navigate') {
       view.dispatch({
@@ -972,18 +960,8 @@ const MultiplayerGame: React.FC = () => {
     lastRegisterValueRef.current = '';
     Vim.getRegisterController().unnamedRegister.clear();
 
-    // Replace doc for every new task. allowReset bypasses readOnlyNavigation
-    // so full-snippet swaps are always permitted.
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: gameState.task.codeSnippet,
-      },
-      selection: { anchor: 0 },
-      effects: [allowReset.of(true), setUndoBarrier.of(true)],
-      annotations: Transaction.addToHistory.of(false),
-    });
+    // Replace doc for every new task with a fresh undo stack.
+    loadTaskSnippet(view, gameState.task.codeSnippet);
     currentTaskIdRef.current = gameState.task.id;
 
     // Clear any active search highlighting from /, *, # between tasks.
@@ -1036,16 +1014,7 @@ const MultiplayerGame: React.FC = () => {
     lastRegisterValueRef.current = '';
     Vim.getRegisterController().unnamedRegister.clear();
 
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: gameState.task.codeSnippet,
-      },
-      selection: { anchor: 0 },
-      effects: [allowReset.of(true), setUndoBarrier.of(true)],
-      annotations: Transaction.addToHistory.of(false),
-    });
+    loadTaskSnippet(view, gameState.task.codeSnippet);
 
     if (gameState.task.type === 'navigate') {
       view.dispatch({

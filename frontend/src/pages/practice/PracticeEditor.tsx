@@ -8,7 +8,6 @@ import React, {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Vim, getCM } from '@replit/codemirror-vim';
 import type { CodeMirrorV } from '@replit/codemirror-vim';
-import { Transaction } from '@codemirror/state';
 
 import type { PracticeSummary, Task, TaskSummary } from '../../types/task';
 import { submitPracticeSession } from '../../api/leaderboard';
@@ -37,15 +36,14 @@ import {
   setYankConfirmed,
 } from '../../extensions/targetHighlight';
 import {
-  allowReset,
   EditBlockReason,
   setAllowedDeleteRange,
   setDeleteMode,
   setYankPasteMode,
   setYankPasteConfirmed,
   setAllowedPasteResults,
-  setUndoBarrier,
 } from '../../extensions/readOnlyNavigation';
+import { loadTaskSnippet } from '../../extensions/taskSnippetLoader';
 import {
   VimRaceEditor,
   VimRaceEditorHandle,
@@ -1220,16 +1218,7 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
     lastRegisterValueRef.current = '';
     Vim.getRegisterController().unnamedRegister.clear();
 
-    view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: task.codeSnippet,
-      },
-      selection: { anchor: 0 },
-      effects: [allowReset.of(true), setUndoBarrier.of(true)],
-      annotations: Transaction.addToHistory.of(false),
-    });
+    loadTaskSnippet(view, task.codeSnippet);
 
     // Reset search highlights between tasks so `/`, `*`, and `#`
     // don't carry visual state into the next snippet.
@@ -1535,7 +1524,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
 
     isTaskCompleteRef.current = false;
     setIsTaskComplete(false);
-    editorRef.current?.resetUndoHistory();
     Vim.getRegisterController().unnamedRegister.clear();
     setupTaskInEditor(current);
     editorRef.current?.view?.focus();

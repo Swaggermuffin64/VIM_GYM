@@ -9,7 +9,7 @@ import {
   lineNumbers,
   highlightActiveLineGutter,
 } from '@codemirror/view';
-import { defaultKeymap, history } from '@codemirror/commands';
+import { defaultKeymap } from '@codemirror/commands';
 import { searchKeymap } from '@codemirror/search';
 import { vim, Vim, getCM } from '@replit/codemirror-vim';
 import { oneDark } from '@codemirror/theme-one-dark';
@@ -21,6 +21,7 @@ import {
   EditBlockReason,
   readOnlyNavigation,
 } from '../extensions/readOnlyNavigation';
+import { taskUndoHistory } from '../extensions/taskSnippetLoader';
 import type { KeystrokeEvent } from '../types/keystroke';
 
 // ---------------------------------------------------------------------------
@@ -54,7 +55,6 @@ const EDITOR_FONT_SIZE_PX = '18px';
 // ---------------------------------------------------------------------------
 
 const lineNumbersCompartment = new Compartment();
-const historyCompartment = new Compartment();
 
 /** Block all mouse interaction — the editor is keyboard-only. */
 const disableMouseInteraction = EditorView.domEventHandlers({
@@ -115,8 +115,6 @@ export interface VimRaceEditorHandle {
   view: EditorView | null;
   /** Toggle between relative and absolute line numbers. */
   setRelativeLineNumbers: (relative: boolean) => void;
-  /** Clear undo/redo history stack. */
-  resetUndoHistory: () => void;
 }
 
 interface VimRaceEditorProps {
@@ -213,16 +211,6 @@ export const VimRaceEditor = forwardRef<
           ),
         });
       },
-      resetUndoHistory() {
-        // Reconfiguring to the same extension preserves field state, so
-        // remove history first, then re-add to guarantee a fresh undo stack.
-        viewRef.current?.dispatch({
-          effects: historyCompartment.reconfigure([]),
-        });
-        viewRef.current?.dispatch({
-          effects: historyCompartment.reconfigure(history()),
-        });
-      },
     }));
 
     // Create editor on mount, destroy on unmount.
@@ -265,7 +253,7 @@ export const VimRaceEditor = forwardRef<
           ...targetHighlightExtension,
           cursorTracker((offset) => onCursorChangeRef.current(offset)),
           lineNumbersCompartment.of(createLineNumbersExtension(true)),
-          historyCompartment.of(history()),
+          taskUndoHistory,
           drawSelection(),
           highlightActiveLine(),
           highlightActiveLineGutter(),

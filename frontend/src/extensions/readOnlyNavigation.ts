@@ -126,6 +126,10 @@ const allowedPasteResultsState = StateField.define<string[] | null>({
 /**
  * State field that blocks undo/redo immediately after a reset swap.
  * It is cleared on the first normal document edit after reset.
+ *
+ * Note: CodeMirror's history undo/redo dispatch with `filter: false`, so they
+ * never reach this filter. Leaks across tasks are prevented by clearing the
+ * history in loadTaskSnippet (taskSnippetLoader.ts), not by this barrier.
  */
 const undoBarrierState = StateField.define<boolean>({
   create: () => false,

@@ -71,3 +71,27 @@ describe('practice Ready screen for a visitor', () => {
     expect(await screen.findByText('Ready')).toBeDefined();
   });
 });
+
+describe('practice sidebar with the inline cheatsheet open', () => {
+  // The inline cheatsheet is long; it must sit below the keys-pressed box so
+  // the player's live keystrokes stay visible at the top of the sidebar.
+  it('shows the keys-pressed box above the cheatsheet', async () => {
+    AUTH.session = { access_token: 'tok' } as Session;
+    renderPractice();
+    fireEvent.click(
+      await screen.findByLabelText('Toggle cheatsheet visibility')
+    );
+    const ready = await screen.findByText('Ready');
+    await waitFor(() =>
+      expect((ready as HTMLButtonElement).disabled).toBe(false)
+    );
+    fireEvent.click(ready);
+
+    const keysPressed = await screen.findByText('Keys Pressed (Current Task)');
+    const cheatSheet = await screen.findByText('Basic Cheat Sheet');
+    expect(
+      keysPressed.compareDocumentPosition(cheatSheet) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+});

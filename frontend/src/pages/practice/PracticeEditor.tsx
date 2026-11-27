@@ -1986,6 +1986,28 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
 
               {/* Sidebar */}
               <div style={styles.sidebarColumn}>
+                <div style={styles.keyLogContainer}>
+                  <div style={styles.keyLogTitle}>
+                    Keys Pressed (Current Task)
+                  </div>
+                  <div
+                    style={
+                      recentKeys.length > 0
+                        ? styles.keyLogBox
+                        : { ...styles.keyLogBox, ...styles.keyLogBoxEmpty }
+                    }
+                  >
+                    {recentKeys.length > 0 ? (
+                      recentKeysDisplay
+                    ) : (
+                      <span style={styles.keyLogEmpty}>No keys yet...</span>
+                    )}
+                  </div>
+                  <div style={styles.blockedEditHint}>
+                    {blockedEditHint ?? '\u00A0'}
+                  </div>
+                </div>
+
                 {showCheatSheet && !useDockedCheatSheet && (
                   <div style={styles.cheatSheetPanel}>
                     <div style={styles.cheatSheetHeader}>
@@ -2020,28 +2042,6 @@ export const RaceSessionPage: React.FC<RaceSessionPageProps> = ({
                     ))}
                   </div>
                 )}
-
-                <div style={styles.keyLogContainer}>
-                  <div style={styles.keyLogTitle}>
-                    Keys Pressed (Current Task)
-                  </div>
-                  <div
-                    style={
-                      recentKeys.length > 0
-                        ? styles.keyLogBox
-                        : { ...styles.keyLogBox, ...styles.keyLogBoxEmpty }
-                    }
-                  >
-                    {recentKeys.length > 0 ? (
-                      recentKeysDisplay
-                    ) : (
-                      <span style={styles.keyLogEmpty}>No keys yet...</span>
-                    )}
-                  </div>
-                  <div style={styles.blockedEditHint}>
-                    {blockedEditHint ?? '\u00A0'}
-                  </div>
-                </div>
 
                 <div style={styles.sidebarControls}>
                   <div style={styles.sidebarActionsRow}>

@@ -713,6 +713,60 @@ function getInnerPairsForStrategy(
   return codeSnippet.bracketIndices;
 }
 
+const INNER_TEXT_OBJECT_DELIMITERS: Record<
+  'INNER_CURLY_BRACE' | 'INNER_PARENTHESIS' | 'INNER_BRACKET',
+  [open: string, close: string]
+> = {
+  INNER_CURLY_BRACE: ['{', '}'],
+  INNER_PARENTHESIS: ['(', ')'],
+  INNER_BRACKET: ['[', ']'],
+};
+
+/**
+ * Returns the `[openOffset, closeOffsetExclusive]` pair that `di{` / `di(` /
+ * `di[` would act on with the cursor at `cursor`, or null if it would do nothing.
+ *
+ * Mirrors the editor's vim mode (codemirror-vim `selectCompanionObject`): scan
+ * backward for the nearest unmatched `open` and forward for the nearest
+ * unmatched `close`, treating a cursor on `open` as inside that pair. Unlike
+ * quote text objects, it never searches forward for a pair, so a cursor before
+ * a nested `{` selects the *enclosing* block, not the nested one.
+ */
+export function findInnerTextObjectPairAtCursor(
+  code: string,
+  cursor: number,
+  open: string,
+  close: string
+): [number, number] | null {
+  const scanStart = code[cursor] === open ? cursor + 1 : cursor;
+
+  let openOffset = -1;
+  for (let i = scanStart - 1, depth = 0; i >= 0; i--) {
+    if (code[i] === close) depth++;
+    else if (code[i] === open && depth-- === 0) {
+      openOffset = i;
+      break;
+    }
+  }
+
+  let closeOffset = -1;
+  for (let i = scanStart, depth = 0; i < code.length; i++) {
+    if (code[i] === open) depth++;
+    else if (code[i] === close && depth-- === 0) {
+      closeOffset = i;
+      break;
+    }
+  }
+
+  if (openOffset < 0 || closeOffset < 0) return null;
+  return [openOffset, closeOffset + 1];
+}
+
+/**
+ * Cursor offsets from which the inner text-object delete (`di{` etc.) removes
+ * exactly `[from, to)`. Fed to the multi-target Dijkstra, which navigates to
+ * whichever anchor is cheapest to reach.
+ */
 function getValidInnerTextObjectAnchors(
   codeSnippet: codeSnippet,
   strategy: DeleteStrategy,
@@ -736,6 +790,8 @@ function getValidInnerTextObjectAnchors(
 
   // Handful of anchors for multi-target Dijkstra (not a full O(|code|×|pairs|) scan).
   // Covers on/near delimiters and mid-inner; `shortestVimSequenceLazyToAnyTarget` picks the cheapest.
+  // Every guess is then checked against the editor's actual text-object lookup, since with
+  // nested pairs a nearby cursor (e.g. column 0 of the `{` line) can resolve to an outer pair.
   // Tradeoff: rare valid cursors (e.g. far left where "next pair" still hits this target) are omitted,
   // so the recommended nav may be longer than with a full enumeration.
   const candidates: number[] = [
@@ -757,7 +813,19 @@ function getValidInnerTextObjectAnchors(
       candidates.push(lineRange[0]);
     }
   }
-  return uniqueValidOffsets(candidates, len);
+  const [open, close] =
+    INNER_TEXT_OBJECT_DELIMITERS[
+      strategy as keyof typeof INNER_TEXT_OBJECT_DELIMITERS
+    ];
+  return uniqueValidOffsets(candidates, len).filter((cursor) => {
+    const pair = findInnerTextObjectPairAtCursor(
+      codeSnippet.code,
+      cursor,
+      open,
+      close
+    );
+    return pair?.[0] === targetOpen && pair[1] === targetCloseExclusive;
+  });
 }
 
 export function getRecommendedDeleteSequence(

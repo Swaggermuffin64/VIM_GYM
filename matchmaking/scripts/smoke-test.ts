@@ -34,6 +34,9 @@ interface TestResult {
 
 const results: TestResult[] = [];
 
+/** Set by Phase 2 when the server rejects anonymous queue joins. */
+let authRequired = false;
+
 function pass(name: string) {
   results.push({ name, passed: true });
   console.log(`  ✅ ${name}`);
@@ -71,6 +74,45 @@ function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
     );
   });
 }
+
+/**
+ * Resolves with the first message of any of `types`. Used where the server
+ * may answer one request two valid ways (queue:joined, or an auth error).
+ */
+function waitForAnyMessage(
+  ws: WebSocket,
+  types: string[]
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const onMessage = (data: WebSocket.Data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (types.includes(msg.type)) {
+          ws.off('message', onMessage);
+          resolve(msg);
+        }
+      } catch {
+        /* ignore non-JSON */
+      }
+    };
+    ws.on('message', onMessage);
+    ws.on('error', reject);
+    ws.on('close', () =>
+      reject(new Error(`WebSocket closed while waiting for ${types.join('/')}`))
+    );
+  });
+}
+
+const base64url = (value: object) =>
+  Buffer.from(JSON.stringify(value)).toString('base64url');
+
+/**
+ * A well-formed but unsigned ES256 token. The matchmaker can only reject it,
+ * but how it rejects shows whether the asymmetric-key verifier is configured:
+ * "Invalid or expired token" when SUPABASE_URL is set, "SUPABASE_URL not
+ * configured" when it is not (which would lock every real player out).
+ */
+const FORGED_ES256_TOKEN = `${base64url({ alg: 'ES256', typ: 'JWT' })}.${base64url({ sub: 'smoke-test' })}.invalid`;
 
 // --- Phase 1: HTTP API checks ---
 
@@ -175,19 +217,46 @@ async function wsConnectivityTests() {
     await withTimeout(pongPromise, 'Ping/pong');
     pass('Ping → pong');
 
-    // queue:join → queue:joined
-    const joinedPromise = waitForMessage(ws, 'queue:joined');
+    // Anonymous queue:join: joined when auth is off (local dev), rejected
+    // when it is on (production).
+    const anonReply = waitForAnyMessage(ws, ['queue:joined', 'error']);
     ws.send(
       JSON.stringify({
         type: 'queue:join',
         playerName: 'SmokeTest_Connectivity',
       })
     );
-    const joinedMsg = await withTimeout(joinedPromise, 'queue:join');
+    const anonMsg = await withTimeout(anonReply, 'queue:join');
+
+    if (anonMsg.type === 'error') {
+      authRequired = true;
+      assert(
+        anonMsg.message === 'Authentication token required',
+        'Anonymous queue:join is rejected (auth required)',
+        `got error: ${String(anonMsg.message)}`
+      );
+
+      const forgedReply = waitForMessage(ws, 'error');
+      ws.send(
+        JSON.stringify({
+          type: 'queue:join',
+          playerName: 'SmokeTest_Connectivity',
+          token: FORGED_ES256_TOKEN,
+        })
+      );
+      const forgedMsg = await withTimeout(forgedReply, 'forged-token join');
+      assert(
+        forgedMsg.message === 'Invalid or expired token',
+        'Forged token is rejected by a configured verifier',
+        `got error: ${String(forgedMsg.message)} (is SUPABASE_URL set on Fly?)`
+      );
+      return;
+    }
+
     assert(
-      typeof joinedMsg.playerId === 'string',
+      typeof anonMsg.playerId === 'string',
       'queue:joined has playerId',
-      `got ${typeof joinedMsg.playerId}`
+      `got ${typeof anonMsg.playerId}`
     );
 
     // queue:leave → queue:left
@@ -206,6 +275,12 @@ async function wsConnectivityTests() {
 
 async function matchmakingFlowTests() {
   console.log('\n🎮 Phase 3: Matchmaking flow (2-player match)');
+  if (authRequired) {
+    console.log(
+      '  ⏭️  Skipped: the server requires Supabase sign-in, which this script has no accounts for'
+    );
+    return;
+  }
 
   let ws1: WebSocket | null = null;
   let ws2: WebSocket | null = null;

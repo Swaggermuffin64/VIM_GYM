@@ -57,15 +57,8 @@ import {
 } from '../lib/challengeRedirect';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
 import { DAILY_RAIL_RACER_COUNT } from '../lib/dailyRail';
-import {
-  badgeInfo,
-  badgeTitle,
-  chipsFor,
-  formatEfficiency,
-} from '../lib/dailyBadges';
-import type { BadgeInfo } from '../lib/dailyBadges';
+import { formatEfficiency } from '../lib/dailyBadges';
 import { StatusSegment } from '../components/StatusSegment';
-import { BadgeValue } from '../components/BadgeValue';
 import { BrandedSpinner } from '../components/BrandedLoading';
 
 // ---------------------------------------------------------------------------
@@ -116,10 +109,11 @@ const ALL_RACERS_ROW_LIMIT = 1000;
 
 /**
  * Leaderboard column widths, shared by the column labels and every row so
- * they line up: rank, racer (takes the rest), Keys, Efficiency, Time.
+ * they line up: rank, racer (takes the rest), Keys, Efficiency, Time, then
+ * Spd. / Eff. wins and Streak.
  */
 const LEADERBOARD_GRID = {
-  gridTemplateColumns: '48px minmax(0, 1fr) 76px 86px 72px',
+  gridTemplateColumns: '48px minmax(0, 1fr) 76px 86px 72px 86px 72px',
   columnGap: '14px',
 };
 
@@ -169,11 +163,12 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     zIndex: 1,
   },
-  // Split-stage layout: race card left, leaderboard rail right, split down
-  // the middle so the gap between them sits at the page's centre.
+  // Split-stage layout: race card left, leaderboard rail right. The rail gets
+  // the wider share so each top-5 row fits its name, stats and badges. The
+  // race card keeps 480px so the "Race of the Day" title stays on one line.
   split: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+    gridTemplateColumns: 'minmax(480px, 5fr) minmax(0, 7fr)',
     gap: '36px',
     alignItems: 'stretch',
   },
@@ -481,16 +476,15 @@ const styles: Record<string, React.CSSProperties> = {
     userSelect: 'none',
     fontFamily: '"JetBrains Mono", monospace',
   },
-  // One grid for the column labels and every row: rank, racer (name over
-  // badge chips), then Keys, Efficiency and Time, whichever order the board is in.
-  // Baseline alignment keeps the rank and metrics on the name's line, with
-  // the chips hanging below it.
+  // One grid for the column labels and every row: rank, racer, then Keys,
+  // Efficiency and Time, whichever order the board is in, then the wins and
+  // streak badges. Every cell is a single line, centred in the row.
   leaderboardRow: {
     display: 'grid',
     ...LEADERBOARD_GRID,
-    alignItems: 'baseline',
+    alignItems: 'center',
     padding: '12px 14px',
-    minHeight: '60px',
+    minHeight: '48px',
     boxSizing: 'border-box',
     borderRadius: '8px',
     border: '1px solid transparent',
@@ -514,13 +508,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: colors.warning,
     fontWeight: 700,
   },
-  // Name on top, badge chips beneath; the name truncates on its own line.
-  leaderboardNameCell: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '7px',
-    minWidth: 0,
-  },
   leaderboardName: {
     color: colors.textPrimary,
     fontWeight: 500,
@@ -529,9 +516,13 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: 'nowrap',
     minWidth: 0,
   },
-  leaderboardChips: { display: 'flex', gap: '5px' },
-  // Slightly dimmed so the chips sit behind the racer's name.
-  badgeChip: { display: 'inline-flex', flexShrink: 0, opacity: 0.9 },
+  // A wins or streak badge, right-aligned like the numbers beside it.
+  leaderboardCountBadge: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  // Stands in for a badge when the count is zero.
+  leaderboardCountNone: { color: colors.textMuted },
   // The column the board is sorted by stands out in cyan; the others stay
   // readable in light grey.
   leaderboardMetric: {
@@ -582,7 +573,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
-    columnGap: '20px',
+    columnGap: '16px',
     rowGap: '12px',
     padding: '18px 20px',
     borderRadius: '10px',
@@ -596,33 +587,13 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1,
   },
   topRacerNameCell: {
-    flex: '1 1 160px',
+    flex: '1 1 100px',
     minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '9px',
   },
   // Inherits the name's look; App.css underlines it on hover.
   racerNameLink: { color: 'inherit', textDecoration: 'none' },
-  // Name plus the viewer's "you" tag; the name truncates, the tag never does.
-  topRacerNameLine: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    minWidth: 0,
-  },
-  topRacerYouTag: {
-    flexShrink: 0,
-    padding: '2px 7px',
-    borderRadius: '4px',
-    background: `${colors.primary}26`,
-    color: colors.primaryLight,
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '0.8px',
-    textTransform: 'uppercase',
-  },
   topRacerName: {
+    display: 'block',
     fontSize: '20px',
     fontWeight: 600,
     color: colors.textPrimary,
@@ -632,7 +603,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   topRacerStats: {
     display: 'grid',
-    gridTemplateColumns: '78px 82px 76px',
+    gridTemplateColumns: '78px 82px 76px 76px 66px',
     gap: '14px',
     textAlign: 'right',
     marginLeft: 'auto',
@@ -1602,8 +1573,8 @@ function formatRacerCount(totalRacers: number): string {
 }
 
 /**
- * A single board row: rank, name with badge chips beneath, then Keys, Efficiency
- * and Time, with the column the board is sorted by highlighted. Today's top
+ * A single board row: rank, name, Keys, Efficiency and Time, with the column
+ * the board is sorted by highlighted, then the wins and streak badges. Today's top
  * 3 are tinted; the signed-in user's row is highlighted and marked
  * aria-current.
  */
@@ -1639,11 +1610,8 @@ function LeaderboardRow({
       >
         #{entry.rank}
       </span>
-      <span style={styles.leaderboardNameCell}>
-        <span style={styles.leaderboardName}>
-          <RacerNameLink entry={entry} userId={userId} />
-        </span>
-        <BadgeChipList entry={entry} />
+      <span style={styles.leaderboardName}>
+        <RacerNameLink entry={entry} userId={userId} />
       </span>
       <span
         style={metric('efficiency')}
@@ -1664,54 +1632,95 @@ function LeaderboardRow({
       </span>
       <span style={styles.leaderboardMetric}>{pct}</span>
       <span style={metric('speed')}>{formatTime(entry.bestMs)}</span>
+      <span style={styles.leaderboardCountBadge}>
+        <WinsBadge board={board} entry={entry} />
+      </span>
+      <span style={styles.leaderboardCountBadge}>
+        <StreakBadge entry={entry} />
+      </span>
     </div>
   );
 }
 
+/** The wins column's title: wins on the board the leaderboard is sorted by. */
+function winsColumnTitle(board: DailyBoard): string {
+  return board === 'speed' ? 'Spd. wins' : 'Eff. wins';
+}
+
 /**
- * The badges beside a racer's name: the same ones their profile card shows
- * (their showcase picks, else their latest earned, chosen by the server), or
- * the automatic wins / podium / streak chips (chipsFor) for a racer who has
- * earned no badges yet. Showcase picks keep the player's chosen order.
+ * A racer's wins on the board shown, as a single WIN badge with the count.
+ * Fills the Spd. / Eff. wins column in the rail and the full
+ * leaderboard.
  */
-function BadgeChipList({ entry }: { entry: DailyLeaderboardEntry }) {
-  const wins = entry.badges
-    ? {
-        speed: entry.badges.speedWins,
-        efficiency: entry.badges.efficiencyWins,
-      }
-    : null;
-  const showcased = entry.showcasedBadges
-    .map((id) => badgeInfo(id))
-    .filter((info): info is BadgeInfo => info !== undefined);
-  const chips =
-    showcased.length > 0
-      ? showcased.map((info) => ({
-          key: info.id,
-          kind: info.kind,
-          label: info.label,
-          value: <BadgeValue info={info} wins={wins} />,
-          title: badgeTitle(info, wins),
-        }))
-      : chipsFor(entry.badges);
-  if (chips.length === 0) return null;
+function WinsBadge({
+  board,
+  entry,
+}: {
+  board: DailyBoard;
+  entry: DailyLeaderboardEntry;
+}) {
+  const wins = board === 'speed' ? entry.speedWins : entry.efficiencyWins;
+  const noun = wins === 1 ? 'win' : 'wins';
   return (
-    <span style={styles.leaderboardChips}>
-      {chips.map((chip) => (
-        <span
-          key={chip.key}
-          style={styles.badgeChip}
-          title={chip.title}
-          aria-label={chip.title}
-        >
-          <StatusSegment
-            kind={chip.kind}
-            label={chip.label}
-            value={chip.value}
-            size="sm"
-          />
-        </span>
-      ))}
+    <CountBadge
+      kind="win"
+      label="WIN"
+      count={wins}
+      title={`${wins} ${board} board ${noun}`}
+    />
+  );
+}
+
+/**
+ * A racer's current daily streak as a single STRK badge with the day
+ * count. Fills the Streak column in the rail and the full leaderboard.
+ */
+function StreakBadge({ entry }: { entry: DailyLeaderboardEntry }) {
+  return (
+    <CountBadge
+      kind="streak"
+      label="STRK"
+      count={entry.dailyStreak}
+      title={`${entry.dailyStreak}-day streak`}
+    />
+  );
+}
+
+/**
+ * One leaderboard count drawn as a small badge (label segment, then the
+ * count), or a muted "—" when the count is zero. `title` is the tooltip and
+ * the screen-reader label.
+ */
+function CountBadge({
+  kind,
+  label,
+  count,
+  title,
+}: {
+  kind: 'win' | 'streak';
+  label: string;
+  count: number;
+  title: string;
+}) {
+  if (count === 0) {
+    return (
+      <span
+        style={styles.leaderboardCountNone}
+        title={title}
+        aria-label={title}
+      >
+        —
+      </span>
+    );
+  }
+  return (
+    <span title={title} aria-label={title}>
+      <StatusSegment
+        kind={kind}
+        label={label}
+        value={String(count)}
+        size="sm"
+      />
     </span>
   );
 }
@@ -1777,9 +1786,10 @@ const TOP_RACER_UNMEDALLED = {
 };
 
 /**
- * One of the rail's top 5: a large rank in its medal colour, name with badge
- * chips beneath, then labelled Keys / Efficiency / Time, the board's sorted stat
- * emphasised. The stats wrap below the name on a narrow screen.
+ * One of the rail's top 5: a large rank in its medal colour, name, then
+ * labelled Keys / Efficiency / Time (the board's sorted stat emphasised),
+ * Spd. / Eff. wins and Streak. The stats wrap below the name on
+ * a narrow screen.
  */
 function TopRacerRow({
   board,
@@ -1813,15 +1823,9 @@ function TopRacerRow({
         {entry.rank}
       </span>
       <span style={styles.topRacerNameCell}>
-        <span style={styles.topRacerNameLine}>
-          <span style={styles.topRacerName}>
-            <RacerNameLink entry={entry} userId={userId} />
-          </span>
-          {/* A tag, not a second outline: a ring around the medal border
-              read as two stacked borders (gold + cyan). */}
-          {isOwn && <span style={styles.topRacerYouTag}>you</span>}
+        <span style={styles.topRacerName}>
+          <RacerNameLink entry={entry} userId={userId} />
         </span>
-        <BadgeChipList entry={entry} />
       </span>
       <span style={styles.topRacerStats}>
         <span style={styles.topRacerStat} title={stats.keysTitle}>
@@ -1846,6 +1850,18 @@ function TopRacerRow({
         <span style={styles.topRacerStat}>
           <span style={label(stats.timeSorted)}>Time</span>
           <span style={value(stats.timeSorted)}>{stats.time}</span>
+        </span>
+        <span style={styles.topRacerStat}>
+          <span style={label(false)}>{winsColumnTitle(board)}</span>
+          <span style={styles.leaderboardCountBadge}>
+            <WinsBadge board={board} entry={entry} />
+          </span>
+        </span>
+        <span style={styles.topRacerStat}>
+          <span style={label(false)}>Streak</span>
+          <span style={styles.leaderboardCountBadge}>
+            <StreakBadge entry={entry} />
+          </span>
         </span>
       </span>
     </div>
@@ -1876,7 +1892,7 @@ function RacerNameLink({
 
 /**
  * The viewer's own row under the rail's top 5, so a mid-pack racer still sees
- * where they stand: rank, name, badges, keys and efficiency, time.
+ * where they stand: rank, name, keys and efficiency, time.
  */
 function OwnPositionRow({
   board,
@@ -1894,7 +1910,6 @@ function OwnPositionRow({
         <span style={styles.ownPositionName}>
           <RacerNameLink entry={entry} userId={entry.userId} />
         </span>
-        <BadgeChipList entry={entry} />
         <span style={styles.ownPositionKeys} title={stats.keysTitle}>
           {stats.hasKeys
             ? `${entry.actualKeys}/${entry.optimalKeys} · ${stats.pct}`
@@ -1940,6 +1955,10 @@ function LeaderboardColumns({ board }: { board: DailyBoard }) {
       </span>
       <span style={styles.leaderboardColumnRight}>Efficiency</span>
       <span style={sorted('speed')}>Time</span>
+      <span style={styles.leaderboardColumnRight}>
+        {winsColumnTitle(board)}
+      </span>
+      <span style={styles.leaderboardColumnRight}>Streak</span>
     </div>
   );
 }

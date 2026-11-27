@@ -139,8 +139,9 @@ function boardEntry(rank: number, userId: string, displayName: string) {
     efficiency: null,
     optimalKeys: null,
     actualKeys: null,
-    badges: null,
-    showcasedBadges: [] as string[],
+    dailyStreak: 0,
+    speedWins: 0,
+    efficiencyWins: 0,
   };
 }
 
@@ -619,6 +620,48 @@ describe('DailyRacePage', () => {
       ).toBe('/profile');
     });
 
+    it('ends each dialog row with the Spd. wins and Streak badges', async () => {
+      mockFetchDailyLeaderboard.mockImplementation(
+        async (_token: unknown, _date: unknown, limit: number) =>
+          limit === 5
+            ? TOP_SLICE
+            : {
+                ...WHOLE_FIELD,
+                entries: [
+                  {
+                    ...boardEntry(1, 'other-1', 'speedster'),
+                    dailyStreak: 12,
+                    speedWins: 3,
+                  },
+                ],
+              }
+      );
+      await act(async () => {
+        renderDaily();
+      });
+      await act(async () => {
+        (
+          await screen.findByRole('button', { name: 'Show all 10 racers' })
+        ).click();
+      });
+      const dialog = screen.getByRole('dialog', { name: 'Leaderboard' });
+      const row = (
+        await within(dialog).findByRole('link', { name: 'speedster' })
+      ).parentElement!.parentElement!;
+      const [winsCell, streakCell] = Array.from(row.children).slice(-2);
+
+      expect(within(dialog).getByText('Spd. wins')).toBeTruthy();
+      expect(within(dialog).getByText('Streak')).toBeTruthy();
+      expect(
+        within(winsCell as HTMLElement).getByLabelText('3 speed board wins')
+          .textContent
+      ).toBe('WIN3');
+      expect(
+        within(streakCell as HTMLElement).getByLabelText('12-day streak')
+          .textContent
+      ).toBe('STRK12');
+    });
+
     it('states the racer count in the dialog', async () => {
       const dialog = await renderAndOpenFullLeaderboard();
 
@@ -873,7 +916,7 @@ describe('DailyRacePage', () => {
     expect(screen.getByText('#312')).toBeTruthy();
   });
 
-  it("marks the viewer's podium row with a tag, not a second outline", async () => {
+  it("marks the viewer's podium row without a 'you' tag or second outline", async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 2,
       entries: [
@@ -891,8 +934,8 @@ describe('DailyRacePage', () => {
 
     expect(ownRow.getAttribute('aria-current')).toBe('true');
     expect(ownRow.style.boxShadow).toBe('');
-    expect(within(ownRow).getByText('you')).toBeTruthy();
-    expect(within(otherRow).queryByText('you')).toBeNull();
+    expect(otherRow.getAttribute('aria-current')).toBeNull();
+    expect(within(ownRow).queryByText('you')).toBeNull();
   });
 
   it("links each racer's name to their profile, and the viewer's to /profile", async () => {
@@ -934,115 +977,57 @@ describe('DailyRacePage', () => {
     ).toBe('/profile');
   });
 
-  it("shows the badges from the racer's profile card in place of the automatic chips", async () => {
+  // Wins and streak sit in the stats grid so their titles line up with the
+  // stats' titles.
+  it("shows a top-5 racer's speed wins and streak as titled badge columns", async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 1,
+      neighborhood: null,
+      lastPlace: null,
       entries: [
         {
           ...boardEntry(1, 'other-1', 'speedster'),
-          badges: { streak: 12, podiumStreak: 3, wins: 4 },
-          showcasedBadges: ['first_win'],
+          dailyStreak: 12,
+          speedWins: 3,
+          efficiencyWins: 2,
         },
       ],
-      neighborhood: null,
-      lastPlace: null,
     });
 
     await act(async () => {
       renderDaily();
     });
-    const row = (await screen.findByText('speedster')).closest(
-      '[data-testid="top-racer"]'
-    ) as HTMLElement;
+    const row = await screen.findByTestId('top-racer');
+    const statColumns = Array.from(row.lastElementChild!.children);
 
-    expect(within(row).getByLabelText('Champion')).toBeTruthy();
-    expect(within(row).queryByLabelText('12-day streak')).toBeNull();
-  });
-
-  it("keeps the racer's chosen showcase order on the leaderboard", async () => {
-    mockFetchDailyLeaderboard.mockResolvedValue({
-      totalRacers: 1,
-      entries: [
-        {
-          ...boardEntry(1, 'other-1', 'speedster'),
-          badges: { streak: 7, podiumStreak: 3, wins: 1 },
-          showcasedBadges: ['days_7', 'first_win', 'first_perfect'],
-        },
-      ],
-      neighborhood: null,
-      lastPlace: null,
-    });
-
-    await act(async () => {
-      renderDaily();
-    });
-    const row = (await screen.findByText('speedster')).closest(
-      '[data-testid="top-racer"]'
-    ) as HTMLElement;
-
-    const regular = within(row).getByLabelText(/^Regular/);
-    const champion = within(row).getByLabelText(/^Champion/);
-    const flawless = within(row).getByLabelText(/^Flawless/);
-    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
-    expect(regular.compareDocumentPosition(champion) & follows).toBeTruthy();
-    expect(champion.compareDocumentPosition(flawless) & follows).toBeTruthy();
-  });
-
-  it("splits a racer's win badge by board, with the split spelled out on hover", async () => {
-    mockFetchDailyLeaderboard.mockResolvedValue({
-      totalRacers: 1,
-      entries: [
-        {
-          ...boardEntry(1, 'other-1', 'speedster'),
-          badges: {
-            streak: 0,
-            podiumStreak: 0,
-            wins: 5,
-            speedWins: 3,
-            efficiencyWins: 2,
-          },
-          showcasedBadges: ['first_win'],
-        },
-      ],
-      neighborhood: null,
-      lastPlace: null,
-    });
-
-    await act(async () => {
-      renderDaily();
-    });
-    const row = (await screen.findByText('speedster')).closest(
-      '[data-testid="top-racer"]'
-    ) as HTMLElement;
-
-    expect(within(row).getByText('S3')).toBeTruthy();
-    expect(within(row).getByText('E2')).toBeTruthy();
     expect(
-      within(row).getByLabelText('Champion: 3 speed, 2 efficiency wins')
-    ).toBeTruthy();
+      statColumns.map((cell) => cell.firstElementChild!.textContent)
+    ).toEqual(['Keys', 'Efficiency', 'Time', 'Spd. wins', 'Streak']);
+    expect(
+      within(statColumns[3] as HTMLElement).getByLabelText('3 speed board wins')
+        .textContent
+    ).toBe('WIN3');
+    expect(
+      within(statColumns[4] as HTMLElement).getByLabelText('12-day streak')
+        .textContent
+    ).toBe('STRK12');
   });
 
-  it('falls back to the automatic chips when the racer has no badges to show', async () => {
+  it('shows a dash, not a badge, for a racer with no wins', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 1,
-      entries: [
-        {
-          ...boardEntry(1, 'other-1', 'speedster'),
-          badges: { streak: 12, podiumStreak: 0, wins: 0 },
-        },
-      ],
       neighborhood: null,
       lastPlace: null,
+      entries: [{ ...boardEntry(1, 'other-1', 'speedster'), dailyStreak: 1 }],
     });
 
     await act(async () => {
       renderDaily();
     });
-    const row = (await screen.findByText('speedster')).closest(
-      '[data-testid="top-racer"]'
-    ) as HTMLElement;
+    await screen.findByText('speedster');
 
-    expect(within(row).getByLabelText('12-day streak')).toBeTruthy();
+    expect(screen.getByLabelText('0 speed board wins').textContent).toBe('—');
+    expect(screen.getByLabelText('1-day streak').textContent).toBe('STRK1');
   });
 
   it('shows no "Your position" row when the viewer is in the top 5', async () => {
@@ -1532,15 +1517,16 @@ describe('DailyRacePage efficiency board', () => {
     ).toBeTruthy();
   });
 
-  it("shows a racer's badge chips beside their name", async () => {
+  it('counts efficiency wins in the wins column on the efficiency board', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 1,
       neighborhood: null,
       lastPlace: null,
       entries: [
         {
-          ...boardEntry(1, 'other-1', 'speedster'),
-          badges: { streak: 12, podiumStreak: 0, wins: 3 },
+          ...boardEntry(1, 'other-1', 'golfer'),
+          speedWins: 3,
+          efficiencyWins: 2,
         },
       ],
     });
@@ -1548,10 +1534,16 @@ describe('DailyRacePage efficiency board', () => {
     await act(async () => {
       renderDaily();
     });
-    await screen.findByText('speedster');
+    await screen.findByText('golfer');
+    await act(async () => {
+      screen.getByRole('button', { name: 'Key Efficiency' }).click();
+    });
 
-    expect(screen.getByLabelText('12-day streak').textContent).toBe('STRK12');
-    expect(screen.getByLabelText('3 daily wins').textContent).toBe('WIN3');
+    expect(await screen.findByText('Eff. wins')).toBeTruthy();
+    expect(screen.queryByText('Spd. wins')).toBeNull();
+    expect(screen.getByLabelText('2 efficiency board wins').textContent).toBe(
+      'WIN2'
+    );
   });
 
   // Switching boards keeps the panel's height: the old rows stay, dimmed and

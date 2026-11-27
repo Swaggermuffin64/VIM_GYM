@@ -52,19 +52,6 @@ export type CompleteAttemptResult =
 /** Which ranking a daily leaderboard shows. */
 export type DailyBoard = 'speed' | 'efficiency';
 
-/** A racer's badge summary, shown as chips beside their name. */
-export interface BadgeChips {
-  /** Current participation streak, in days. */
-  streak: number;
-  /** Current podium (top 3 on either board) streak, in days. */
-  podiumStreak: number;
-  /** #1 finishes on closed days, both boards combined. */
-  wins: number;
-  /** `wins` split by board, for the win badge's per-board counts. */
-  speedWins: number;
-  efficiencyWins: number;
-}
-
 /** A single row in the daily leaderboard. */
 export interface DailyLeaderboardEntry {
   rank: number;
@@ -83,14 +70,14 @@ export interface DailyLeaderboardEntry {
   efficiency: number | null;
   optimalKeys: number | null;
   actualKeys: number | null;
-  /** Null when the server has no daily history for the racer. */
-  badges: BadgeChips | null;
+  /** Current participation streak in days, for the Streak column. */
+  dailyStreak: number;
   /**
-   * The badge ids the racer's profile card shows: their earned showcase
-   * picks, else their three most recently earned. Empty when they have
-   * earned none; the row then falls back to the `badges` chips.
+   * #1 finishes on closed days (today's doesn't count yet), per board, for
+   * the Speed wins / Efficiency wins column.
    */
-  showcasedBadges: string[];
+  speedWins: number;
+  efficiencyWins: number;
 }
 
 export type ShareLinkResult =
@@ -348,18 +335,6 @@ const EMPTY_LEADERBOARD: DailyLeaderboardData = {
   totalRacers: 0,
 };
 
-function mapBadgeChips(raw: unknown): BadgeChips | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const b = raw as Record<string, unknown>;
-  return {
-    streak: (b.streak as number) ?? 0,
-    podiumStreak: (b.podium_streak as number) ?? 0,
-    wins: (b.wins as number) ?? 0,
-    speedWins: (b.speed_wins as number) ?? 0,
-    efficiencyWins: (b.efficiency_wins as number) ?? 0,
-  };
-}
-
 function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((e: Record<string, unknown>) => ({
@@ -371,10 +346,9 @@ function mapLeaderboardEntries(raw: unknown): DailyLeaderboardEntry[] {
     efficiency: typeof e.efficiency === 'number' ? e.efficiency : null,
     optimalKeys: typeof e.optimal_keys === 'number' ? e.optimal_keys : null,
     actualKeys: typeof e.actual_keys === 'number' ? e.actual_keys : null,
-    badges: mapBadgeChips(e.badges),
-    showcasedBadges: Array.isArray(e.showcased_badges)
-      ? e.showcased_badges.filter((id): id is string => typeof id === 'string')
-      : [],
+    dailyStreak: numberOr(e.daily_streak, 0),
+    speedWins: numberOr(e.speed_wins, 0),
+    efficiencyWins: numberOr(e.efficiency_wins, 0),
   }));
 }
 

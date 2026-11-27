@@ -9,6 +9,7 @@ import {
   shortestVimSequenceLazy,
   getRecommendedDeleteSequence,
   getRecommendedYankPasteSequence,
+  findInnerTextObjectPairAtCursor,
 } from './vimGraph.js';
 import { resolveKeyOffset } from './graphInfra.js';
 import { CODE_SNIPPIT_OBJECTS } from '../codeSnippets.js';
@@ -154,6 +155,135 @@ describe('getRecommendedDeleteSequence', () => {
     expect(rec).not.toBeNull();
     expect(rec!.recommendedWeight).toBeGreaterThan(0);
     expect(rec!.recommendedSequence.length).toBeGreaterThan(0);
+  });
+});
+
+describe('findInnerTextObjectPairAtCursor', () => {
+  // Offsets:  0123456789
+  const code = 'a{b{c}d}e';
+
+  it('picks the innermost enclosing pair when the cursor is inside it', () => {
+    expect(findInnerTextObjectPairAtCursor(code, 4, '{', '}')).toEqual([3, 6]);
+  });
+
+  it('treats a cursor on an opening delimiter as inside that pair', () => {
+    expect(findInnerTextObjectPairAtCursor(code, 3, '{', '}')).toEqual([3, 6]);
+  });
+
+  it('treats a cursor on a closing delimiter as inside that pair', () => {
+    expect(findInnerTextObjectPairAtCursor(code, 5, '{', '}')).toEqual([3, 6]);
+  });
+
+  it('skips a nested pair that sits entirely before or after the cursor', () => {
+    expect(findInnerTextObjectPairAtCursor(code, 2, '{', '}')).toEqual([1, 8]);
+    expect(findInnerTextObjectPairAtCursor(code, 6, '{', '}')).toEqual([1, 8]);
+  });
+
+  it('does not search forward for a pair when the cursor is outside all pairs', () => {
+    expect(findInnerTextObjectPairAtCursor(code, 0, '{', '}')).toBeNull();
+    expect(findInnerTextObjectPairAtCursor(code, 8, '{', '}')).toBeNull();
+  });
+});
+
+describe('getRecommendedDeleteSequence — inner text objects', () => {
+  const INNER_STRATEGIES = [
+    {
+      strategy: 'INNER_CURLY_BRACE',
+      open: '{',
+      close: '}',
+      pairs: 'curlyBraceIndices',
+    },
+    {
+      strategy: 'INNER_PARENTHESIS',
+      open: '(',
+      close: ')',
+      pairs: 'parenthesisIndices',
+    },
+    {
+      strategy: 'INNER_BRACKET',
+      open: '[',
+      close: ']',
+      pairs: 'bracketIndices',
+    },
+  ] as const;
+
+  /** Cursor offset right before the trailing `d i <char>` keys run. */
+  function cursorBeforeTextObject(
+    snippet: codeSnippet,
+    start: number,
+    sequence: string[]
+  ): number {
+    return executeSequence(snippet, start, sequence.slice(0, -3));
+  }
+
+  // Regression: nested `{}` used to recommend `j d i {`, where `j` lands on
+  // column 0 of `    if (n <= 1) {` — outside the inner braces, so `di{`
+  // would empty the whole function body instead of the if-block.
+  it('navigates inside a nested brace pair before di{', () => {
+    const snippet = CODE_SNIPPIT_OBJECTS[0]!;
+    const ifBlock = snippet.curlyBraceIndices.find(([open]) =>
+      snippet.code.slice(0, open).includes('if')
+    )!;
+    const rec = getRecommendedDeleteSequence(
+      snippet,
+      'INNER_CURLY_BRACE',
+      ifBlock[0] + 1,
+      ifBlock[1] - 1,
+      0
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedSequence.slice(-3)).toEqual(['d', 'i', '{']);
+    const cursor = cursorBeforeTextObject(snippet, 0, rec!.recommendedSequence);
+    expect(
+      findInnerTextObjectPairAtCursor(snippet.code, cursor, '{', '}')
+    ).toEqual(ifBlock);
+  });
+
+  // Regression: the outer pair used to recommend bare `di{` from offset 0,
+  // which is before the function's `{` and selects nothing in the editor.
+  it('navigates inside the outer brace pair before di{', () => {
+    const snippet = CODE_SNIPPIT_OBJECTS[0]!;
+    const rec = getRecommendedDeleteSequence(
+      snippet,
+      'INNER_CURLY_BRACE',
+      22,
+      98,
+      0
+    );
+    expect(rec).not.toBeNull();
+    expect(rec!.recommendedSequence).not.toEqual(['d', 'i', '{']);
+  });
+
+  it('every recommended inner delete selects its target pair in every snippet', () => {
+    for (const snippet of CODE_SNIPPIT_OBJECTS) {
+      for (const { strategy, open, close, pairs } of INNER_STRATEGIES) {
+        for (const [openOffset, closeOffsetExclusive] of snippet[pairs]) {
+          // Task generation skips pairs with blank inner content.
+          const inner = snippet.code.slice(
+            openOffset + 1,
+            closeOffsetExclusive - 1
+          );
+          if (inner.trim().length === 0) continue;
+          const rec = getRecommendedDeleteSequence(
+            snippet,
+            strategy,
+            openOffset + 1,
+            closeOffsetExclusive - 1,
+            0
+          );
+          expect(rec).not.toBeNull();
+          const cursor = cursorBeforeTextObject(
+            snippet,
+            0,
+            rec!.recommendedSequence
+          );
+          expect(
+            findInnerTextObjectPairAtCursor(snippet.code, cursor, open, close),
+            `${strategy} [${openOffset}, ${closeOffsetExclusive}) via ${rec!.recommendedSequence.join(' ')}`
+          ).toEqual([openOffset, closeOffsetExclusive]);
+        }
+      }
+    }
   });
 });
 

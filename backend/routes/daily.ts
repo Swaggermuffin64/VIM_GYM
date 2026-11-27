@@ -46,13 +46,10 @@ import {
   type FastestRunEfficiency,
 } from '../db/dailyResults.js';
 import {
-  chipsFromSummary,
-  profileShowcase,
   isBadgeId,
   summariesByUser,
   summarizeDailyHistory,
 } from '../daily/badges.js';
-import { getShowcasedBadgesByUser } from '../db/profiles.js';
 import { badgeToWire, dailySummaryToWire } from './profileWire.js';
 
 /** Rows returned by GET /api/daily/leaderboard when no limit is given. */
@@ -462,18 +459,15 @@ export async function registerDailyRoutes(
         ? await speedBoardSlice(raceDate, limit, user?.id ?? null)
         : await efficiencyBoardSlice(raceDate, limit, user?.id ?? null);
 
-    // Chips and showcases are computed only for the racers on the returned
-    // rows.
+    // Streaks and win counts are computed only for the racers on the
+    // returned rows.
     const shown = [
       ...slice.entries,
       ...(slice.neighborhood ?? []),
       ...(slice.lastPlace ? [slice.lastPlace] : []),
     ];
     const shownIds = [...new Set(shown.map((e) => e.userId))];
-    const [history, showcased] = await Promise.all([
-      queryDailyHistory(shownIds),
-      getShowcasedBadgesByUser(shownIds),
-    ]);
+    const history = await queryDailyHistory(shownIds);
     const summaries = summariesByUser(history, utcDateKey(new Date()));
     // Speed rows carry only a time; their keys come from that same fastest
     // run. Efficiency rows already carry everything from their one run.
@@ -486,7 +480,6 @@ export async function registerDailyRoutes(
 
     const toWire = (e: BoardRow) => {
       const summary = summaries.get(e.userId);
-      const c = summary ? chipsFromSummary(summary) : undefined;
       const fastest = fastestRunKeys.get(e.userId);
       return {
         user_id: e.userId,
@@ -497,22 +490,11 @@ export async function registerDailyRoutes(
         efficiency: e.efficiency ?? fastest?.efficiency ?? null,
         optimal_keys: e.optimalKeys ?? fastest?.optimalKeys ?? null,
         actual_keys: e.actualKeys ?? fastest?.actualKeys ?? null,
-        badges: c
-          ? {
-              streak: c.streak,
-              podium_streak: c.podiumStreak,
-              wins: c.wins,
-              speed_wins: c.speedWins,
-              efficiency_wins: c.efficiencyWins,
-            }
-          : null,
-        // The badges the racer's profile card shows (their picks, else their
-        // latest earned); empty when they have none, and the row then shows
-        // the `badges` chips.
-        showcased_badges: profileShowcase(
-          showcased.get(e.userId) ?? [],
-          summary
-        ),
+        // The leaderboard's Streak and Spd. / Eff. wins
+        // columns. Wins count closed days only, so today's #1 isn't one yet.
+        daily_streak: summary?.streaks.participation.current ?? 0,
+        speed_wins: summary?.counters.speedWins ?? 0,
+        efficiency_wins: summary?.counters.efficiencyWins ?? 0,
       };
     };
 

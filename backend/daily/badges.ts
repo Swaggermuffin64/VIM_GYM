@@ -73,17 +73,6 @@ export interface DailySummary {
   recent: DailyDayResult[];
 }
 
-/** Compact badge summary shown beside a name on the leaderboard. */
-export interface BadgeChips {
-  streak: number;
-  podiumStreak: number;
-  /** Both boards combined. */
-  wins: number;
-  /** `wins` split by board, for the win badge's per-board counts. */
-  speedWins: number;
-  efficiencyWins: number;
-}
-
 export const RECENT_DAYS = 14;
 
 const PODIUM_MAX_RANK = 3;
@@ -246,17 +235,6 @@ export function summarizeDailyHistory(
   };
 }
 
-/** The leaderboard-row badge summary for one user's summary. */
-export function chipsFromSummary(summary: DailySummary): BadgeChips {
-  return {
-    streak: summary.streaks.participation.current,
-    podiumStreak: summary.streaks.podium.current,
-    wins: summary.counters.speedWins + summary.counters.efficiencyWins,
-    speedWins: summary.counters.speedWins,
-    efficiencyWins: summary.counters.efficiencyWins,
-  };
-}
-
 /**
  * The daily summary of every user in `history` (which may mix users), keyed
  * by user id. Users with no history are absent.
@@ -279,46 +257,7 @@ export function summariesByUser(
 }
 
 /**
- * Badge chips for every user in `history` (which may mix users), keyed by
- * user id. Users with no history are absent.
- */
-export function chipsByUser(
-  history: DailyDayResult[],
-  today: string
-): Map<string, BadgeChips> {
-  const chips = new Map<string, BadgeChips>();
-  for (const [userId, summary] of summariesByUser(history, today)) {
-    chips.set(userId, chipsFromSummary(summary));
-  }
-  return chips;
-}
-
-/**
  * Most badges a player may feature on their profile, and how many a profile
  * card's showcase row shows. validation/inputValidation.ts enforces it.
  */
 export const MAX_SHOWCASE = 3;
-
-/**
- * The (up to three) badges a player's profile card shows, which their
- * leaderboard rows show too: their showcased picks that are still earned, in
- * their chosen order; with none of those, their three most recently earned.
- * Empty when they have earned nothing. Mirrors showcaseBadges in the
- * frontend's lib/profileView.ts, so the two always agree.
- */
-export function profileShowcase(
-  showcased: string[],
-  summary: DailySummary | undefined
-): string[] {
-  if (!summary) return [];
-  const earned = new Set<string>(summary.badges.map((b) => b.id));
-  const picked = showcased
-    .filter((id) => earned.has(id))
-    .slice(0, MAX_SHOWCASE);
-  if (picked.length > 0) return picked;
-
-  return [...summary.badges]
-    .sort((a, b) => b.earnedOn.localeCompare(a.earnedOn))
-    .map((b) => b.id)
-    .slice(0, MAX_SHOWCASE);
-}

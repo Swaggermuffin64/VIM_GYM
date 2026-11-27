@@ -10,32 +10,6 @@ export interface Profile {
   created_at: Date;
 }
 
-/**
- * The badges each of `userIds` picked to showcase, keyed by user id (users
- * who picked none are absent). Best-effort, for leaderboard rows: an empty
- * map with no DB or on a query error, so the board still loads.
- */
-export async function getShowcasedBadgesByUser(
-  userIds: string[]
-): Promise<Map<string, string[]>> {
-  const pool = getPool();
-  const byUser = new Map<string, string[]>();
-  if (!pool || userIds.length === 0) return byUser;
-
-  try {
-    const result = await pool.query<{ id: string; showcased_badges: string[] }>(
-      `SELECT id, showcased_badges FROM profiles
-       WHERE id = ANY($1::uuid[]) AND cardinality(showcased_badges) > 0`,
-      [userIds]
-    );
-    for (const row of result.rows) byUser.set(row.id, row.showcased_badges);
-  } catch (err) {
-    const code = (err as { code?: string })?.code;
-    console.error('[profiles] getShowcasedBadgesByUser failed', { code, err });
-  }
-  return byUser;
-}
-
 /** Fetch a profile by Supabase user UUID. Returns null if not found or no DB. */
 export async function getProfile(userId: string): Promise<Profile | null> {
   const pool = getPool();

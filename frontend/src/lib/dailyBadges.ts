@@ -1,13 +1,12 @@
 /**
  * Display data for Race of the Day badges: the badge catalog (names, the
- * status-line segment each is drawn as, how to earn each, progress toward it)
- * and the leaderboard-row chips.
+ * status-line segment each is drawn as, how to earn each, progress toward it).
  *
  * Which badges a user has earned is decided by the server
  * (backend/daily/badges.ts); this module only describes them. Ids here must
  * match BADGE_IDS there.
  */
-import type { BadgeChips, DailyProfile } from '../api/daily';
+import type { DailyProfile } from '../api/daily';
 import { colors } from '../theme';
 
 /**
@@ -203,58 +202,6 @@ export function badgeTitle(info: BadgeInfo, wins: DailyWins | null): string {
 /** Catalog entry for a badge id, or undefined for an id this build lacks. */
 export function badgeInfo(id: string): BadgeInfo | undefined {
   return CATALOG_BY_ID.get(id);
-}
-
-/** One chip beside a leaderboard name. */
-export interface Chip {
-  key: 'streak' | 'podium' | 'wins';
-  kind: BadgeKind;
-  /** Left segment text, e.g. "STRK". */
-  label: string;
-  /** Right segment text, the count. */
-  value: string;
-  /** Full description for the tooltip and screen readers. */
-  title: string;
-}
-
-/** Most chips a row shows; they sit on their own line under the name. */
-export const MAX_CHIPS = 3;
-
-/**
- * The chips to show for a racer, rarest first: total wins, then a podium
- * streak of 2+ days, then an active streak of 3+ days.
- */
-export function chipsFor(badges: BadgeChips | null): Chip[] {
-  if (!badges) return [];
-  const chips: Chip[] = [];
-  if (badges.wins >= 1) {
-    chips.push({
-      key: 'wins',
-      kind: 'win',
-      label: 'WIN',
-      value: String(badges.wins),
-      title: `${badges.wins} daily ${badges.wins === 1 ? 'win' : 'wins'}`,
-    });
-  }
-  if (badges.podiumStreak >= 2) {
-    chips.push({
-      key: 'podium',
-      kind: 'podium',
-      label: 'TOP3',
-      value: String(badges.podiumStreak),
-      title: `Top 3 for ${badges.podiumStreak} days running`,
-    });
-  }
-  if (badges.streak >= 3) {
-    chips.push({
-      key: 'streak',
-      kind: 'streak',
-      label: 'STRK',
-      value: String(badges.streak),
-      title: `${badges.streak}-day streak`,
-    });
-  }
-  return chips.slice(0, MAX_CHIPS);
 }
 
 /**

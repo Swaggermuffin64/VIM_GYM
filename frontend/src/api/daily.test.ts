@@ -317,8 +317,9 @@ describe('fetchDailyLeaderboard', () => {
           efficiency: null,
           optimalKeys: null,
           actualKeys: null,
-          badges: null,
-          showcasedBadges: [],
+          dailyStreak: 0,
+          speedWins: 0,
+          efficiencyWins: 0,
         },
       ],
       neighborhood: [
@@ -331,8 +332,9 @@ describe('fetchDailyLeaderboard', () => {
           efficiency: null,
           optimalKeys: null,
           actualKeys: null,
-          badges: null,
-          showcasedBadges: [],
+          dailyStreak: 0,
+          speedWins: 0,
+          efficiencyWins: 0,
         },
       ],
       lastPlace: null,
@@ -368,8 +370,9 @@ describe('fetchDailyLeaderboard', () => {
       efficiency: null,
       optimalKeys: null,
       actualKeys: null,
-      badges: null,
-      showcasedBadges: [],
+      dailyStreak: 0,
+      speedWins: 0,
+      efficiencyWins: 0,
     });
   });
 
@@ -642,7 +645,7 @@ describe('fetchDailyRaceCached', () => {
 });
 
 describe('fetchDailyLeaderboard board=efficiency', () => {
-  it('requests the efficiency board and maps efficiency and badge chips', async () => {
+  it('requests the efficiency board and maps efficiency, streak and wins', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({
         success: true,
@@ -658,13 +661,9 @@ describe('fetchDailyLeaderboard board=efficiency', () => {
             efficiency: 0.875,
             optimal_keys: 42,
             actual_keys: 48,
-            badges: {
-              streak: 12,
-              podium_streak: 3,
-              wins: 4,
-              speed_wins: 1,
-              efficiency_wins: 3,
-            },
+            daily_streak: 12,
+            speed_wins: 1,
+            efficiency_wins: 3,
           },
         ],
         neighborhood: null,
@@ -689,14 +688,9 @@ describe('fetchDailyLeaderboard board=efficiency', () => {
       efficiency: 0.875,
       optimalKeys: 42,
       actualKeys: 48,
-      badges: {
-        streak: 12,
-        podiumStreak: 3,
-        wins: 4,
-        speedWins: 1,
-        efficiencyWins: 3,
-      },
-      showcasedBadges: [],
+      dailyStreak: 12,
+      speedWins: 1,
+      efficiencyWins: 3,
     });
   });
 
@@ -831,34 +825,5 @@ describe('markBadgesSeen', () => {
   it('returns false when the request fails', async () => {
     fetchMock.mockRejectedValue(new Error('offline'));
     expect(await markBadgesSeen('tok', ['days_7'])).toBe(false);
-  });
-});
-
-describe('fetchDailyLeaderboard showcased badges', () => {
-  it("maps a racer's showcased badges, dropping anything that isn't an id", async () => {
-    invalidateDailyLeaderboardCache();
-    fetchMock.mockResolvedValue(
-      jsonResponse({
-        success: true,
-        total_racers: 1,
-        entries: [
-          {
-            rank: 1,
-            user_id: 'u1',
-            display_name: 'Bob',
-            avatar_url: null,
-            best_ms: 2500,
-            showcased_badges: ['first_win', 7, 'streak_7'],
-          },
-        ],
-      })
-    );
-
-    const result = await fetchDailyLeaderboard('tok', '2026-08-30');
-
-    expect(result.entries[0].showcasedBadges).toEqual([
-      'first_win',
-      'streak_7',
-    ]);
   });
 });

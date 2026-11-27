@@ -943,6 +943,35 @@ describe('DailyRacePage', () => {
     expect(within(row).queryByLabelText('12-day streak')).toBeNull();
   });
 
+  it("keeps the racer's chosen showcase order on the leaderboard", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 7, podiumStreak: 3, wins: 1 },
+          showcasedBadges: ['days_7', 'first_win', 'first_perfect'],
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    const regular = within(row).getByLabelText(/^Regular/);
+    const champion = within(row).getByLabelText(/^Champion/);
+    const flawless = within(row).getByLabelText(/^Flawless/);
+    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(regular.compareDocumentPosition(champion) & follows).toBeTruthy();
+    expect(champion.compareDocumentPosition(flawless) & follows).toBeTruthy();
+  });
+
   it("splits a racer's win badge by board, with the split spelled out on hover", async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 1,

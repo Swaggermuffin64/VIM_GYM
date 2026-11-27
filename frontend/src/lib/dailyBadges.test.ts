@@ -25,7 +25,7 @@ describe('chipsFor', () => {
     ).toEqual([]);
   });
 
-  it('lists streak, podium streak, then wins', () => {
+  it('lists wins, podium streak, then streak', () => {
     const chips = chipsFor({
       streak: 12,
       podiumStreak: 4,
@@ -34,9 +34,9 @@ describe('chipsFor', () => {
       efficiencyWins: 3,
     });
     expect(chips.map((c) => [c.label, c.value])).toEqual([
-      ['STRK', '12'],
-      ['TOP3', '4'],
       ['WIN', '9'],
+      ['TOP3', '4'],
+      ['STRK', '12'],
     ]);
   });
 
@@ -49,8 +49,8 @@ describe('chipsFor', () => {
       efficiencyWins: 0,
     });
     expect(chips.map((c) => [c.kind, c.value, c.title])).toEqual([
-      ['podium', '2', 'Top 3 for 2 days running'],
       ['win', '1', '1 daily win'],
+      ['podium', '2', 'Top 3 for 2 days running'],
     ]);
   });
 });

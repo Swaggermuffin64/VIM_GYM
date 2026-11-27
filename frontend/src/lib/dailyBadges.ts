@@ -221,19 +221,19 @@ export interface Chip {
 export const MAX_CHIPS = 3;
 
 /**
- * The chips to show for a racer, highest priority first: an active streak of
- * 3+ days, then a podium streak of 2+ days, then total wins.
+ * The chips to show for a racer, rarest first: total wins, then a podium
+ * streak of 2+ days, then an active streak of 3+ days.
  */
 export function chipsFor(badges: BadgeChips | null): Chip[] {
   if (!badges) return [];
   const chips: Chip[] = [];
-  if (badges.streak >= 3) {
+  if (badges.wins >= 1) {
     chips.push({
-      key: 'streak',
-      kind: 'streak',
-      label: 'STRK',
-      value: String(badges.streak),
-      title: `${badges.streak}-day streak`,
+      key: 'wins',
+      kind: 'win',
+      label: 'WIN',
+      value: String(badges.wins),
+      title: `${badges.wins} daily ${badges.wins === 1 ? 'win' : 'wins'}`,
     });
   }
   if (badges.podiumStreak >= 2) {
@@ -245,13 +245,13 @@ export function chipsFor(badges: BadgeChips | null): Chip[] {
       title: `Top 3 for ${badges.podiumStreak} days running`,
     });
   }
-  if (badges.wins >= 1) {
+  if (badges.streak >= 3) {
     chips.push({
-      key: 'wins',
-      kind: 'win',
-      label: 'WIN',
-      value: String(badges.wins),
-      title: `${badges.wins} daily ${badges.wins === 1 ? 'win' : 'wins'}`,
+      key: 'streak',
+      kind: 'streak',
+      label: 'STRK',
+      value: String(badges.streak),
+      title: `${badges.streak}-day streak`,
     });
   }
   return chips.slice(0, MAX_CHIPS);

@@ -1669,8 +1669,8 @@ function LeaderboardRow({
 /**
  * The badges beside a racer's name: the same ones their profile card shows
  * (their showcase picks, else their latest earned, chosen by the server), or
- * the automatic streak / podium / wins chips (chipsFor) for a racer who has
- * earned no badges yet.
+ * the automatic wins / podium / streak chips (chipsFor) for a racer who has
+ * earned no badges yet. Showcase picks keep the player's chosen order.
  */
 function BadgeChipList({ entry }: { entry: DailyLeaderboardEntry }) {
   const wins = entry.badges

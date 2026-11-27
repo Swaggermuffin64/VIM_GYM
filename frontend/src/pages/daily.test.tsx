@@ -603,6 +603,22 @@ describe('DailyRacePage', () => {
       expect(within(dialog).queryByText('···')).toBeNull();
     });
 
+    it("links each racer's name in the dialog to their profile", async () => {
+      const dialog = await renderAndOpenFullLeaderboard();
+      await within(dialog).findByText('midpacker');
+
+      expect(
+        within(dialog)
+          .getByRole('link', { name: 'midpacker' })
+          .getAttribute('href')
+      ).toBe('/players/other-9');
+      expect(
+        within(dialog)
+          .getByRole('link', { name: 'testuser' })
+          .getAttribute('href')
+      ).toBe('/profile');
+    });
+
     it('states the racer count in the dialog', async () => {
       const dialog = await renderAndOpenFullLeaderboard();
 

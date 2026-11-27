@@ -1640,7 +1640,9 @@ function LeaderboardRow({
         #{entry.rank}
       </span>
       <span style={styles.leaderboardNameCell}>
-        <span style={styles.leaderboardName}>{entry.displayName}</span>
+        <span style={styles.leaderboardName}>
+          <RacerNameLink entry={entry} userId={userId} />
+        </span>
         <BadgeChipList entry={entry} />
       </span>
       <span
@@ -1851,9 +1853,10 @@ function TopRacerRow({
 }
 
 /**
- * A racer's name on the rail, linking to their profile: /profile for the
- * viewer's own row, /players/:id for anyone else. Plain text for a visitor
- * (null `userId`), since profiles are for signed-in users only.
+ * A racer's name on the rail or in the full leaderboard, linking to their
+ * profile: /profile for the viewer's own row, /players/:id for anyone else.
+ * Plain text for a visitor (null `userId`), since profiles are for signed-in
+ * users only.
  */
 function RacerNameLink({
   entry,

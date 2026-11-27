@@ -171,6 +171,8 @@ describe('getPlayerStats', () => {
       playMode?: string;
       bobFinished?: boolean;
       bobKeys?: [number, number | null];
+      /** Drop bob's second attempt row, as if its insert had failed. */
+      bobMissingTask?: boolean;
     }) {
       await db.query(
         `INSERT INTO tasks (content_hash, task_type, task_json, optimal_keystroke_count)
@@ -205,6 +207,13 @@ describe('getPlayerStats', () => {
                 ($2, 'eff2', $3, 'quick_play', 1000, 20)`,
         [TEST_USERS.bob, TEST_USERS.alice, GAME, bobA, bobB]
       );
+      if (opts.bobMissingTask) {
+        await db.query(
+          `DELETE FROM task_attempts
+            WHERE game_id = $1 AND user_id = $2 AND task_hash = 'eff2'`,
+          [GAME, TEST_USERS.bob]
+        );
+      }
     }
 
     afterEach(async () => {
@@ -238,6 +247,14 @@ describe('getPlayerStats', () => {
       await seedRace({ bobKeys: [10, null] });
       const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
       expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+    });
+
+    it('leaves a finisher unranked when a task has no attempt row, without shifting the others', async () => {
+      await seedRace({ bobMissingTask: true });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      const alice = await playerStats.getPlayerStats(TEST_USERS.alice);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+      expect(alice.recentGames[0]!.efficiencyRank).toBe(1);
     });
 
     it('does not rank solo modes', async () => {

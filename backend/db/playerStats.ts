@@ -204,8 +204,8 @@ export async function getPlayerStats(
           efficiency_rank: string | null;
         }>(
           `WITH recent AS (
-           SELECT g.id AS game_id, g.play_mode, gp.position, gp.finished,
-                  gp.left_race, gp.total_time_ms, g.started_at
+           SELECT g.id AS game_id, g.play_mode, g.task_hashes, gp.position,
+                  gp.finished, gp.left_race, gp.total_time_ms, g.started_at
              FROM game_players gp
              JOIN games g ON g.id = gp.game_id
             WHERE gp.user_id = $1
@@ -222,8 +222,12 @@ export async function getPlayerStats(
                ON ta.game_id = gp.game_id AND ta.user_id = gp.user_id
              JOIN tasks t ON t.content_hash = ta.task_hash
             WHERE r.play_mode IN ('quick_play', 'private_match')
-            GROUP BY gp.game_id, gp.user_id
-           HAVING COUNT(ta.keystroke_count) = COUNT(*)
+            GROUP BY gp.game_id, gp.user_id, r.task_hashes
+           -- Ranked only on complete data: an attempt row for every task in
+           -- the game (attempt inserts can fail while the finish still
+           -- commits), each with keystroke and optimal counts.
+           HAVING COUNT(*) = cardinality(r.task_hashes)
+              AND COUNT(ta.keystroke_count) = COUNT(*)
               AND COUNT(t.optimal_keystroke_count) = COUNT(*)
          ),
          ranked AS (

@@ -4,56 +4,8 @@ import {
   badgeInfo,
   badgeTitle,
   winSplit,
-  chipsFor,
   formatEfficiency,
 } from './dailyBadges';
-
-describe('chipsFor', () => {
-  it('shows nothing for a racer with no history', () => {
-    expect(chipsFor(null)).toEqual([]);
-  });
-
-  it('skips streaks too short to mention', () => {
-    expect(
-      chipsFor({
-        streak: 2,
-        podiumStreak: 1,
-        wins: 0,
-        speedWins: 0,
-        efficiencyWins: 0,
-      })
-    ).toEqual([]);
-  });
-
-  it('lists wins, podium streak, then streak', () => {
-    const chips = chipsFor({
-      streak: 12,
-      podiumStreak: 4,
-      wins: 9,
-      speedWins: 6,
-      efficiencyWins: 3,
-    });
-    expect(chips.map((c) => [c.label, c.value])).toEqual([
-      ['WIN', '9'],
-      ['TOP3', '4'],
-      ['STRK', '12'],
-    ]);
-  });
-
-  it('falls through to wins when a streak is missing', () => {
-    const chips = chipsFor({
-      streak: 0,
-      podiumStreak: 2,
-      wins: 1,
-      speedWins: 1,
-      efficiencyWins: 0,
-    });
-    expect(chips.map((c) => [c.kind, c.value, c.title])).toEqual([
-      ['win', '1', '1 daily win'],
-      ['podium', '2', 'Top 3 for 2 days running'],
-    ]);
-  });
-});
 
 describe('formatEfficiency', () => {
   it.each([

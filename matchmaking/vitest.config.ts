@@ -6,7 +6,12 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      exclude: ['scripts/**', 'dist/**', '**/*.config.ts'],
+      exclude: [
+        'scripts/**',
+        'dist/**',
+        '**/*.config.ts',
+        'src/loadEnv.ts', // startup side effect; logic lives in envCheck.ts
+      ],
       thresholds: {
         lines: 40,
         branches: 79,

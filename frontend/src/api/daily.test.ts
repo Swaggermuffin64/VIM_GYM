@@ -32,6 +32,8 @@ const {
   fetchDailyLeaderboard,
   createDailyShareLink,
   fetchChallenge,
+  fetchDailyProfile,
+  markBadgesSeen,
 } = await import('./daily');
 
 describe('fetchDailyRace', () => {
@@ -312,6 +314,11 @@ describe('fetchDailyLeaderboard', () => {
           displayName: 'Bob',
           avatarUrl: 'https://img.example.com/bob.png',
           bestMs: 2500,
+          efficiency: null,
+          optimalKeys: null,
+          actualKeys: null,
+          badges: null,
+          showcasedBadges: [],
         },
       ],
       neighborhood: [
@@ -321,6 +328,11 @@ describe('fetchDailyLeaderboard', () => {
           displayName: 'You',
           avatarUrl: null,
           bestMs: 9000,
+          efficiency: null,
+          optimalKeys: null,
+          actualKeys: null,
+          badges: null,
+          showcasedBadges: [],
         },
       ],
       lastPlace: null,
@@ -353,6 +365,11 @@ describe('fetchDailyLeaderboard', () => {
       displayName: 'normie_mode',
       avatarUrl: null,
       bestMs: 72350,
+      efficiency: null,
+      optimalKeys: null,
+      actualKeys: null,
+      badges: null,
+      showcasedBadges: [],
     });
   });
 
@@ -621,5 +638,227 @@ describe('fetchDailyRaceCached', () => {
     await fetchDailyRaceCached('tok');
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('fetchDailyLeaderboard board=efficiency', () => {
+  it('requests the efficiency board and maps efficiency and badge chips', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        board: 'efficiency',
+        total_racers: 1,
+        entries: [
+          {
+            user_id: 'u1',
+            display_name: 'Bob',
+            avatar_url: null,
+            best_ms: 41200,
+            rank: 1,
+            efficiency: 0.875,
+            optimal_keys: 42,
+            actual_keys: 48,
+            badges: {
+              streak: 12,
+              podium_streak: 3,
+              wins: 4,
+              speed_wins: 1,
+              efficiency_wins: 3,
+            },
+          },
+        ],
+        neighborhood: null,
+      })
+    );
+
+    const result = await fetchDailyLeaderboard(
+      'tok',
+      undefined,
+      8,
+      'efficiency'
+    );
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('board=efficiency');
+    expect(result.entries[0]).toEqual({
+      rank: 1,
+      userId: 'u1',
+      displayName: 'Bob',
+      avatarUrl: null,
+      bestMs: 41200,
+      efficiency: 0.875,
+      optimalKeys: 42,
+      actualKeys: 48,
+      badges: {
+        streak: 12,
+        podiumStreak: 3,
+        wins: 4,
+        speedWins: 1,
+        efficiencyWins: 3,
+      },
+      showcasedBadges: [],
+    });
+  });
+
+  it('leaves the board param off for the speed board', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, entries: [], total_racers: 0 })
+    );
+
+    await fetchDailyLeaderboard('tok', undefined, 8);
+
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('board=');
+  });
+
+  it('caches each board separately', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({ success: true, entries: [], total_racers: 3 })
+      )
+    );
+
+    await fetchDailyLeaderboard('tok', undefined, 8, 'speed');
+    await fetchDailyLeaderboard('tok', undefined, 8, 'efficiency');
+    await fetchDailyLeaderboard('tok', undefined, 8, 'efficiency');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('fetchDailyProfile', () => {
+  it('maps the profile payload to camelCase', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        badges: [{ id: 'days_7', earned_on: '2026-10-08' }],
+        unseen_badges: [{ id: 'days_7', earned_on: '2026-10-08' }],
+        streaks: {
+          participation: { current: 4, longest: 9 },
+          podium: { current: 0, longest: 2 },
+        },
+        counters: {
+          days_raced: 12,
+          speed_wins: 1,
+          efficiency_wins: 2,
+          podiums: 5,
+        },
+        personal_bests: {
+          best_speed_placing: { rank: 1, racers: 44, race_date: '2026-10-09' },
+          best_efficiency_placing: null,
+          fastest: { ms: 30100, race_date: '2026-10-12' },
+          most_efficient: { efficiency: 1, race_date: '2026-10-10' },
+        },
+        recent: [
+          {
+            race_date: '2026-10-18',
+            best_ms: 35000,
+            speed_rank: 4,
+            racers: 41,
+            efficiency: null,
+            efficiency_rank: null,
+            efficiency_racers: null,
+          },
+        ],
+      })
+    );
+
+    const profile = await fetchDailyProfile('tok');
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' });
+    expect(profile).toEqual({
+      badges: [{ id: 'days_7', earnedOn: '2026-10-08' }],
+      unseenBadges: [{ id: 'days_7', earnedOn: '2026-10-08' }],
+      streaks: {
+        participation: { current: 4, longest: 9 },
+        podium: { current: 0, longest: 2 },
+      },
+      counters: { daysRaced: 12, speedWins: 1, efficiencyWins: 2, podiums: 5 },
+      personalBests: {
+        bestSpeedPlacing: { rank: 1, racers: 44, raceDate: '2026-10-09' },
+        bestEfficiencyPlacing: null,
+        fastest: { ms: 30100, raceDate: '2026-10-12' },
+        mostEfficient: { efficiency: 1, raceDate: '2026-10-10' },
+      },
+      recent: [
+        {
+          raceDate: '2026-10-18',
+          bestMs: 35000,
+          speedRank: 4,
+          racers: 41,
+          efficiency: null,
+          efficiencyRank: null,
+          efficiencyRacers: null,
+        },
+      ],
+      winDates: [],
+    });
+  });
+
+  it('maps win_dates to winDates', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({ success: true, win_dates: ['2026-11-20'] })
+    );
+    const profile = await fetchDailyProfile('tok');
+    expect(profile?.winDates).toEqual(['2026-11-20']);
+  });
+
+  it('defaults winDates to [] when win_dates is missing', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+    const profile = await fetchDailyProfile('tok');
+    expect(profile?.winDates).toEqual([]);
+  });
+
+  it('returns null on an HTTP error', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: false }, 401));
+    expect(await fetchDailyProfile('tok')).toBeNull();
+  });
+});
+
+describe('markBadgesSeen', () => {
+  it('posts the badge ids', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ success: true }));
+
+    expect(await markBadgesSeen('tok', ['days_7', 'first_win'])).toBe(true);
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain('/api/daily/badges/seen');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      badge_ids: ['days_7', 'first_win'],
+    });
+  });
+
+  it('returns false when the request fails', async () => {
+    fetchMock.mockRejectedValue(new Error('offline'));
+    expect(await markBadgesSeen('tok', ['days_7'])).toBe(false);
+  });
+});
+
+describe('fetchDailyLeaderboard showcased badges', () => {
+  it("maps a racer's showcased badges, dropping anything that isn't an id", async () => {
+    invalidateDailyLeaderboardCache();
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        success: true,
+        total_racers: 1,
+        entries: [
+          {
+            rank: 1,
+            user_id: 'u1',
+            display_name: 'Bob',
+            avatar_url: null,
+            best_ms: 2500,
+            showcased_badges: ['first_win', 7, 'streak_7'],
+          },
+        ],
+      })
+    );
+
+    const result = await fetchDailyLeaderboard('tok', '2026-08-30');
+
+    expect(result.entries[0].showcasedBadges).toEqual([
+      'first_win',
+      'streak_7',
+    ]);
   });
 });

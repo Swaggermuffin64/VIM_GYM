@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv.js';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { randomUUID } from 'crypto';

@@ -10,6 +10,7 @@ import {
   englishDataset,
   englishRecommendedTransformers,
 } from 'obscenity';
+import { isBadgeId, MAX_SHOWCASE } from '../daily/badges.js';
 
 const profanityMatcher = new RegExpMatcher({
   ...englishDataset.build(),
@@ -302,3 +303,23 @@ export const validators = {
   editorText: validateEditorText,
   boolean: validateBoolean,
 };
+
+/**
+ * Validate the badge ids a player wants to showcase on their profile.
+ * Requires an array of known badge ids; duplicates are dropped (order kept)
+ * and at most MAX_SHOWCASE distinct ids are allowed. Used by
+ * POST /api/user/showcase before anything is stored.
+ */
+export function validateShowcase(raw: unknown): ValidationResult<string[]> {
+  if (!Array.isArray(raw)) {
+    return { valid: false, error: 'showcased_badges must be an array' };
+  }
+  if (!raw.every(isBadgeId)) {
+    return { valid: false, error: 'Unknown badge' };
+  }
+  const unique = [...new Set<string>(raw)];
+  if (unique.length > MAX_SHOWCASE) {
+    return { valid: false, error: `At most ${MAX_SHOWCASE} badges` };
+  }
+  return { valid: true, value: unique };
+}

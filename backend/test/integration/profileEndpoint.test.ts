@@ -4,7 +4,7 @@
  * must be the *sanitized* display name, and avatar URLs must be validated —
  * both regressions found in code review of the auth branch.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -129,5 +129,66 @@ describe('POST /api/user/profile', () => {
     expect(res.status).toBe(200);
     expect(body.profile!.avatar_url).toBe(url);
     expect((await profileRow()).avatar_url).toBe(url);
+  });
+});
+
+describe('showcased badges', () => {
+  /** Directly set the stored showcase so each test owns its starting state. */
+  async function seedShowcase(ids: string[]) {
+    await db.query('UPDATE profiles SET showcased_badges = $2 WHERE id = $1', [
+      TEST_USERS.alice,
+      ids,
+    ]);
+  }
+
+  beforeEach(async () => {
+    await seedShowcase([]);
+  });
+
+  async function getMe() {
+    const res = await fetch(`${base}/api/user/me`, {
+      headers: {
+        Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}`,
+      },
+    });
+    return (await res.json()) as {
+      profile: { showcased_badges: string[] };
+    };
+  }
+
+  async function postShowcase(showcased_badges: unknown) {
+    const res = await fetch(`${base}/api/user/showcase`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${mintTestToken(TEST_USERS.alice)}`,
+      },
+      body: JSON.stringify({ showcased_badges }),
+    });
+    return {
+      res,
+      body: (await res.json()) as {
+        success: boolean;
+        showcased_badges?: string[];
+      },
+    };
+  }
+
+  it('/me returns an empty showcase for a fresh profile', async () => {
+    expect((await getMe()).profile.showcased_badges).toEqual([]);
+  });
+
+  it('saves a showcase that /me then returns', async () => {
+    const { res, body } = await postShowcase(['first_win']);
+    expect(res.status).toBe(200);
+    expect(body.showcased_badges).toEqual(['first_win']);
+    expect((await getMe()).profile.showcased_badges).toEqual(['first_win']);
+  });
+
+  it('rejects an unknown badge with 400 and keeps the old showcase', async () => {
+    await seedShowcase(['first_win']);
+    const { res } = await postShowcase(['nope']);
+    expect(res.status).toBe(400);
+    expect((await getMe()).profile.showcased_badges).toEqual(['first_win']);
   });
 });

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv.js';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
@@ -53,7 +53,11 @@ import {
 } from './auth/httpAuth.js';
 import { resolveSocketIdentity } from './auth/socketIdentity.js';
 import { invalidateCachedDisplayName } from './auth/identityCache.js';
-import { getProfile, upsertProfile } from './db/profiles.js';
+import {
+  getProfile,
+  upsertProfile,
+  setShowcasedBadges,
+} from './db/profiles.js';
 import {
   upsertTasksOnFirstUse,
   createGameSession,
@@ -64,6 +68,8 @@ import {
   compactKeystrokes,
 } from './db/stats.js';
 import { getPlayerStats } from './db/playerStats.js';
+import { playerStatsToWire } from './routes/profileWire.js';
+import { registerPlayerRoutes } from './routes/players.js';
 import { httpErrorHandler } from './httpErrorHandler.js';
 import { getHeapStatistics } from 'v8';
 import { validatePracticeSubmissionTiming } from './validation/practiceTiming.js';
@@ -79,6 +85,7 @@ import {
   validateBoolean,
   validateKeystrokeEvents,
   validateAvatarUrl,
+  validateShowcase,
 } from './validation/inputValidation.js';
 
 // Event loop lag tracker — measures how late setImmediate fires vs expected
@@ -171,6 +178,7 @@ fastify.get('/api/user/me', async (request, reply) => {
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+      showcased_badges: profile.showcased_badges,
       created_at: profile.created_at,
     },
   };
@@ -229,9 +237,32 @@ fastify.post<{
       avatar_url: profile.avatar_url,
       is_premium: profile.is_premium,
       has_completed_onboarding: profile.has_completed_onboarding,
+      showcased_badges: profile.showcased_badges,
       created_at: profile.created_at,
     },
   };
+});
+
+// Save the (up to 3) badges the signed-in user features on their profile.
+// Separate from /api/user/profile, which requires display_name.
+fastify.post<{
+  Body: { showcased_badges?: unknown };
+}>('/api/user/showcase', async (request, reply) => {
+  const user = await requireSupabaseAuth(request, reply);
+  if (!user) return;
+
+  const result = validateShowcase(request.body?.showcased_badges);
+  if (!result.valid) {
+    return reply.status(400).send({ success: false, error: result.error });
+  }
+
+  const stored = await setShowcasedBadges(user.id, result.value!);
+  if (!stored) {
+    return reply
+      .status(500)
+      .send({ success: false, error: 'Failed to update showcase' });
+  }
+  return { success: true, showcased_badges: stored };
 });
 
 // Aggregated racing/task stats for the signed-in user's profile page.
@@ -240,28 +271,7 @@ fastify.get('/api/user/stats', async (request, reply) => {
   if (!user) return;
 
   const stats = await getPlayerStats(user.id);
-  return {
-    success: true,
-    stats: {
-      races_played: stats.racesPlayed,
-      wins: stats.wins,
-      win_rate: stats.racesPlayed > 0 ? stats.wins / stats.racesPlayed : 0,
-      best_race_ms: stats.bestRaceMs,
-      tasks_completed: stats.tasksCompleted,
-      avg_task_ms: stats.avgTaskMs,
-      avg_race_ms: stats.avgRaceMs,
-      avg_task_efficiency: stats.avgTaskEfficiency,
-      efficiency_sample: stats.efficiencySample,
-      recent_games: stats.recentGames.map((g) => ({
-        play_mode: g.playMode,
-        position: g.position,
-        finished: g.finished,
-        left_race: g.leftRace,
-        total_time_ms: g.totalTimeMs,
-        started_at: g.startedAt,
-      })),
-    },
-  };
+  return { success: true, stats: playerStatsToWire(stats) };
 });
 
 // Get a new position task (single player)
@@ -851,6 +861,9 @@ await fastify.register(registerDailyRoutes);
 
 // Public share unfurl page and challenge endpoint (unauthenticated)
 await fastify.register(registerShareRoutes);
+
+// Other players' profiles (signed-in only)
+await fastify.register(registerPlayerRoutes);
 
 // Memory-aware health check for Fly.io auto-restart
 const MEMORY_LIMIT_MB = 200;

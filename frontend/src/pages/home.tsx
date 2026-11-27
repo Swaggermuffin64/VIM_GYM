@@ -21,6 +21,7 @@ import { colors } from '../theme';
 import { fetchDailyRaceCached, fetchDailyLeaderboard } from '../api/daily';
 import type { DailyRaceInfo } from '../api/daily';
 import { useUtcMidnightCountdown } from '../lib/dailyCountdown';
+import { DAILY_RAIL_RACER_COUNT } from '../lib/dailyRail';
 import { LeaderboardTable } from '../components/LeaderboardTable';
 import { SiteBanner } from '../components/SiteBanner';
 import { AmbientGlow } from '../components/AmbientGlow';
@@ -125,7 +126,7 @@ function DailyPanel() {
     });
     // Warm the daily leaderboard cache (same slice the daily page shows) so
     // clicking through paints a fully-formed screen with no fetch waterfall.
-    void fetchDailyLeaderboard(token, undefined, 8);
+    void fetchDailyLeaderboard(token, undefined, DAILY_RAIL_RACER_COUNT);
     return () => {
       cancelled = true;
     };

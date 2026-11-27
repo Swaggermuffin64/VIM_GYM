@@ -155,20 +155,22 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     position: 'relative',
   },
+  // Wide enough that, beside the unwrapped race card, the leaderboard rail
+  // still fits each top-5 row (rank, name, five stats) on one line.
   container: {
-    maxWidth: '1360px',
+    maxWidth: '1440px',
     width: '100%',
     margin: '0 auto',
     padding: '48px 32px',
     position: 'relative',
     zIndex: 1,
   },
-  // Split-stage layout: race card left, leaderboard rail right. The rail gets
-  // the wider share so each top-5 row fits its name, stats and badges. The
-  // race card keeps 480px so the "Race of the Day" title stays on one line.
+  // Split-stage layout: race card left, leaderboard rail right. The race
+  // card is as wide as its longest line so nothing in it wraps (the caption
+  // under the buttons is the widest); the rail takes the remaining width.
   split: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(480px, 5fr) minmax(0, 7fr)',
+    gridTemplateColumns: 'max-content minmax(0, 1fr)',
     gap: '36px',
     alignItems: 'stretch',
   },
@@ -1267,7 +1269,7 @@ function PreRaceScreen({
         </div>
 
         <div style={styles.subLine}>
-          {info.tasks.length} tasks · same set for everyone · resets at midnight
+          {info.tasks.length} tasks | same set for everyone | resets at midnight
           UTC
         </div>
 

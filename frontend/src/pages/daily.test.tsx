@@ -130,7 +130,18 @@ function makeInfo(overrides: Record<string, unknown> = {}) {
 
 /** A leaderboard row as the API client returns it. */
 function boardEntry(rank: number, userId: string, displayName: string) {
-  return { rank, userId, displayName, avatarUrl: null, bestMs: rank * 1000 };
+  return {
+    rank,
+    userId,
+    displayName,
+    avatarUrl: null,
+    bestMs: rank * 1000,
+    efficiency: null,
+    optimalKeys: null,
+    actualKeys: null,
+    badges: null,
+    showcasedBadges: [] as string[],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +473,8 @@ describe('DailyRacePage', () => {
     ).toBeTruthy();
   });
 
+  // The rail keeps its header to the title and board switch; the racer
+  // count and the efficiency tip live in the full-leaderboard dialog.
   // The rail header states the size of the field, since the rows below it
   // are only the top slice.
   it('shows the total racer count in the leaderboard header', async () => {
@@ -477,9 +490,12 @@ describe('DailyRacePage', () => {
     expect(await screen.findByText('speedster')).toBeTruthy();
 
     expect(screen.getByText('312 racers')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Show all 312 racers' })
+    ).toBeTruthy();
   });
 
-  it('uses the singular for a field of one racer', async () => {
+  it('uses the singular in the header for a field of one racer', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 1,
       neighborhood: null,
@@ -501,9 +517,7 @@ describe('DailyRacePage', () => {
     expect(await screen.findByText('No entries yet')).toBeTruthy();
 
     expect(screen.queryByText(/\d+ racers?/i)).toBeNull();
-    expect(
-      screen.queryByRole('button', { name: /full leaderboard/i })
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /show all/i })).toBeNull();
   });
 
   it('offers no full-leaderboard button when every racer is already listed', async () => {
@@ -521,9 +535,7 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(
-      screen.queryByRole('button', { name: /full leaderboard/i })
-    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /show all/i })).toBeNull();
   });
 
   describe('the full leaderboard dialog', () => {
@@ -548,7 +560,7 @@ describe('DailyRacePage', () => {
     function serveBoardByLimit() {
       mockFetchDailyLeaderboard.mockImplementation(
         async (_token: unknown, _date: unknown, limit: number) =>
-          limit === 8 ? TOP_SLICE : WHOLE_FIELD
+          limit === 5 ? TOP_SLICE : WHOLE_FIELD
       );
     }
 
@@ -558,7 +570,7 @@ describe('DailyRacePage', () => {
         renderDaily();
       });
       const showFull = await screen.findByRole('button', {
-        name: 'Show full leaderboard',
+        name: 'Show all 10 racers',
       });
       await act(async () => {
         showFull.click();
@@ -583,17 +595,55 @@ describe('DailyRacePage', () => {
       expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
         'tok',
         undefined,
-        1000
+        1000,
+        'speed'
       );
       expect(await within(dialog).findByText('midpacker')).toBeTruthy();
       expect(within(dialog).getByText('speedster')).toBeTruthy();
       expect(within(dialog).queryByText('···')).toBeNull();
     });
 
+    it("links each racer's name in the dialog to their profile", async () => {
+      const dialog = await renderAndOpenFullLeaderboard();
+      await within(dialog).findByText('midpacker');
+
+      expect(
+        within(dialog)
+          .getByRole('link', { name: 'midpacker' })
+          .getAttribute('href')
+      ).toBe('/players/other-9');
+      expect(
+        within(dialog)
+          .getByRole('link', { name: 'testuser' })
+          .getAttribute('href')
+      ).toBe('/profile');
+    });
+
     it('states the racer count in the dialog', async () => {
       const dialog = await renderAndOpenFullLeaderboard();
 
       expect(within(dialog).getByText('10 racers')).toBeTruthy();
+    });
+
+    it('uses the singular for a field of one racer', async () => {
+      mockFetchDailyLeaderboard.mockImplementation(
+        async (_token: unknown, _date: unknown, limit: number) =>
+          limit === 5
+            ? { ...TOP_SLICE, totalRacers: 2 }
+            : { ...WHOLE_FIELD, totalRacers: 1 }
+      );
+      await act(async () => {
+        renderDaily();
+      });
+      await act(async () => {
+        (
+          await screen.findByRole('button', { name: 'Show all 2 racers' })
+        ).click();
+      });
+
+      expect(
+        await within(screen.getByRole('dialog')).findByText('1 racer')
+      ).toBeTruthy();
     });
 
     it("highlights the signed-in user's row in the dialog", async () => {
@@ -610,7 +660,6 @@ describe('DailyRacePage', () => {
       await renderAndOpenFullLeaderboard();
       await screen.findByText('midpacker');
 
-      expect(screen.getByText('···')).toBeTruthy();
       expect(screen.getAllByText('midpacker')).toHaveLength(1);
     });
 
@@ -624,14 +673,171 @@ describe('DailyRacePage', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(screen.queryByText('midpacker')).toBeNull();
     });
+
+    it('switches the dialog between the speed and efficiency boards', async () => {
+      mockFetchDailyLeaderboard.mockImplementation(
+        async (
+          _token: unknown,
+          _date: unknown,
+          limit: number,
+          board: string
+        ) =>
+          limit === 5
+            ? TOP_SLICE
+            : {
+                ...WHOLE_FIELD,
+                entries: [
+                  boardEntry(
+                    1,
+                    'other-1',
+                    board === 'efficiency' ? 'golfer' : 'speedster'
+                  ),
+                ],
+              }
+      );
+      await act(async () => {
+        renderDaily();
+      });
+      await act(async () => {
+        (
+          await screen.findByRole('button', { name: 'Show all 10 racers' })
+        ).click();
+      });
+      const dialog = screen.getByRole('dialog');
+      expect(await within(dialog).findByText('speedster')).toBeTruthy();
+      expect(
+        within(dialog)
+          .getByRole('button', { name: 'Speed' })
+          .getAttribute('aria-pressed')
+      ).toBe('true');
+
+      await act(async () => {
+        within(dialog).getByRole('button', { name: 'Key Efficiency' }).click();
+      });
+
+      expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
+        'tok',
+        undefined,
+        1000,
+        'efficiency'
+      );
+      const switched = screen.getByRole('dialog', {
+        name: 'Leaderboard by key efficiency',
+      });
+      expect(await within(switched).findByText('golfer')).toBeTruthy();
+      expect(within(switched).queryByText('speedster')).toBeNull();
+    });
+
+    it('carries a board switch in the dialog back to the rail', async () => {
+      await renderAndOpenFullLeaderboard();
+
+      await act(async () => {
+        within(screen.getByRole('dialog'))
+          .getByRole('button', { name: 'Key Efficiency' })
+          .click();
+      });
+      await act(async () => {
+        screen.getByRole('button', { name: 'Close' }).click();
+      });
+
+      expect(
+        screen
+          .getByRole('button', { name: 'Key Efficiency' })
+          .getAttribute('aria-pressed')
+      ).toBe('true');
+      expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
+        'tok',
+        undefined,
+        5,
+        'efficiency'
+      );
+    });
   });
 
-  // The rail closes with the slowest racer: top entries, a divider, last place.
-  it('renders a divider and the last-place row below the top entries', async () => {
+  // The rail is the top 5 as large rows, then the viewer's own row when they
+  // fall outside it; the full field lives in the dialog.
+  it('asks for the top 5 racers', async () => {
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('No entries yet');
+
+    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
+      'tok',
+      undefined,
+      5,
+      'speed'
+    );
+  });
+
+  it('lists five top racers, with only the podium in medal colours', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 5,
+      entries: [
+        boardEntry(1, 'other-1', 'first'),
+        boardEntry(2, 'other-2', 'second'),
+        boardEntry(3, 'other-3', 'third'),
+        boardEntry(4, 'other-4', 'fourth'),
+        boardEntry(5, 'other-5', 'fifth'),
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('first');
+
+    const rows = screen.getAllByTestId('top-racer');
+    expect(rows).toHaveLength(5);
+    const bronzeBorder = rows[2].style.borderColor;
+    expect(rows[3].style.borderColor).not.toBe(bronzeBorder);
+    expect(rows[4].style.borderColor).not.toBe(bronzeBorder);
+  });
+
+  it("labels each top racer's keys, efficiency, and time", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          bestMs: 31000,
+          efficiency: 0.9375,
+          optimalKeys: 120,
+          actualKeys: 128,
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByText('Keys')).toBeTruthy();
+    expect(within(row).getByText('Efficiency')).toBeTruthy();
+    expect(within(row).getByText('Time')).toBeTruthy();
+    expect(within(row).getByText('/120').parentElement?.textContent).toBe(
+      '128/120'
+    );
+    expect(within(row).getByText('93.8%')).toBeTruthy();
+    expect(within(row).getByText('31.0s')).toBeTruthy();
+  });
+
+  it("shows the viewer's own row under the top 5 when they're outside it", async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       entries: [boardEntry(1, 'other-1', 'speedster')],
-      neighborhood: null,
+      neighborhood: [
+        boardEntry(46, 'other-46', 'yank_bank'),
+        boardEntry(47, 'me-123', 'testuser'),
+        boardEntry(48, 'other-48', 'paste_waste'),
+      ],
       lastPlace: boardEntry(312, 'other-312', 'normie_mode'),
     });
 
@@ -640,12 +846,17 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(screen.getByText('···')).toBeTruthy();
-    expect(screen.getByText('normie_mode')).toBeTruthy();
-    expect(screen.getByText('#312')).toBeTruthy();
+    expect(screen.getByText('Your position')).toBeTruthy();
+    const ownRow = screen.getByText('testuser').closest('[aria-current]');
+    expect(ownRow).not.toBeNull();
+    expect(screen.getByText('#47')).toBeTruthy();
+    // Only the viewer: no rank neighbors, no last place.
+    expect(screen.queryByText('yank_bank')).toBeNull();
+    expect(screen.queryByText('paste_waste')).toBeNull();
+    expect(screen.queryByText('normie_mode')).toBeNull();
   });
 
-  it('highlights the last-place row when it is the signed-in user', async () => {
+  it('shows the viewer as last place under "Your position" when they are last', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       entries: [boardEntry(1, 'other-1', 'speedster')],
@@ -658,14 +869,17 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    const ownRow = screen.getByText('testuser').closest('[aria-current]');
-    expect(ownRow).not.toBeNull();
+    expect(screen.getByText('Your position')).toBeTruthy();
+    expect(screen.getByText('#312')).toBeTruthy();
   });
 
-  it('shows no divider when every racer is already listed', async () => {
+  it("marks the viewer's podium row with a tag, not a second outline", async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
-      totalRacers: 1,
-      entries: [boardEntry(1, 'other-1', 'speedster')],
+      totalRacers: 2,
+      entries: [
+        boardEntry(1, 'me-123', 'testuser'),
+        boardEntry(2, 'other-2', 'second'),
+      ],
       neighborhood: null,
       lastPlace: null,
     });
@@ -673,21 +887,172 @@ describe('DailyRacePage', () => {
     await act(async () => {
       renderDaily();
     });
-    expect(await screen.findByText('speedster')).toBeTruthy();
+    const [ownRow, otherRow] = await screen.findAllByTestId('top-racer');
 
-    expect(screen.queryByText('···')).toBeNull();
+    expect(ownRow.getAttribute('aria-current')).toBe('true');
+    expect(ownRow.style.boxShadow).toBe('');
+    expect(within(ownRow).getByText('you')).toBeTruthy();
+    expect(within(otherRow).queryByText('you')).toBeNull();
   });
 
-  // The rail is top entries plus last place only; a mid-pack user finds
-  // their own row in the full-leaderboard dialog.
-  it("leaves the user's rank neighborhood out of the rail", async () => {
+  it("links each racer's name to their profile, and the viewer's to /profile", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 2,
+      entries: [
+        boardEntry(1, 'other-1', 'speedster'),
+        boardEntry(2, 'me-123', 'testuser'),
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+
+    const other = await screen.findByRole('link', { name: 'speedster' });
+    expect(other.getAttribute('href')).toBe('/players/other-1');
+    const own = screen.getByRole('link', { name: 'testuser' });
+    expect(own.getAttribute('href')).toBe('/profile');
+  });
+
+  it('links the "Your position" row to the viewer\'s own profile', async () => {
     mockFetchDailyLeaderboard.mockResolvedValue({
       totalRacers: 312,
       entries: [boardEntry(1, 'other-1', 'speedster')],
-      neighborhood: [
-        boardEntry(46, 'other-46', 'yank_bank'),
-        boardEntry(47, 'me-123', 'testuser'),
+      neighborhood: [boardEntry(47, 'me-123', 'testuser')],
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('Your position');
+
+    expect(
+      screen.getByRole('link', { name: 'testuser' }).getAttribute('href')
+    ).toBe('/profile');
+  });
+
+  it("shows the badges from the racer's profile card in place of the automatic chips", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 12, podiumStreak: 3, wins: 4 },
+          showcasedBadges: ['first_win'],
+        },
       ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByLabelText('Champion')).toBeTruthy();
+    expect(within(row).queryByLabelText('12-day streak')).toBeNull();
+  });
+
+  it("keeps the racer's chosen showcase order on the leaderboard", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 7, podiumStreak: 3, wins: 1 },
+          showcasedBadges: ['days_7', 'first_win', 'first_perfect'],
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    const regular = within(row).getByLabelText(/^Regular/);
+    const champion = within(row).getByLabelText(/^Champion/);
+    const flawless = within(row).getByLabelText(/^Flawless/);
+    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(regular.compareDocumentPosition(champion) & follows).toBeTruthy();
+    expect(champion.compareDocumentPosition(flawless) & follows).toBeTruthy();
+  });
+
+  it("splits a racer's win badge by board, with the split spelled out on hover", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: {
+            streak: 0,
+            podiumStreak: 0,
+            wins: 5,
+            speedWins: 3,
+            efficiencyWins: 2,
+          },
+          showcasedBadges: ['first_win'],
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByText('S3')).toBeTruthy();
+    expect(within(row).getByText('E2')).toBeTruthy();
+    expect(
+      within(row).getByLabelText('Champion: 3 speed, 2 efficiency wins')
+    ).toBeTruthy();
+  });
+
+  it('falls back to the automatic chips when the racer has no badges to show', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 12, podiumStreak: 0, wins: 0 },
+        },
+      ],
+      neighborhood: null,
+      lastPlace: null,
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    const row = (await screen.findByText('speedster')).closest(
+      '[data-testid="top-racer"]'
+    ) as HTMLElement;
+
+    expect(within(row).getByLabelText('12-day streak')).toBeTruthy();
+  });
+
+  it('shows no "Your position" row when the viewer is in the top 5', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 312,
+      entries: [
+        boardEntry(1, 'other-1', 'speedster'),
+        boardEntry(2, 'me-123', 'testuser'),
+      ],
+      neighborhood: null,
       lastPlace: boardEntry(312, 'other-312', 'normie_mode'),
     });
 
@@ -696,8 +1061,8 @@ describe('DailyRacePage', () => {
     });
     expect(await screen.findByText('speedster')).toBeTruthy();
 
-    expect(screen.queryByText('yank_bank')).toBeNull();
-    expect(screen.queryByText('testuser')).toBeNull();
+    expect(screen.queryByText('Your position')).toBeNull();
+    expect(screen.queryByText('normie_mode')).toBeNull();
   });
 
   // 6. Leaderboard renders entries with the signed-in user's row highlighted.
@@ -706,27 +1071,9 @@ describe('DailyRacePage', () => {
       totalRacers: 3,
       neighborhood: null,
       entries: [
-        {
-          rank: 1,
-          userId: 'other-1',
-          displayName: 'speedster',
-          avatarUrl: null,
-          bestMs: 3000,
-        },
-        {
-          rank: 2,
-          userId: 'me-123',
-          displayName: 'testuser',
-          avatarUrl: null,
-          bestMs: 5000,
-        },
-        {
-          rank: 3,
-          userId: 'other-2',
-          displayName: 'slowpoke',
-          avatarUrl: null,
-          bestMs: 8000,
-        },
+        { ...boardEntry(1, 'other-1', 'speedster'), bestMs: 3000 },
+        { ...boardEntry(2, 'me-123', 'testuser'), bestMs: 5000 },
+        { ...boardEntry(3, 'other-2', 'slowpoke'), bestMs: 8000 },
       ],
     });
 
@@ -762,8 +1109,33 @@ describe('DailyRacePage for a visitor with no session', () => {
     });
     expect(await screen.findByText(/Start attempt 1 of 3/i)).toBeTruthy();
     expect(mockFetchDailyRace).toHaveBeenCalledWith(null);
-    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(null, undefined, 8);
+    expect(mockFetchDailyLeaderboard).toHaveBeenCalledWith(
+      null,
+      undefined,
+      5,
+      'speed'
+    );
     expect(mockGetCachedDailyRace).not.toHaveBeenCalled();
+  });
+
+  it("shows racers' names as plain text, since profiles need a sign-in", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      entries: [boardEntry(1, 'other-1', 'speedster')],
+      neighborhood: null,
+      lastPlace: null,
+    });
+    const visitorUser = AUTH.user;
+    AUTH.user = null as unknown as { id: string };
+    try {
+      await act(async () => {
+        renderDaily();
+      });
+      expect(await screen.findByText('speedster')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: 'speedster' })).toBeNull();
+    } finally {
+      AUTH.user = visitorUser;
+    }
   });
 
   it('sends Start to /login instead of claiming an attempt', async () => {
@@ -1041,5 +1413,221 @@ describe('DailyCompletionExtras', () => {
         /finished the VIM GYM daily race in 38\.4 seconds/
       )
     ).toBeTruthy();
+  });
+});
+
+describe('DailyRacePage efficiency board', () => {
+  it('re-sorts by key efficiency, with every metric on each row', async () => {
+    mockFetchDailyLeaderboard.mockImplementation(
+      (_token: unknown, _date: unknown, _limit: unknown, board: unknown) =>
+        Promise.resolve({
+          totalRacers: 1,
+          neighborhood: null,
+          lastPlace: null,
+          entries: [
+            board === 'efficiency'
+              ? {
+                  ...boardEntry(1, 'other-1', 'golfer'),
+                  bestMs: 38100,
+                  efficiency: 0.875,
+                  optimalKeys: 42,
+                  actualKeys: 48,
+                }
+              : boardEntry(1, 'other-1', 'speedster'),
+          ],
+        })
+    );
+
+    await act(async () => {
+      renderDaily();
+    });
+    expect(await screen.findByText('speedster')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Speed' }).getAttribute('aria-pressed')
+    ).toBe('true');
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Key Efficiency' }).click();
+    });
+
+    expect(await screen.findByText('golfer')).toBeTruthy();
+    expect(mockFetchDailyLeaderboard).toHaveBeenLastCalledWith(
+      'tok',
+      undefined,
+      5,
+      'efficiency'
+    );
+    expect(screen.getByText('Keys')).toBeTruthy();
+    expect(screen.getByText('/42').parentElement?.textContent).toBe('48/42');
+    expect(screen.getByText('87.5%')).toBeTruthy();
+    // Time is the efficient run's own time, the same run as the keys.
+    expect(screen.getByText('38.1s')).toBeTruthy();
+    expect(screen.getByTitle('48 keys used, 42 optimal · 87.5%')).toBeTruthy();
+    expect(screen.queryByText('speedster')).toBeNull();
+  });
+
+  it('explains the key columns in a tip in the full leaderboard', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 2,
+      neighborhood: null,
+      lastPlace: null,
+      entries: [boardEntry(1, 'other-1', 'golfer')],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('golfer');
+    await act(async () => {
+      screen.getByRole('button', { name: 'Show all 2 racers' }).click();
+    });
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText('Time')).toBeTruthy();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    const tipButton = within(dialog).getByRole('button', {
+      name: 'How efficiency is scored',
+    });
+    await act(async () => {
+      tipButton.focus();
+    });
+    expect(screen.getByRole('tooltip').textContent).toBe(
+      "Keys is keystrokes used / optimal. For example, 50/40 means the racer used 50 keystrokes where the day's tasks can be done in 40, so Efficiency is 80%."
+    );
+    await act(async () => {
+      tipButton.blur();
+    });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('opens the full leaderboard on the selected board', async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 20,
+      neighborhood: null,
+      lastPlace: null,
+      entries: [boardEntry(1, 'other-1', 'golfer')],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('golfer');
+    await act(async () => {
+      screen.getByRole('button', { name: 'Key Efficiency' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: /show all/i }).click();
+    });
+
+    expect(mockFetchDailyLeaderboard).toHaveBeenLastCalledWith(
+      'tok',
+      undefined,
+      1000,
+      'efficiency'
+    );
+    expect(
+      within(screen.getByRole('dialog')).getByText(
+        'Leaderboard by key efficiency'
+      )
+    ).toBeTruthy();
+  });
+
+  it("shows a racer's badge chips beside their name", async () => {
+    mockFetchDailyLeaderboard.mockResolvedValue({
+      totalRacers: 1,
+      neighborhood: null,
+      lastPlace: null,
+      entries: [
+        {
+          ...boardEntry(1, 'other-1', 'speedster'),
+          badges: { streak: 12, podiumStreak: 0, wins: 3 },
+        },
+      ],
+    });
+
+    await act(async () => {
+      renderDaily();
+    });
+    await screen.findByText('speedster');
+
+    expect(screen.getByLabelText('12-day streak').textContent).toBe('STRK12');
+    expect(screen.getByLabelText('3 daily wins').textContent).toBe('WIN3');
+  });
+
+  // Switching boards keeps the panel's height: the old rows stay, dimmed and
+  // inert under the amber spinner, until the new board's rows land.
+  describe('while a board switch is loading', () => {
+    function boardOf(name: string) {
+      return {
+        totalRacers: 1,
+        neighborhood: null,
+        lastPlace: null,
+        entries: [boardEntry(1, 'other-1', name)],
+      };
+    }
+
+    it('shows the spinner, not "No entries yet", before the first rows land', async () => {
+      mockFetchDailyLeaderboard.mockReturnValue(new Promise(() => {}));
+
+      await act(async () => {
+        renderDaily();
+      });
+
+      expect(
+        await screen.findByRole('status', { name: 'Loading leaderboard' })
+      ).toBeTruthy();
+      expect(screen.getByTestId('branded-loading-spinner')).toBeTruthy();
+      expect(screen.queryByText('No entries yet')).toBeNull();
+    });
+
+    it('keeps the old rows, dimmed under the spinner, until the new board arrives', async () => {
+      let resolveEfficiency: (
+        data: ReturnType<typeof boardOf>
+      ) => void = () => {};
+      mockFetchDailyLeaderboard.mockImplementation(
+        (_token: unknown, _date: unknown, _limit: unknown, board: unknown) =>
+          board === 'efficiency'
+            ? new Promise((resolve) => {
+                resolveEfficiency = resolve;
+              })
+            : Promise.resolve(boardOf('speedster'))
+      );
+
+      await act(async () => {
+        renderDaily();
+      });
+      expect(await screen.findByText('speedster')).toBeTruthy();
+      expect(
+        screen.queryByRole('status', { name: 'Loading leaderboard' })
+      ).toBeNull();
+
+      await act(async () => {
+        screen.getByRole('button', { name: 'Key Efficiency' }).click();
+      });
+
+      const staleRow = screen.getByText('speedster');
+      const cover = staleRow.closest('[aria-busy]') as HTMLElement;
+      expect(cover.getAttribute('aria-busy')).toBe('true');
+      expect(staleRow.closest('[inert]')).not.toBeNull();
+      expect(
+        screen.getByRole('status', { name: 'Loading leaderboard' })
+      ).toBeTruthy();
+
+      await act(async () => {
+        resolveEfficiency(boardOf('golfer'));
+      });
+
+      expect(await screen.findByText('golfer')).toBeTruthy();
+      expect(screen.queryByText('speedster')).toBeNull();
+      expect(
+        screen.queryByRole('status', { name: 'Loading leaderboard' })
+      ).toBeNull();
+      expect(
+        screen
+          .getByText('golfer')
+          .closest('[aria-busy]')
+          ?.getAttribute('aria-busy')
+      ).toBe('false');
+    });
   });
 });

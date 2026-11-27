@@ -25,27 +25,17 @@ Competitive vim motion racing. Practice alone or race others in real time.
 
 ### Environment Variables
 
-Each service needs its own `.env` file:
+Each service needs its own `.env` file, copied from the committed template:
 
-**frontend/.env**
-
-```
-VITE_BACKEND_URL=http://localhost:3001
-VITE_MATCHMAKING_URL=ws://localhost:3002
-```
-
-**backend/.env**
-
-```
-MATCH_TOKEN_SECRET=any-shared-secret-for-dev
+```bash
+cp frontend/.env.example frontend/.env
+cp backend/.env.example backend/.env
+cp matchmaking/.env.example matchmaking/.env
 ```
 
-**matchmaking/.env**
-
-```
-MATCH_TOKEN_SECRET=any-shared-secret-for-dev
-GAME_SERVER_URL=http://localhost:3001
-```
+Every service refuses to start in dev without its `.env` file. Production
+(`NODE_ENV=production`, or `vite build` for the frontend) refuses to start
+unless the variables marked `[prod-required]` in each template are set.
 
 ### Running
 

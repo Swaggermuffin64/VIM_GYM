@@ -7,9 +7,11 @@ import Login from './pages/login';
 import PrivacyPolicy from './pages/privacy';
 import TermsOfService from './pages/terms';
 import ProfilePage from './pages/profile';
+import PlayerProfilePage from './pages/player';
 import DailyRoute from './pages/dailyRoute';
 import Onboarding from './pages/onboarding';
 import { AuthGuard } from './components/AuthGuard';
+import { BadgeToast } from './components/BadgeToast';
 import './App.css';
 
 /* ------------------------------------------------------------------ */
@@ -74,6 +76,15 @@ function App() {
             </AuthGuard>
           }
         />
+        {/* Another player's read-only profile; linked from the daily rail. */}
+        <Route
+          path="/players/:id"
+          element={
+            <AuthGuard>
+              <PlayerProfilePage />
+            </AuthGuard>
+          }
+        />
         <Route
           path="/onboarding"
           element={
@@ -85,6 +96,7 @@ function App() {
         {/* Keep old route for backwards compatibility */}
         <Route path="/vim-editor" element={<PracticeEditor />} />
       </Routes>
+      <BadgeToast />
     </Router>
   );
 }

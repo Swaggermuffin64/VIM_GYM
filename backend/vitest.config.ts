@@ -14,6 +14,7 @@ export default defineConfig({
         'test/**',
         'dist/**',
         'taskWorker.ts', // piscina worker entry; exercised only in-worker
+        'loadEnv.ts', // startup side effect; logic lives in envCheck.ts
       ],
       thresholds: {
         lines: 58,

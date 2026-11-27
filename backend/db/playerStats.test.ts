@@ -18,6 +18,12 @@ describe('getPlayerStats without DATABASE_URL', () => {
       avgTaskEfficiency: null,
       efficiencySample: 0,
       recentGames: [],
+      totalRuns: 0,
+      multiplayer: { races: 0, wins: 0 },
+      activity: [],
+      raceTimeWeekly: [],
+      avgRaceMs30d: null,
+      avgRaceMsPrev30d: null,
     });
   });
 });

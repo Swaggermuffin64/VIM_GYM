@@ -4,7 +4,7 @@
  * time only over finished races, task totals average correctly, and the
  * recent list is newest-first and capped.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { startTestDatabase, TEST_USERS, type TestDatabase } from './harness.js';
 
 let db: TestDatabase;
@@ -131,6 +131,12 @@ describe('getPlayerStats', () => {
       avgTaskEfficiency: null,
       efficiencySample: 0,
       recentGames: [],
+      totalRuns: 0,
+      multiplayer: { races: 0, wins: 0 },
+      activity: [],
+      raceTimeWeekly: [],
+      avgRaceMs30d: null,
+      avgRaceMsPrev30d: null,
     });
   });
 
@@ -154,5 +160,261 @@ describe('getPlayerStats', () => {
   it('caps the recent list at the requested limit', async () => {
     const stats = await playerStats.getPlayerStats(TEST_USERS.alice, 2);
     expect(stats.recentGames).toHaveLength(2);
+  });
+
+  describe('efficiency rank on recent multiplayer games', () => {
+    const GAME = 901;
+    const started = new Date(Date.now() + 60_000); // newest game for bob
+
+    /** One game with two scored tasks (optimal 10 keys each) for bob and alice. */
+    async function seedRace(opts: {
+      playMode?: string;
+      bobFinished?: boolean;
+      bobKeys?: [number, number | null];
+      /** Drop bob's second attempt row, as if its insert had failed. */
+      bobMissingTask?: boolean;
+    }) {
+      await db.query(
+        `INSERT INTO tasks (content_hash, task_type, task_json, optimal_keystroke_count)
+         VALUES ('eff1', 'navigate', '{}', 10), ('eff2', 'navigate', '{}', 10)
+         ON CONFLICT (content_hash) DO NOTHING`
+      );
+      await db.query(
+        `INSERT INTO games (id, play_mode, task_hashes, started_at)
+         VALUES ($1, $2, '{eff1,eff2}', $3)`,
+        [GAME, opts.playMode ?? 'quick_play', started]
+      );
+      const bobFinished = opts.bobFinished ?? true;
+      await db.query(
+        `INSERT INTO game_players (game_id, user_id, position, total_time_ms, finished)
+         VALUES ($1, $2, $3, $4, $5), ($1, $6, 2, 30000, true)`,
+        [
+          GAME,
+          TEST_USERS.bob,
+          bobFinished ? 1 : null,
+          bobFinished ? 20000 : null,
+          bobFinished,
+          TEST_USERS.alice,
+        ]
+      );
+      const [bobA, bobB] = opts.bobKeys ?? [10, 10];
+      // Bob is perfectly efficient (10 + 10); alice takes twice the keys.
+      await db.query(
+        `INSERT INTO task_attempts (user_id, task_hash, game_id, play_mode, duration_ms, keystroke_count)
+         VALUES ($1, 'eff1', $3, 'quick_play', 1000, $4),
+                ($1, 'eff2', $3, 'quick_play', 1000, $5),
+                ($2, 'eff1', $3, 'quick_play', 1000, 20),
+                ($2, 'eff2', $3, 'quick_play', 1000, 20)`,
+        [TEST_USERS.bob, TEST_USERS.alice, GAME, bobA, bobB]
+      );
+      if (opts.bobMissingTask) {
+        await db.query(
+          `DELETE FROM task_attempts
+            WHERE game_id = $1 AND user_id = $2 AND task_hash = 'eff2'`,
+          [GAME, TEST_USERS.bob]
+        );
+      }
+    }
+
+    afterEach(async () => {
+      await db.query(`DELETE FROM task_attempts WHERE game_id = $1`, [GAME]);
+      await db.query(`DELETE FROM games WHERE id = $1`, [GAME]);
+    });
+
+    it('places each finisher by efficiency within that game', async () => {
+      await seedRace({});
+      // Bob used the optimal keys; alice used twice as many, so she placed
+      // 2nd on efficiency even though the race itself ranks them separately.
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      const alice = await playerStats.getPlayerStats(TEST_USERS.alice);
+      expect(bob.recentGames[0]).toMatchObject({
+        playMode: 'quick_play',
+        efficiencyRank: 1,
+      });
+      expect(alice.recentGames[0]).toMatchObject({
+        playMode: 'quick_play',
+        efficiencyRank: 2,
+      });
+    });
+
+    it('leaves a player who did not finish unplaced', async () => {
+      await seedRace({ bobFinished: false });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+    });
+
+    it('leaves a player unranked when a task is missing keystroke data', async () => {
+      await seedRace({ bobKeys: [10, null] });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+    });
+
+    it('leaves a finisher unranked when a task has no attempt row, without shifting the others', async () => {
+      await seedRace({ bobMissingTask: true });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      const alice = await playerStats.getPlayerStats(TEST_USERS.alice);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+      expect(alice.recentGames[0]!.efficiencyRank).toBe(1);
+    });
+
+    it('does not rank solo modes', async () => {
+      await seedRace({ playMode: 'practice' });
+      const bob = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(bob.recentGames[0]!.efficiencyRank).toBeNull();
+    });
+  });
+
+  describe('per-user aggregates for the profile bento', () => {
+    const MS_PER_DAY = 24 * 60 * 60 * 1000;
+    const isoDay = (d: Date) => d.toISOString().slice(0, 10);
+    /** UTC midnight `daysAgo` days before today. */
+    const utcMidnight = (daysAgo: number) => {
+      const now = new Date();
+      return new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) -
+          daysAgo * MS_PER_DAY
+      );
+    };
+    /** UTC Monday 00:00 of the week containing today, minus `weeksAgo` weeks. */
+    const utcMonday = (weeksAgo: number) => {
+      const today = utcMidnight(0);
+      const sinceMonday = (today.getUTCDay() + 6) % 7;
+      return new Date(
+        today.getTime() - sinceMonday * MS_PER_DAY - weeksAgo * 7 * MS_PER_DAY
+      );
+    };
+
+    interface SeedRun {
+      playMode: string;
+      startedAt: Date;
+      position?: number | null;
+      totalTimeMs?: number | null;
+      finished?: boolean;
+    }
+    /** Inserts one game plus bob's game_players row for it. */
+    async function seedRun(run: SeedRun) {
+      const game = await db.query(
+        `INSERT INTO games (play_mode, task_hashes, started_at)
+         VALUES ($1, '{h1}', $2) RETURNING id`,
+        [run.playMode, run.startedAt]
+      );
+      const gameId = (game.rows[0] as { id: string }).id;
+      await db.query(
+        `INSERT INTO game_players (game_id, user_id, position, total_time_ms, finished)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          gameId,
+          TEST_USERS.bob,
+          run.position ?? null,
+          run.totalTimeMs ?? null,
+          run.finished ?? run.totalTimeMs != null,
+        ]
+      );
+    }
+
+    afterEach(async () => {
+      await db.query(
+        `DELETE FROM games WHERE id IN
+           (SELECT game_id FROM game_players WHERE user_id = $1)`,
+        [TEST_USERS.bob]
+      );
+    });
+
+    it('totalRuns counts practice and daily', async () => {
+      const at = utcMidnight(1);
+      await seedRun({ playMode: 'practice', startedAt: at });
+      await seedRun({ playMode: 'practice', startedAt: at });
+      await seedRun({ playMode: 'daily', startedAt: at });
+      await seedRun({ playMode: 'quick_play', startedAt: at, position: 1 });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.totalRuns).toBe(4);
+    });
+
+    it('multiplayer excludes daily and practice', async () => {
+      const at = utcMidnight(1);
+      await seedRun({ playMode: 'quick_play', startedAt: at, position: 1 });
+      await seedRun({ playMode: 'private_match', startedAt: at, position: 2 });
+      await seedRun({ playMode: 'daily', startedAt: at, position: null });
+      await seedRun({ playMode: 'practice', startedAt: at });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.multiplayer).toEqual({ races: 2, wins: 1 });
+    });
+
+    it('activity buckets by UTC day', async () => {
+      const day1 = utcMidnight(3);
+      const day2 = utcMidnight(2);
+      await seedRun({
+        playMode: 'quick_play',
+        startedAt: new Date(day1.getTime() + 23.5 * 3600 * 1000),
+        position: 1,
+      });
+      await seedRun({
+        playMode: 'practice',
+        startedAt: new Date(day2.getTime() + 0.5 * 3600 * 1000),
+      });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.activity).toEqual([
+        { day: isoDay(day1), runs: 1, multiplayerWins: 1 },
+        { day: isoDay(day2), runs: 1, multiplayerWins: 0 },
+      ]);
+    });
+
+    it('activity keeps days within a year (52 weeks)', async () => {
+      await seedRun({ playMode: 'practice', startedAt: utcMidnight(300) });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.activity).toEqual([
+        { day: isoDay(utcMidnight(300)), runs: 1, multiplayerWins: 0 },
+      ]);
+    });
+
+    it('activity drops days older than 52 weeks', async () => {
+      await seedRun({ playMode: 'practice', startedAt: utcMidnight(400) });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.activity).toEqual([]);
+      expect(stats.totalRuns).toBe(1);
+    });
+
+    it('raceTimeWeekly averages finished runs and skips empty weeks', async () => {
+      const noon = 12 * 3600 * 1000;
+      const week3 = utcMonday(3).getTime() + noon;
+      await seedRun({
+        playMode: 'practice',
+        startedAt: new Date(week3),
+        totalTimeMs: 10000,
+      });
+      await seedRun({
+        playMode: 'daily',
+        startedAt: new Date(week3),
+        totalTimeMs: 20000,
+      });
+      // Unfinished run in week 3 must be ignored.
+      await seedRun({ playMode: 'practice', startedAt: new Date(week3) });
+      await seedRun({
+        playMode: 'practice',
+        startedAt: new Date(utcMonday(1).getTime() + noon),
+        totalTimeMs: 9000,
+      });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.raceTimeWeekly).toEqual([
+        { weekStart: isoDay(utcMonday(3)), avgMs: 15000 },
+        { weekStart: isoDay(utcMonday(1)), avgMs: 9000 },
+      ]);
+    });
+
+    it('30-day windows compare the last 30 days to the 30 before', async () => {
+      await seedRun({
+        playMode: 'practice',
+        startedAt: utcMidnight(5),
+        totalTimeMs: 10000,
+      });
+      await seedRun({
+        playMode: 'daily',
+        startedAt: utcMidnight(40),
+        totalTimeMs: 20000,
+      });
+      const stats = await playerStats.getPlayerStats(TEST_USERS.bob);
+      expect(stats.avgRaceMs30d).toBe(10000);
+      expect(stats.avgRaceMsPrev30d).toBe(20000);
+    });
   });
 });

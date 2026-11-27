@@ -115,8 +115,63 @@ code {
   }
 }
 
+/* A racer's name on the daily rail, linking to their profile (RacerNameLink
+   in pages/daily.tsx). */
+.racer-name-link:hover,
+.racer-name-link:focus-visible {
+  text-decoration: underline !important;
+  text-underline-offset: 3px;
+}
+
+/* Leaderboard board-switch cover (see BoardLoadingCover in pages/daily.tsx):
+   the stale rows dim and the spinner fades in, both held back briefly so a
+   switch the cache answers at once never flickers. */
+@keyframes board-loading-dim {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+
+.board-loading-dim {
+  animation: board-loading-dim 150ms ease 120ms both;
+}
+
+@keyframes board-loading-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.board-loading-fade-in {
+  animation: board-loading-fade-in 150ms ease 120ms both;
+}
+
+/* The Flawless badge's sheen (see StatusSegment.tsx): a quick sweep left to
+   right, then a long rest so it glints rather than flickers. */
+@keyframes flawless-sheen {
+  0% {
+    transform: translateX(-150%);
+  }
+  25%,
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.flawless-sheen {
+  animation: flawless-sheen 4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .branded-loading-spinner {
+  .branded-loading-spinner,
+  .flawless-sheen,
+  .board-loading-fade-in {
     animation: none !important;
   }
 }

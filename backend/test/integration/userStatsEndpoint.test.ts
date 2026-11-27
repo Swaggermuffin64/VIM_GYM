@@ -114,6 +114,12 @@ describe('GET /api/user/stats', () => {
         avg_task_efficiency: null,
         efficiency_sample: 0,
         recent_games: [],
+        total_runs: 0,
+        multiplayer: { races: 0, wins: 0, win_rate: 0 },
+        activity: [],
+        race_time_weekly: [],
+        avg_race_ms_30d: null,
+        avg_race_ms_prev_30d: null,
       },
     });
   });
@@ -155,7 +161,10 @@ describe('GET /api/user/stats', () => {
         avg_race_ms: number | null;
         avg_task_efficiency: number | null;
         efficiency_sample: number;
-        recent_games: Array<{ play_mode: string }>;
+        recent_games: Array<{
+          play_mode: string;
+          efficiency_rank: number | null;
+        }>;
       };
     };
     expect(body.success).toBe(true);
@@ -168,5 +177,49 @@ describe('GET /api/user/stats', () => {
     expect(body.stats.efficiency_sample).toBe(1);
     expect(body.stats.recent_games).toHaveLength(1);
     expect(body.stats.recent_games[0]!.play_mode).toBe('quick_play');
+    // Alice is the only finisher with keystroke data, so she places 1st.
+    expect(body.stats.recent_games[0]!.efficiency_rank).toBe(1);
+    expect(body.stats.recent_games[0]).not.toHaveProperty('efficiency_racers');
+  });
+
+  it('returns all-mode, multiplayer, activity and trend fields', async () => {
+    // Self-contained: bob gets one quick_play win, one practice run, both
+    // finished and started now, so every new field is non-empty.
+    await db.query(
+      `INSERT INTO games (id, play_mode, task_hashes, started_at, finished_at)
+       VALUES (301, 'quick_play', '{}', now(), now()),
+              (302, 'practice', '{}', now(), now())`
+    );
+    await db.query(
+      `INSERT INTO game_players (game_id, user_id, position, total_time_ms, finished)
+       VALUES (301, $1, 1, 60000, true), (302, $1, NULL, 40000, true)`,
+      [TEST_USERS.bob]
+    );
+    const res = await fetch(`${base}/api/user/stats`, {
+      headers: { Authorization: `Bearer ${mintTestToken(TEST_USERS.bob)}` },
+    });
+    const body = (await res.json()) as {
+      stats: {
+        total_runs: number;
+        multiplayer: { races: number; wins: number; win_rate: number };
+        activity: Array<Record<string, unknown>>;
+        race_time_weekly: Array<Record<string, unknown>>;
+        avg_race_ms_30d: number | null;
+      };
+    };
+    expect(body.stats.total_runs).toBe(2);
+    expect(body.stats.multiplayer).toEqual({ races: 1, wins: 1, win_rate: 1 });
+    expect(body.stats.activity.length).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(body.stats.activity[0]!).sort()).toEqual([
+      'day',
+      'multiplayer_wins',
+      'runs',
+    ]);
+    expect(body.stats.race_time_weekly.length).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(body.stats.race_time_weekly[0]!).sort()).toEqual([
+      'avg_ms',
+      'week_start',
+    ]);
+    expect(typeof body.stats.avg_race_ms_30d).toBe('number');
   });
 });

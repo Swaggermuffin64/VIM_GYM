@@ -20,14 +20,6 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '20px',
     background: '#000000',
   },
-  spinner: {
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
-    border: '3px solid #27272a',
-    borderTopColor: '#fbbf24',
-    animation: 'branded-loading-spin 0.9s linear infinite',
-  },
   wordmark: {
     color: '#3f3f46',
     fontSize: '20px',
@@ -37,15 +29,33 @@ const styles: Record<string, React.CSSProperties> = {
   },
 };
 
+/**
+ * The amber spinning ring on its own, for in-page loading (a leaderboard
+ * switching boards) where the full-screen BrandedLoading would be too much.
+ * Decorative: the caller owns the status role and its label.
+ */
+export function BrandedSpinner({ size = 32 }: { size?: number }) {
+  return (
+    <div
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: '50%',
+        border: '3px solid #27272a',
+        borderTopColor: '#fbbf24',
+        animation: 'branded-loading-spin 0.9s linear infinite',
+      }}
+      className="branded-loading-spinner"
+      data-testid="branded-loading-spinner"
+      aria-hidden="true"
+    />
+  );
+}
+
 export function BrandedLoading() {
   return (
     <div style={styles.container} role="status" aria-live="polite">
-      <div
-        style={styles.spinner}
-        className="branded-loading-spinner"
-        data-testid="branded-loading-spinner"
-        aria-hidden="true"
-      />
+      <BrandedSpinner />
       <span style={styles.wordmark}>VIM_GYM</span>
     </div>
   );
